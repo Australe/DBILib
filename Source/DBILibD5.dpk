@@ -1,0 +1,58 @@
+package DBILibD5;
+
+{$R *.RES}
+{$ALIGN ON}
+{$ASSERTIONS ON}
+{$BOOLEVAL OFF}
+{$DEBUGINFO ON}
+{$EXTENDEDSYNTAX ON}
+{$IMPORTEDDATA ON}
+{$IOCHECKS ON}
+{$LOCALSYMBOLS ON}
+{$LONGSTRINGS ON}
+{$OPENSTRINGS ON}
+{$OPTIMIZATION ON}
+{$OVERFLOWCHECKS OFF}
+{$RANGECHECKS OFF}
+{$REFERENCEINFO ON}
+{$SAFEDIVIDE OFF}
+{$STACKFRAMES OFF}
+{$TYPEDADDRESS OFF}
+{$VARSTRINGCHECKS ON}
+{$WRITEABLECONST ON}
+{$MINENUMSIZE 1}
+{$IMAGEBASE $400000}
+{$DESCRIPTION 'Axiom - Xbase and Objectlist datasets'}
+{$RUNONLY}
+{$IMPLICITBUILD OFF}
+{$DEFINE DBIPackage}
+
+requires
+  vcl50,
+  Vclx50,
+  Vcldb50;
+
+contains
+  DBIConst in 'DBIConst.pas',
+  DBICustomListDataConnections in 'DBICustomListDataConnections.pas',
+  DBICustomStreamDataConnections in 'DBICustomStreamDataConnections.pas',
+  DBIDataSet in 'DBIDataSet.pas',
+  DBIDateTimeUtils in 'DBIDateTimeUtils.pas',
+  DBIFileStreams in 'DBIFileStreams.pas',
+  DBIFilters in 'DBIFilters.pas',
+  DBIIndices in 'DBIIndices.pas',
+  DBIInterfaces in 'DBIInterfaces.pas',
+  DBIIntfConsts in 'DBIIntfConsts.pas',
+  DBIMemoryStreams in 'DBIMemoryStreams.pas',
+  DBIObjectListDataConnections in 'DBIObjectListDataConnections.pas',
+  DBIObjectListDatasets in 'DBIObjectListDatasets.pas',
+  DBIStrings in 'DBIStrings.pas',
+  DBIStringsDataConnections in 'DBIStringsDataConnections.pas',
+  DBIUtils in 'DBIUtils.pas',
+  DBIXbaseBlobConnections in 'DBIXbaseBlobConnections.pas',
+  DBIXbaseConsts in 'DBIXbaseConsts.pas',
+  DBIXbaseDataConnections in 'DBIXbaseDataConnections.pas',
+  DBIXbaseDatasets in 'DBIXbaseDatasets.pas',
+  DBIXmlUtils in 'DBIXmlUtils.pas';
+
+end.

@@ -1,0 +1,42 @@
+package dclDBILibD2006;
+
+{$R *.res}
+{$R 'DBILib.dcr'}
+{$ALIGN 8}
+{$ASSERTIONS ON}
+{$BOOLEVAL OFF}
+{$DEBUGINFO ON}
+{$EXTENDEDSYNTAX ON}
+{$IMPORTEDDATA ON}
+{$IOCHECKS ON}
+{$LOCALSYMBOLS ON}
+{$LONGSTRINGS ON}
+{$OPENSTRINGS ON}
+{$OPTIMIZATION OFF}
+{$OVERFLOWCHECKS ON}
+{$RANGECHECKS ON}
+{$REFERENCEINFO ON}
+{$SAFEDIVIDE OFF}
+{$STACKFRAMES ON}
+{$TYPEDADDRESS OFF}
+{$VARSTRINGCHECKS ON}
+{$WRITEABLECONST OFF}
+{$MINENUMSIZE 1}
+{$IMAGEBASE $400000}
+{$DESCRIPTION 'Axiom - Xbase and Objectlist datasets - Designers'}
+{$DESIGNONLY}
+{$IMPLICITBUILD OFF}
+{$DEFINE DBIPackage}
+
+requires
+  rtl,
+  vcl,
+  dclDB,
+  DBILibD2006;
+
+contains
+  DBIComponentEditors in 'DBIComponentEditors.pas',
+  DBIPropertyEditors in 'DBIPropertyEditors.pas',
+  DBIReg in 'DBIReg.pas';
+
+end.
