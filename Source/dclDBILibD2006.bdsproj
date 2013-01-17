@@ -120,7 +120,7 @@
 		</Linker>
 		<Directories>
 			<Directories Name="OutputDir"></Directories>
-			<Directories Name="UnitOutputDir">C:\Temp\dcu</Directories>
+			<Directories Name="UnitOutputDir">C:\Temp\dcu\2006</Directories>
 			<Directories Name="PackageDLLOutputDir">O:\Prj\DelphiPackages\10.0</Directories>
 			<Directories Name="PackageDCPOutputDir">O:\Prj\DelphiPackages\10.0</Directories>
 			<Directories Name="SearchPath">$(DELPHI)\Source\Property Editors</Directories>

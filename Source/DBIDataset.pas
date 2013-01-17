@@ -3353,6 +3353,7 @@ begin
 
         PRecInfo(TDBIRecordBuffer(Buffer) + FRecInfoOfs)^.BookmarkFlag := bfCurrent;
         FDSCursor.GetSequenceNumber(LongWord(PRecInfo(TDBIRecordBuffer(Buffer) + FRecInfoOfs)^.RecordNumber));
+        FDSCursor.GetRecordNumber(DWord(PRecInfo(TDBIRecordBuffer(Buffer) + FRecInfoOfs)^.RecordIdent));
         FDSCursor.GetRecordAttribute(PRecInfo(TDBIRecordBuffer(Buffer) + FRecInfoOfs)^.Attribute);
 
         GetCalcFields(Buffer);

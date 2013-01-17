@@ -1988,6 +1988,9 @@ begin
       else
         PhysicalFieldProps.FieldType := DT_GENERAL;
       end;
+
+      // Don't forget to update the header to indicate we have a memo file
+      Include(FHeader.Flags, xfMemo);
     end;  { fldBLOB }
 
 //##JVR    fldZSTRING, fldWIDESTRING, fldUNICODE: begin
@@ -2179,6 +2182,11 @@ begin
 
     // Delete Flags starts at offset 0, the first field starts at offset 1
     PhysicalFieldOffset := 1;
+
+    // Reset Header Flags property
+    Exclude(FHeader.Flags, xfCompoundIndex);
+    Exclude(FHeader.Flags, xfMemo);
+    Exclude(FHeader.Flags, xfDatabaseContainer);
 
     SetLength(FFields, FieldCount);
     for FieldNo := 0 to FieldCount - 1 do begin

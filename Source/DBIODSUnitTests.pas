@@ -48,9 +48,7 @@ type
     FObjectListDataset: TObjectListDataset;
 
   protected
-    procedure CreateBooksTable;
     procedure CreateGadTable;
-    procedure UpdateBooksTable;
 
     procedure Setup; override;
     procedure Teardown; override;
@@ -65,7 +63,7 @@ type
 
   published
     procedure AutoFieldDefs;
-    procedure CreateDataset;
+    procedure CreateBooks;
     procedure CreateGadCDS;
     procedure CreateGadODS;
     procedure DateTimeConsts;
@@ -74,13 +72,14 @@ type
     procedure FieldPropsODS;
     procedure Indices;
     procedure LoadFromDataset;
+    procedure LoadFromFile;
     procedure Locate;
     procedure ObjectDataEvents;
     procedure MemoryStreams;
     procedure NullFlags;
     procedure ReadOnlyProperty;
     procedure SaveAsCDS;
-    procedure UpdateDataset;
+    procedure UpdateBooks;
     procedure Validation;
 
   end;  { TDBIObjectListUnitTests }
@@ -181,55 +180,22 @@ uses
 procedure TDBIODSUnitTests.AutoFieldDefs;
 var
   ODS: TObjectListDataset;
-  Index: Integer;
 
 begin
   // Create a new Dataset
   ODS := TObjectListDataset.Create(nil);
   try
     ODS.ClassTypeName := TBookData.ClassName;
+    ODS.StringFieldSize := 1024;
+    
     // No fielddefs are defined because we are relying on the dataset to create
     // them automatically from the object's published properties
-    ODS.Open; //##Jvr - 22/05/2002 14:17:22 CreateDataset;
+    ODS.Open;
 
-    Index := 0;
-    ODS.AppendRecord([
-      NewBooks[Index].Sequence,
-      NewBooks[Index].Name,
-      NewBooks[Index].Author,
-      StrToDateTime(String(NewBooks[Index].Purchased)),
-      NewBooks[Index].Price,
-      NewBooks[Index].Currency,
-      NewBooks[Index].Rating,
-      NewBooks[Index].Approved,
-      NewBooks[Index].Comments,
-      NewBooks[Index].Notes,
-      NewBooks[Index].Details
-    ]);
+    TBookData.OccupyFields(ODS);
+    TBookData.AssertFields(ODS);
 
-    Assert(ODS.RecNo = (Index + 1));
-    Assert(ODS.RecordCount = 1);
-    Assert(ODS.FieldByName('Sequence').AsInteger = NewBooks[Index].Sequence);
-    Equalz(ODS.FieldByName('Name').AsString , NewBooks[Index].Name);
-    Equalz(ODS.FieldByName('Author').AsString , NewBooks[Index].Author);
-    Equalz(
-      FormatDateTime(DateTimeFormat, ODS.FieldByName('Purchased').AsDateTime),
-      NewBooks[Index].Purchased
-      );
-    Assert(ODS.FieldByName('Price').AsFloat = NewBooks[Index].Price);
-    Equalz(ODS.FieldByName('Currency').AsString , NewBooks[Index].Currency);
-    Assert(ODS.FieldByName('Rating').AsInteger = NewBooks[Index].Rating);
-    Assert(ODS.FieldByName('Approved').AsBoolean = NewBooks[Index].Approved);
-    Equalz(ODS.FieldByName('Comments').AsString , NewBooks[Index].Comments);
-    Equalz(ODS.FieldByName('Notes').AsString , NewBooks[Index].Notes);
-
-    // If the Data is too long then this will fail because the auto fielddefs
-    // generation creates string fields with a default length of 255
-    Equalz(ODS.FieldByName('Details').AsString , NewBooks[Index].Details);
-
-    Assert(ODS.RecordCount = 1);
     ODS.Close;
-
   finally
     ODS.Free;
   end;
@@ -240,125 +206,37 @@ end;  { AutoFieldDefs }
 {**
   Jvr - 12/02/2001 14:25:47.<P>
 }
-procedure TDBIODSUnitTests.CreateBooksTable;
+procedure TDBIODSUnitTests.CreateBooks;
+const
+  TableName = 'oCreateBooks.dbf';
+
 var
   ODS: TObjectListDataset;
-  Index: Integer;
 
 begin
-  // Only create Books table if it doesn't exist!
-  if SysUtils.FileExists(DataPath(dbfOBooks)) then begin
-    Exit;
-  end;
-
   // Create a new Dataset
+  TBookData.ODSCreateTable(DataPath(TableName));
+
   ODS := TObjectListDataset.Create(nil);
   try
     ODS.ClassTypeName := TBookData.ClassName;
 
-    for Index := Low(TBookFields) to High(TBookFields) do begin
-      with ODS.FieldDefs.AddFieldDef do begin
-        Name := UpperCase(TBookFields[Index].FieldName);
-        DataType := TBookFields[Index].FieldType;
+    TBookData.CreateFieldDefs(ODS);
 
-        if (TBookFields[Index].FieldSize > 0) then begin
-          Size := TBookFields[Index].FieldSize;
-        end;
-
-        if (TBookFields[Index].Precision > 0) then begin
-          Precision := TBookFields[Index].Precision;
-        end;
-      end;  { with }
-    end;  { for }
-
-    ODS.CreateDataset;
-
-    // Add Data
-    with ODS do begin
-      for Index := Low(NewBooks) to High(NewBooks) do begin
-        AppendRecord([
-          NewBooks[Index].Sequence,
-          NewBooks[Index].Name,
-          NewBooks[Index].Author,
-          StrToDateTime(String(NewBooks[Index].Purchased)),
-          NewBooks[Index].Price,
-          NewBooks[Index].Currency,
-          NewBooks[Index].Rating,
-          NewBooks[Index].Approved,
-          NewBooks[Index].Comments,
-          NewBooks[Index].Notes,
-          NewBooks[Index].Details
-        ]);
-
-        Assert(RecNo = (Index + 1));
-        Assert(FieldByName('Sequence').AsInteger = NewBooks[Index].Sequence);
-        Equalz(FieldByName('Name').AsString , NewBooks[Index].Name);
-        Equalz(FieldByName('Author').AsString , NewBooks[Index].Author);
-        Equalz(FormatDateTime(DateTimeFormat, FieldByName('Purchased').AsDateTime) , NewBooks[Index].Purchased);
-        Assert(FieldByName('Price').AsFloat = NewBooks[Index].Price);
-        Equalz(FieldByName('Currency').AsString , NewBooks[Index].Currency);
-        Assert(FieldByName('Rating').AsInteger = NewBooks[Index].Rating);
-        Assert(FieldByName('Approved').AsBoolean = NewBooks[Index].Approved);
-        Equalz(FieldByName('Comments').AsString , NewBooks[Index].Comments);
-        Equalz(FieldByName('Notes').AsString , NewBooks[Index].Notes);
-        Equalz(FieldByName('Details').AsString , NewBooks[Index].Details);
-      end;  { for }
-    end;  { with }
-
-    Assert(ODS.RecordCount = Length(NewBooks));
-    ODS.SaveToFile(DataPath(dbfOBooks));
-    ODS.Close;
-
-    Assert(SysUtils.FileExists(DataPath(dbfOBooks)), 'Failed to create Books table');
-    Assert(SysUtils.FileExists(DataPath(fptOBooks)), 'Failed to create Books Blob file');
-
+//    ODS.CreateDataset;
 
     // Verify Data was written correctly to file
-    ODS.LoadFromFile(DataPath(dbfOBooks));
+    ODS.List.Clear;
+    ODS.LoadFromFile(DataPath(TableName));
 
-    with ODS do begin
-      for Index := Low(NewBooks) to High(NewBooks) do begin
-        Assert(RecNo = (Index + 1));
-        Assert(FieldByName('Sequence').AsInteger = NewBooks[Index].Sequence);
-        Equalz(FieldByName('Name').AsString , NewBooks[Index].Name);
-        Equalz(FieldByName('Author').AsString , NewBooks[Index].Author);
-        Equalz(
-          FormatDateTime(DateTimeFormat, FieldByName('Purchased').AsDateTime),
-          NewBooks[Index].Purchased
-          );
-        Assert(FieldByName('Price').AsFloat = NewBooks[Index].Price);
-        Equalz(FieldByName('Currency').AsString , NewBooks[Index].Currency);
-        Assert(FieldByName('Rating').AsInteger = NewBooks[Index].Rating);
-        Assert(FieldByName('Approved').AsBoolean = NewBooks[Index].Approved);
-        Equalz(FieldByName('Comments').AsString , NewBooks[Index].Comments);
-        Equalz(FieldByName('Notes').AsString , NewBooks[Index].Notes);
-        Equalz(FieldByName('Details').AsString , NewBooks[Index].Details);
-
-        Next;
-      end;  { for }
-    end;  { with }
+    TBookData.AssertFields(ODS);
 
     ODS.Close;
 
   finally
     ODS.Free;
   end;
-end;  { CreateBooksTable }
-
-
-procedure TDBIODSUnitTests.CreateDataset;
-begin
-  // Delete the Datafile if it exists
-  SysUtils.DeleteFile(DataPath(dbfOBooks));
-  Assert(not SysUtils.FileExists(DataPath(dbfOBooks)));
-
-  // Delete the Blobfile if it exists
-  SysUtils.DeleteFile(DataPath(fptOBooks));
-  Assert(not SysUtils.FileExists(DataPath(fptOBooks)));
-
-  // Create new table
-  CreateBooksTable;
-end;
+end;  { CreateBooks }
 
 
 procedure TDBIODSUnitTests.CreateGadCDS;
@@ -705,12 +583,16 @@ end;
   Jvr - 28/02/2001 14:55:05.<P>
 }
 procedure TDBIODSUnitTests.Indices;
+const
+  TableName = 'oIndice.dbf';
+
 var
   ODS: TObjectListDataset;
   Index: Integer;
 
 begin
-  UpdateBooksTable;
+  DeleteTables(DataPath(TableName));
+  TBookData.ODSUpdateTable(DataPath(TableName));
 
   ODS := TObjectListDataset.Create(nil);
   try
@@ -718,7 +600,7 @@ begin
     with ODS do begin
       Close;
       ClassTypeName := TBookData.ClassName;
-      LoadFromFile(DataPath(dbfOBooksUpD8));
+      LoadFromFile(DataPath(TableName));
 
       AddIndex('NameOrder', 'Name', [ixCaseInsensitive]);
       AddIndex('NameReverse', 'Name', [ixDescending, ixCaseInsensitive]);
@@ -727,7 +609,7 @@ begin
       IndexName := 'NameOrder';
       First;
       for Index := 0 to RecordCount-1 do begin
-        Equalz(FieldByName('Name').AsString , UpdateBooks[NameOrderIdx[Index]].Name);
+        Equalz(FieldByName('Name').AsString , UpdatedBooks[NameOrderIdx[Index]].Name);
         Next;
       end;
 
@@ -735,7 +617,7 @@ begin
       IndexName := 'NameOrder' + ';Descending';
       First;
       for Index := 0 to RecordCount-1 do begin
-        Equalz(FieldByName('Name').AsString , UpdateBooks[NameReverseIdx[Index]].Name);
+        Equalz(FieldByName('Name').AsString , UpdatedBooks[NameReverseIdx[Index]].Name);
         Next;
       end;
 
@@ -743,7 +625,7 @@ begin
       IndexName := 'NameReverse';
       First;
       for Index := 0 to RecordCount-1 do begin
-        Equalz(FieldByName('Name').AsString , UpdateBooks[NameReverseIdx[Index]].Name);
+        Equalz(FieldByName('Name').AsString , UpdatedBooks[NameReverseIdx[Index]].Name);
         Next;
       end;
 
@@ -751,7 +633,7 @@ begin
       IndexName := 'NameReverse' + ';Descending';
       First;
       for Index := 0 to RecordCount-1 do begin
-        Equalz(FieldByName('Name').AsString , UpdateBooks[NameOrderIdx[Index]].Name);
+        Equalz(FieldByName('Name').AsString , UpdatedBooks[NameOrderIdx[Index]].Name);
         Next;
       end;
 
@@ -770,80 +652,37 @@ end;  { Indices }
   Jvr - 28/05/2001 16:32:04.<P>
 }
 procedure TDBIODSUnitTests.LoadFromDataset;
+const
+  TableName = 'oLoadFromDataset.dbf';
+
 var
   ODS: TObjectListDataset;
   XDS: TXbaseDataset;
-  Index: Integer;
+
 begin
-  CreateBooksTable;
+  // Create a new books Table
+  TBookData.ODSCreateTable(DataPath(TableName));
 
   // Open Dataset
   XDS := TXbaseDataset.Create(nil);
   try
-    XDS.LoadFromFile(DataPath(dbfOBooks));
+    XDS.LoadFromFile(DataPath(TableName));
 
     // dbfODSTest should have the same number of records as NewBooks
     Assert(XDS.RecordCount = Length(NewBooks));
 
     // Verify Data
-    with XDS do begin
-//##JVR ShowMessageFmt('RecordCount = %d', [RecordCount]);
-      First;
-      for Index := Low(NewBooks) to High(NewBooks) do begin
-        Assert(RecNo = (Index + 1));
-        Assert(FieldByName('Sequence').AsInteger = NewBooks[Index].Sequence);
-        Equalz(FieldByName('Name').AsString , NewBooks[Index].Name);
-        Equalz(FieldByName('Author').AsString , NewBooks[Index].Author);
-        Equalz(
-          FormatDateTime(DateTimeFormat, FieldByName('Purchased').AsDateTime),
-          NewBooks[Index].Purchased
-          );
-        Assert(FieldByName('Price').AsFloat = NewBooks[Index].Price);
-        Equalz(FieldByName('Currency').AsString , NewBooks[Index].Currency);
-        Assert(FieldByName('Rating').AsInteger = NewBooks[Index].Rating);
-        Assert(FieldByName('Approved').AsBoolean = NewBooks[Index].Approved);
-        Equalz(FieldByName('Comments').AsString , NewBooks[Index].Comments);
-        Equalz(FieldByName('Notes').AsString , NewBooks[Index].Notes);
-        Equalz(FieldByName('Details').AsString , NewBooks[Index].Details);
+    TBookData.AssertFields(XDS);
 
-        Next;
-      end;  { for }
-    end;  { with }
-
-
-    // Update Data
+    // Load Data
     ODS := TObjectListDataset.Create(nil);
     try
       ODS.ClassTypeName := TBookData.ClassName;
       ODS.LoadFromDataset(XDS, [lmCreateDataset]);
 
-      // dbfODSTest should have the same number of records as NewBooks
-      Assert(ODS.RecordCount = Length(NewBooks));
+      // Verify Data
+      TBookData.AssertFields(ODS);
 
-      with ODS do begin
-        First;
-        for Index := Low(NewBooks) to High(NewBooks) do begin
-          Assert(RecNo = (Index + 1));
-          Assert(FieldByName('Sequence').AsInteger = NewBooks[Index].Sequence);
-          Equalz(FieldByName('Name').AsString , NewBooks[Index].Name);
-          Equalz(FieldByName('Author').AsString , NewBooks[Index].Author);
-          Equalz(
-            FormatDateTime(DateTimeFormat, FieldByName('Purchased').AsDateTime),
-            NewBooks[Index].Purchased
-            );
-          Assert(FieldByName('Price').AsFloat = NewBooks[Index].Price);
-          Equalz(FieldByName('Currency').AsString , NewBooks[Index].Currency);
-          Assert(FieldByName('Rating').AsInteger = NewBooks[Index].Rating);
-          Assert(FieldByName('Approved').AsBoolean = NewBooks[Index].Approved);
-          Equalz(FieldByName('Comments').AsString , NewBooks[Index].Comments);
-          Equalz(FieldByName('Notes').AsString , NewBooks[Index].Notes);
-          Equalz(FieldByName('Details').AsString , NewBooks[Index].Details);
-
-          Next;
-        end;  { for }
-      end;  { with }
-
-      Assert(ODS.RecordCount = Length(NewBooks));
       ODS.Close;
     finally
       ODS.Free;
@@ -854,6 +693,37 @@ begin
     XDS.Free;
   end;
 end;  { LoadFromDataset }
+
+
+procedure TDBIODSUnitTests.LoadFromFile;
+const
+  TableName = 'oLoadFromFile.dbf';
+
+var
+  ODS: TObjectListDataset;
+
+begin
+  // Delete the Table if it exists
+  TDBIUnitTests.DeleteTables(DataPath(TableName));
+
+  // Create new table
+  TBookData.ODSCreateTable(DataPath(TableName));
+
+  ODS := TObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := TBookData.ClassName;
+    TBookData.CreateFieldDefs(ODS);
+
+    // Verify Data was written correctly to file
+    ODS.List.Clear;
+    ODS.LoadFromFile(DataPath(TableName));
+    TBookData.AssertFields(ODS);
+
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+end;
 
 
 // _____________________________________________________________________________
@@ -996,7 +866,7 @@ procedure TDBIODSUnitTests.NestedDataset;
 var
   ODS: TObjectListDataset;
 //##JVR  Index: Integer;
-
+  
 begin
   // Create a new Dataset
   ODS := TObjectListDataset.Create(nil);
@@ -1005,7 +875,8 @@ begin
     // No fielddefs are defined because we are relying on the dataset to create
     // them automatically from the object's published properties
     ODS.CreateDataset;
-(*
+
+(*##JVR
     Index := 0;
     ODS.AppendRecord([
       NewBooks[Index].Sequence,
@@ -1136,12 +1007,12 @@ var
     Equalz(Name, DataObject.CategoryName);
   end;
 
-  procedure CompareOrderedRecordWithObject(PItem: PNumRec);
+  function CompareOrderedRecordWithObject(PItem: PNumRec): TBookCategory;
   begin
-    DataObject := ODS.List[ODS.RecordNumber-1] as TBookCategory;
-//##JVR    DataObject := ODS.List[ODS.RecNo] as TBookCategory;
-    Assert(ODS.FieldByName('Sequence').AsInteger = DataObject.Sequence);
-    Equalz(ODS.FieldByName('CategoryName').AsString , DataObject.CategoryName);
+    Result := ODS.List[ODS.RecordNumber-1] as TBookCategory;
+
+    Assert(ODS.FieldByName('Sequence').AsInteger = Result.Sequence);
+    Equalz(ODS.FieldByName('CategoryName').AsString , Result.CategoryName);
 
     Assert(ODS.FieldByName('Sequence').AsInteger = PItem^.Sequence);
     Assert(
@@ -1174,13 +1045,14 @@ begin
     DataObject.CategoryName := 'Zero';
     ODS.UpdateObject(DataObject);
 
-{##JVR - RecordNumber does not work at this stage !!!
     ODS.First;
     for Index := Low(OrderedNumbers) to High(OrderedNumbers) do begin
-      CompareOrderedRecordWithObject(@(OrderedNumbers[Index]));
+      Assert(
+        CompareOrderedRecordWithObject(@(OrderedNumbers[Index])).Sequence =
+        (ODS.Data as TBookCategory).Sequence
+        );
       ODS.Next;
     end;
-//}
 
     for Index := ODS.RecordCount-1 downto 0 do begin
       DataObject := ODS.List[Index] as TBookCategory;
@@ -1341,30 +1213,28 @@ end;  { ReferenceFields }
   Jvr - 28/02/2001 12:40:34.<P>
 }
 procedure TDBIODSUnitTests.SaveAsCDS;
+const
+  TableName = 'oSaveAsCDS.dbf';
+
 var
   ODS: TObjectListDataset;
   CDS: TClientDataSet;
-  Index: Integer;
-  MemoData: String;
 
 begin
-  UpdateBooksTable;
+  TBookData.ODSUpdateTable(DataPath(TableName));
 
   // Open Dataset
   ODS := TObjectListDataset.Create(nil);
   try
-    Assert(SysUtils.FileExists(DataPath(dbfOBooksUpD8)));
-    Assert(SysUtils.FileExists(DataPath(fptOBooksUpD8)));
-
     ODS.ClassTypeName := TBookData.ClassName;
-    ODS.LoadFromFile(DataPath(dbfOBooksUpD8));
+    ODS.LoadFromFile(DataPath(TableName));
 
-    Assert(ODS.RecordCount = Length(NewBooks));
+    TBookData.ReviseFields(ODS);
 
-    ODS.SaveToFile(DataPath(cdsODSSave), dfCDS);
+    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfCDS);
     ODS.Close;
 
-    Assert(SysUtils.FileExists(DataPath(cdsODSSave)));
+    Assert(SysUtils.FileExists(DataPath(ChangeFileExt(TableName, '.cds'))));
   finally
     ODS.Free;
   end;  { try..finally }
@@ -1374,39 +1244,10 @@ begin
   // Open Dataset
   CDS := TClientDataset.Create(nil);
   try
-    CDS.LoadFromFile(DataPath(cdsODSSave));
-    Assert(CDS.RecordCount = Length(NewBooks));
+    CDS.LoadFromFile(DataPath(ChangeFileExt(TableName, '.cds')));
 
     // Verify Data
-    with CDS do begin
-      First;
-      for Index := Low(UpdateBooks) to High(UpdateBooks) do begin
-        Assert(RecNo = (Index + 1));
-        Assert(FieldByName('Sequence').AsInteger = UpdateBooks[Index].Sequence);
-        Equalz(FieldByName('Name').AsString , UpdateBooks[Index].Name);
-        Equalz(FieldByName('Author').AsString , UpdateBooks[Index].Author);
-        Equalz(
-          FormatDateTime(DateTimeFormat, FieldByName('Purchased').AsDateTime),
-          UpdateBooks[Index].Purchased
-          );
-        Assert(FieldByName('Price').AsFloat = UpdateBooks[Index].Price);
-        Equalz(FieldByName('Currency').AsString , UpdateBooks[Index].Currency);
-        Assert(FieldByName('Rating').AsInteger = UpdateBooks[Index].Rating);
-        Assert(FieldByName('Approved').AsBoolean = UpdateBooks[Index].Approved);
-        Equalz(FieldByName('Comments').AsString , UpdateBooks[Index].Comments);
-
-        // I need to do this because I believe ther is a bug in CDS
-        MemoData := FieldByName('Notes').AsString;
-        SetLength(MemoData, StrLen(PChar(MemoData)));
-        Equalz(MemoData , UpdateBooks[Index].Notes);
-
-        MemoData := FieldByName('Details').AsString;
-        SetLength(MemoData, StrLen(PChar(MemoData)));
-        Equalz(MemoData , UpdateBooks[Index].Details);
-
-        Next;
-      end;  { for }
-    end;  { with }
+    TBookData.ReviseFields(CDS);
 
     CDS.Close;
   finally
@@ -1477,115 +1318,41 @@ end;
 {**
   Jvr - 23/02/2001 16:06:32<P>
 }
-procedure TDBIODSUnitTests.UpdateBooksTable;
+procedure TDBIODSUnitTests.UpdateBooks;
+const
+  TableName = 'oUpdateBooks.dbf';
+
+begin
+  TBookData.ODSUpdateTable(DataPath(TableName));
+end;
+
+(*##JVR
+procedure TDBIODSUnitTests.UpdateBooksTable(const AFileName: String);
 var
   ODS: TObjectListDataset;
   Index: Integer;
 
 begin
-  // Only create BooksUpD8 table if it doesn't exist!
-  if SysUtils.FileExists(DataPath(dbfOBooksUpD8)) then begin
-    Exit;
-  end;
-
-  CreateBooksTable;
+  TBookData.ODSCreateTable(AFileName);
 
   // Open Dataset
   ODS := TObjectListDataset.Create(nil);
   try
-    Assert(SysUtils.FileExists(DataPath(dbfOBooks))); //##JVR dbfODSTest)));
-    Assert(SysUtils.FileExists(DataPath(fptOBooks))); //##JVR fptODSTest)));
-
     ODS.ClassTypeName := TBookData.ClassName;
-    ODS.LoadFromFile(DataPath(dbfOBooks)); //##JVR dbfODSTest));
-
-    // dbfOBooks should have the same number of records as NewBooks
-    Assert(ODS.RecordCount = Length(NewBooks));
-
-    // Verify Data
-    with ODS do begin
-      First;
-      for Index := Low(NewBooks) to High(NewBooks) do begin
-        Assert(RecNo = (Index + 1));
-        Assert(FieldByName('Sequence').AsInteger = NewBooks[Index].Sequence);
-        Equalz(FieldByName('Name').AsString , NewBooks[Index].Name);
-        Equalz(FieldByName('Author').AsString , NewBooks[Index].Author);
-        Equalz(
-          FormatDateTime(DateTimeFormat, FieldByName('Purchased').AsDateTime),
-          NewBooks[Index].Purchased
-          );
-
-        Assert(FieldByName('Price').AsFloat = NewBooks[Index].Price);
-        Equalz(FieldByName('Currency').AsString , NewBooks[Index].Currency);
-        Assert(FieldByName('Rating').AsInteger = NewBooks[Index].Rating);
-        Assert(FieldByName('Approved').AsBoolean = NewBooks[Index].Approved);
-        Equalz(FieldByName('Comments').AsString , NewBooks[Index].Comments);
-        Equalz(FieldByName('Notes').AsString , NewBooks[Index].Notes);
-        Equalz(FieldByName('Details').AsString , NewBooks[Index].Details);
-
-        Next;
-      end;  { for }
-    end;  { with }
-
+    ODS.LoadFromFile(AFileName);
+    TBookData.AssertFields(ODS);
 
     // Update Data
-    with ODS do begin
-      First;
-      for Index := Low(UpdateBooks) to High(UpdateBooks) do begin
-        Edit;
-        SetFields([
-          UpdateBooks[Index].Sequence,
-          UpdateBooks[Index].Name,
-          UpdateBooks[Index].Author,
-          StrToDateTime(String(UpdateBooks[Index].Purchased)),
-          UpdateBooks[Index].Price,
-          UpdateBooks[Index].Currency,
-          UpdateBooks[Index].Rating,
-          UpdateBooks[Index].Approved,
-          UpdateBooks[Index].Comments,
-          UpdateBooks[Index].Notes,
-          UpdateBooks[Index].Details
-        ]);
-        Post;
+    TBookData.UpdateFields(ODS);
+    TBookData.ReviseFields(ODS);
 
-        Assert(RecNo = (Index + 1));
-        Assert(FieldByName('Sequence').AsInteger = UpdateBooks[Index].Sequence);
-        Equalz(FieldByName('Name').AsString , UpdateBooks[Index].Name);
-        Equalz(FieldByName('Author').AsString , UpdateBooks[Index].Author);
-        Equalz(
-          FormatDateTime(DateTimeFormat, FieldByName('Purchased').AsDateTime),
-          UpdateBooks[Index].Purchased
-          );
-        Assert(FieldByName('Price').AsFloat = UpdateBooks[Index].Price);
-        Equalz(FieldByName('Currency').AsString , UpdateBooks[Index].Currency);
-        Assert(FieldByName('Rating').AsInteger = UpdateBooks[Index].Rating);
-        Assert(FieldByName('Approved').AsBoolean = UpdateBooks[Index].Approved);
-        Equalz(FieldByName('Comments').AsString , UpdateBooks[Index].Comments);
-        Equalz(FieldByName('Notes').AsString , UpdateBooks[Index].Notes);
-        Equalz(FieldByName('Details').AsString , UpdateBooks[Index].Details);
-
-        Next;
-      end;  { for }
-    end;  { with }
-
-    Assert(ODS.RecordCount = Length(NewBooks));
-    ODS.SaveToFile(DataPath(dbfOBooksUpD8));
+    ODS.SaveToFile(AFileName);
     ODS.Close;
-
-    Assert(SysUtils.FileExists(DataPath(dbfOBooksUpD8)));
-    Assert(SysUtils.FileExists(DataPath(fptOBooksUpD8)));
-
   finally
     ODS.Free;
   end;
-end;  { UpdateBooksTable }
-
-
-procedure TDBIODSUnitTests.UpdateDataset;
-begin
-  UpdateBooksTable;
 end;
-
+//*)
 
 // _____________________________________________________________________________
 {**

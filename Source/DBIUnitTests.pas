@@ -96,6 +96,7 @@ type
 
   public
     function DataPath(const FileName: String = ''): String;
+    class procedure DeleteTables(const AFileName: String);
 
     procedure ZapOGadTable;
     procedure ZapXGadTable;
@@ -126,6 +127,25 @@ type
   end;
 
 
+type
+  TBookRecord = record
+    Sequence: Integer;
+    Name: TDBIString;
+    Author: TDBIString;
+    Purchased: TDBIString;
+    Price: Double;
+    Currency: TDBIString;
+    Rating: Integer;
+    Approved: Boolean;
+    Comments: TDBIString;
+    Notes: TDBIString;
+    Details: TDBIString;
+  end;  { TBookRecord }
+
+  TBookRecords = array[0..4] of TBookRecord;
+  PBookRecords = ^TBookRecords;
+
+type
   TBookData = class(TPersistent)
   private
     FSequence: Integer;
@@ -144,8 +164,14 @@ type
     class procedure AssertFields(ADataset: TDataset);
     class procedure CreateFieldDefs(ADataset: TDataset);
     class procedure OccupyFields(ADataset: TDataset);
+    class procedure ReviseFields(ADataset: TDataset);
+    class procedure UpdateFields(ADataset: TDataset);
 
-    class procedure XbaseCreateTable(const AFileName: String);
+    class procedure ODSCreateTable(const AFileName: String);
+    class procedure ODSUpdateTable(const AFileName: String);
+
+    class procedure XDSCreateTable(const AFileName: String);
+    class procedure XDSUpdateTable(const AFileName: String);
 
   published
     property Sequence: Integer read FSequence write FSequence;
@@ -163,6 +189,7 @@ type
   end;  { TBookData }
 
 
+type
   TBookCategory = class(TPersistent)
   private
     FSequence: Integer;
@@ -175,22 +202,6 @@ type
     property Books: TObjectList read FBooks write FBooks;
 
   end;  { TBookCategory }
-
-
-type
-  TBookRecord = record
-    Sequence: Integer;
-    Name: TDBIString;
-    Author: TDBIString;
-    Purchased: TDBIString;
-    Price: Double;
-    Currency: TDBIString;
-    Rating: Integer;
-    Approved: Boolean;
-    Comments: TDBIString;
-    Notes: TDBIString;
-    Details: TDBIString;
-  end;  { TBookRecord }
 
 
 const
@@ -229,7 +240,7 @@ const
   {**
     Data for the CREATION of the test dataset(s)
   }
-  NewBooks: array[0..4] of TBookRecord = (
+  NewBooks: TBookRecords = (
     (
       Sequence: 0;
       Name: 'Learn Delphi 2 Database Programming Today!';
@@ -323,7 +334,7 @@ const
   {**
     Data UPDATE the test dataset(s)
   }
-  UpdateBooks: array[0..4] of TBookRecord = (
+  UpdatedBooks: array[0..4] of TBookRecord = (
     (
       Sequence: 0;
       Name: 'Learn Delphi 2 Database Programming Today!';
@@ -417,6 +428,13 @@ const
     )
   );
 
+const
+  NameOrderIdx: array[Low(NewBooks)..High(NewBooks)] of Integer =
+    (4, 3, 0, 1, 2);
+  NameReverseIdx: array[Low(NewBooks)..High(NewBooks)] of Integer =
+    (2, 1, 0, 3, 4);
+
+
 type
 // _____________________________________________________________________________
 {**
@@ -444,7 +462,11 @@ type
     class procedure ClearFields(ADataset: TDataset);
     class procedure CreateFields(ADataset: TDataset);
     class procedure CreateFieldDefs(ADataset: TDataset);
+    class procedure OccupyFields(ADataset: TDataset);
     class procedure UpdateFields(ADataset: TDataset);
+
+    class procedure ODSCreateTable(const AFileName: String);
+    class procedure XDSCreateTable(const AFileName: String);
 
   published
     property ID: Word read FID write FID;
@@ -591,12 +613,6 @@ const
 const
   GadData_Comment = 'John_Vander_Reest';
 
-  NameOrderIdx: array[Low(NewBooks)..High(NewBooks)] of Integer =
-    (4, 3, 0, 1, 2);
-  NameReverseIdx: array[Low(NewBooks)..High(NewBooks)] of Integer =
-    (2, 1, 0, 3, 4);
-
-
 type
   TStringData = class(TPersistent)
   private
@@ -680,7 +696,7 @@ procedure Equalz(const Str1: String; const Str2: AnsiString);
 implementation
 
 uses
-  SysUtils, Dialogs, Forms, DSIntf, DBIConst, DBIUtils, DBIXbaseDatasets;
+  Windows, SysUtils, Dialogs, Forms, DSIntf, DBIConst, DBIUtils, DBIXbaseDatasets;
 
 
 { Helpers }
@@ -1028,7 +1044,7 @@ begin
     Assert(ADataset.FieldByName('Value').AsInteger = GadData[Index].Value);
 {$ifdef DELPHI6}
     Assert(ADataset.FieldByName('Comment').AsString = GadData_Comment);
-{$endif}    
+{$endif}
     Equalz(ADataset.FieldByName('Status').AsString , GadData[Index].Status);
 
     Inc(Index);
@@ -1108,6 +1124,46 @@ begin
 end;
 
 
+class procedure TGad.OccupyFields(ADataset: TDataset);
+var
+  Index: Integer;
+  Today: TDateTime;
+
+begin
+  for Index := Low(GadData) to High(GadData) do begin
+    Today := Now;
+
+    ADataset.Append;
+    ADataset.FieldByName('ID').AsInteger := Index;
+    ADataset.FieldByName('Age').AsInteger := GadData[Index].Age;
+    ADataset.FieldByName('Gender').AsString := String(GadData[Index].Gender);
+    ADataset.FieldByName('YieldRate').AsFloat := GadData[Index].YieldRate;
+    ADataset.FieldByName('Value').AsInteger := GadData[Index].Value;
+{$ifdef DELPHI6}
+    ADataset.FieldByName('Comment').AsString := GadData_Comment;
+{$endif}
+    ADataset.FieldByName('Status').AsString := GadData[Index].Status;
+    ADataset.FieldByName('Created').AsDateTime := Today;
+    ADataset.FieldByName('Date').AsDateTime := Trunc(Today);
+//{
+    // We post the record here to force the Created datetime value
+    // to be stored prior to proceeding.
+    ADataset.Post;
+    ADataset.Edit;
+//}
+    Today := ADataset.FieldByName('Created').AsDateTime;
+    ADataset.FieldByName('Time').AsString := FormatDateTime('hh:nn:ss.zzz', Today);
+
+    ADataset.CheckBrowseMode;
+    Sleep(5);
+  end;
+end;
+
+class procedure TGad.ODSCreateTable(const AFileName: String);
+begin
+
+end;
+
 // _____________________________________________________________________________
 {**
   Jvr - 03/12/2002 11:22:46.<P>
@@ -1146,6 +1202,125 @@ begin
 end;
 
 
+class procedure TGad.XDSCreateTable(const AFileName: String);
+var
+  XDS: TXBaseDataset;
+
+begin
+  // Create Gad Table
+  XDS := TXBaseDataset.Create(nil);
+  try
+    CreateFields(XDS);
+
+    XDS.FileName := AFileName;
+    XDS.CreateDataset;
+
+    OccupyFields(XDS);
+    AssertFields(XDS);
+
+(*##JVR
+    for Index := Low(GadData) to High(GadData) do begin
+      Today := Now;
+
+      XDS.Append;
+      XDS.FieldByName('ID').AsInteger := Index;
+      XDS.FieldByName('Age').AsInteger := GadData[Index].Age;
+      XDS.FieldByName('Gender').AsString := String(GadData[Index].Gender);
+      XDS.FieldByName('YieldRate').AsFloat := GadData[Index].YieldRate;
+      XDS.FieldByName('Value').AsInteger := GadData[Index].Value;
+      XDS.FieldByName('Created').AsDateTime := Today;
+      XDS.FieldByName('Date').AsDateTime := Trunc(Today);
+//{
+      // We post the record here to force the Created datetime value
+      // to be stored prior to proceeding.
+      XDS.Post;
+      XDS.Edit;
+//}
+      Today := XDS.FieldByName('Created').AsDateTime;
+      XDS.FieldByName('Time').AsString := FormatDateTime('hh:nn:ss.zzz', Today);
+
+      XDS.CheckBrowseMode;
+      Sleep(5);
+    end;
+//*)
+
+(*##JVR
+    Field := ODS.FieldDefs.AddFieldDef;
+    Field.Name := 'Age';
+    Field.DataType := ftSmallInt;
+
+    Field := ODS.FieldDefs.AddFieldDef;
+    Field.Name := 'Gender';
+    Field.DataType := ftString;
+    Field.Size := 1;
+
+    Field := ODS.FieldDefs.AddFieldDef;
+    Field.Name := 'YieldRate';
+    Field.DataType := ftFloat;
+{##JVR
+    Field.DataType := ftBCD;
+    Field.Size := 14;
+    Field.Precision := 4;
+//}
+    Field := ODS.FieldDefs.AddFieldDef;
+    Field.Name := 'Value';
+    Field.DataType := ftSmallInt;
+{##JVR
+    ODS.FieldDefs.Add('Gender', ftString, 1, False);
+    ODS.FieldDefs.Add('YieldRate', ftFloat, 2, False);
+    ODS.FieldDefs.Add('Value', ftSmallInt, 0, False);
+//}
+
+
+    XDS.First;
+    Index := 0;
+    while not XDS.Eof do begin
+      Assert(XDS.FieldByName('Age').AsInteger = GadData[Index].Age);
+      Equalz(XDS.FieldByName('Gender').ASString , GadData[Index].Gender);
+      Assert(XDS.FieldByName('YieldRate').AsFloat = GadData[Index].YieldRate);
+      Assert(XDS.FieldByName('Value').AsInteger = GadData[Index].Value);
+
+      Inc(Index);
+      XDS.Next;
+    end;
+*)
+
+    XDS.Close;
+  finally
+    XDS.Free;
+  end;
+
+
+  Assert(SysUtils.FileExists(AFileName), 'Failed to create Gad Table');
+
+  // Reload Gad Table and verify data
+  XDS := TXBaseDataset.Create(nil);
+  try
+//##JVR    XDSGad_Init;
+    XDS.LoadFromFile(AFileName);
+
+    AssertFields(XDS);
+(*##JVR
+    XDS.First;
+    Index := 0;
+    while not XDS.Eof do begin
+      Assert(XDS.FieldByName('Age').AsInteger = GadData[Index].Age);
+      Equalz(XDS.FieldByName('Gender').ASString , GadData[Index].Gender);
+      Assert(XDS.FieldByName('YieldRate').AsFloat = GadData[Index].YieldRate);
+      Assert(XDS.FieldByName('Value').AsInteger = GadData[Index].Value);
+
+      Inc(Index);
+      XDS.Next;
+    end;
+//*)
+
+    XDS.Close;
+  finally
+    XDS.Free;
+  end;
+end;
+
+
 
 
 
@@ -1156,11 +1331,10 @@ var
   Index: Integer;
 
 begin
-  Index := Low(NewBooks);
-
   ADataset.First;
-  while not ADataset.Eof do begin
+  for Index := Low(NewBooks) to High(NewBooks) do begin
     Assert(ADataset.RecNo = (Index + 1));
+
     Assert(ADataset.FieldByName('Sequence').AsInteger = NewBooks[Index].Sequence);
     Equalz(ADataset.FieldByName('Name').AsString , NewBooks[Index].Name);
     Equalz(ADataset.FieldByName('Author').AsString , NewBooks[Index].Author);
@@ -1176,11 +1350,41 @@ begin
     Equalz(ADataset.FieldByName('Notes').AsString , NewBooks[Index].Notes);
     Equalz(ADataset.FieldByName('Details').AsString , NewBooks[Index].Details);
 
-    Inc(Index);
     ADataset.Next;
   end;
 
   Assert(ADataset.RecordCount = Length(NewBooks));
+end;
+
+
+class procedure TBookData.ReviseFields(ADataset: TDataset);
+var
+  Index: Integer;
+
+begin
+  ADataset.First;
+  for Index := Low(UpdatedBooks) to High(UpdatedBooks) do begin
+    Assert(ADataset.RecNo = (Index + 1));
+
+    Assert(ADataset.FieldByName('Sequence').AsInteger = UpdatedBooks[Index].Sequence);
+    Equalz(ADataset.FieldByName('Name').AsString , UpdatedBooks[Index].Name);
+    Equalz(ADataset.FieldByName('Author').AsString , UpdatedBooks[Index].Author);
+    Equalz(
+      FormatDateTime(DateTimeFormat, ADataset.FieldByName('Purchased').AsDateTime),
+      UpdatedBooks[Index].Purchased
+      );
+    Assert(ADataset.FieldByName('Price').AsFloat = UpdatedBooks[Index].Price);
+    Equalz(ADataset.FieldByName('Currency').AsString , UpdatedBooks[Index].Currency);
+    Assert(ADataset.FieldByName('Rating').AsInteger = UpdatedBooks[Index].Rating);
+    Assert(ADataset.FieldByName('Approved').AsBoolean = UpdatedBooks[Index].Approved);
+    Equalz(ADataset.FieldByName('Comments').AsString , UpdatedBooks[Index].Comments);
+    Equalz(ADataset.FieldByName('Notes').AsString , UpdatedBooks[Index].Notes);
+    Equalz(ADataset.FieldByName('Details').AsString , UpdatedBooks[Index].Details);
+
+    ADataset.Next;
+  end;
+
+  Assert(ADataset.RecordCount = Length(UpdatedBooks));
 end;
 
 
@@ -1232,29 +1436,173 @@ begin
 end;
 
 
-class procedure TBookData.XbaseCreateTable(const AFileName: String);
+class procedure TBookData.ODSCreateTable(const AFileName: String);
+var
+  ODS: TObjectListDataset;
+
+begin
+  // Create a new Dataset
+  ODS := TObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := TBookData.ClassName;
+
+    TBookData.CreateFieldDefs(ODS);
+
+    ODS.CreateDataset;
+
+    TBookData.OccupyFields(ODS);
+    TBookData.AssertFields(ODS);
+
+    ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.dbf')), 'Failed to create Books table');
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.fpt')), 'Failed to create Books Blob file');
+end;  { ODSCreateTable }
+
+
+class procedure TBookData.ODSUpdateTable(const AFileName: String);
+var
+  ODS: TObjectListDataset;
+
+begin
+  ODSCreateTable(AFileName);
+
+  // Open Dataset
+  ODS := TObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := TBookData.ClassName;
+    ODS.LoadFromFile(AFileName);
+    TBookData.AssertFields(ODS);
+
+    // Update Data
+    TBookData.UpdateFields(ODS);
+    TBookData.ReviseFields(ODS);
+
+    ODS.SaveToFile(AFileName);
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+end;
+
+
+class procedure TBookData.UpdateFields(ADataset: TDataset);
+var
+  Index: Integer;
+
+begin
+  ADataset.First;
+  for Index := Low(UpdatedBooks) to High(UpdatedBooks) do begin
+    ADataset.Edit;
+    ADataset.SetFields([
+      UpdatedBooks[Index].Sequence,
+      UpdatedBooks[Index].Name,
+      UpdatedBooks[Index].Author,
+      StrToDateTime(String(UpdatedBooks[Index].Purchased)),
+      UpdatedBooks[Index].Price,
+      UpdatedBooks[Index].Currency,
+      UpdatedBooks[Index].Rating,
+      UpdatedBooks[Index].Approved,
+      UpdatedBooks[Index].Comments,
+      UpdatedBooks[Index].Notes,
+      UpdatedBooks[Index].Details
+    ]);
+    ADataset.Post;
+    ADataset.Next;
+  end;
+end;
+
+
+class procedure TBookData.XDSCreateTable(const AFileName: String);
 var
   XDS: TXbaseDataset;
-
+  CDS: TClientDataset;
+  
 begin
   XDS := TXbaseDataset.Create(nil);
   try
-    XDS.FileName := AFileName;
+    XDS.FileName := ChangeFileExt(AFileName, '.dbf');
     TBookData.CreateFieldDefs(XDS);
     XDS.CreateDataset;
 
     TBookData.OccupyFields(XDS);
     TBookData.AssertFields(XDS);
 
+    XDS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfCDS);
     XDS.Close;
   finally
     XDS.Free;
   end;
 
+  // Verify the data that was saved to the ".cds' is valid
+  // Open Dataset
   Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.dbf')));
   Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.fpt')));
-end;  { XbaseCreateTable }
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.cds')));
 
+  CDS := TClientDataset.Create(nil);
+  try
+    CDS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
+
+    TBookData.AssertFields(CDS);
+
+    CDS.Close;
+  finally
+    CDS.Free;
+  end;
+end;  { XDSCreateTable }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 23/02/2001 15:07:48<P>
+}
+class procedure TBookData.XDSUpdateTable(const AFileName: String);
+var
+  XDS: TXbaseDataset;
+  CDS: TClientDataset;
+
+begin
+  TDBIUnitTests.DeleteTables(AFileName);
+
+  TBookData.XDSCreateTable(AFileName);
+
+  // Update Data
+  XDS := TXbaseDataset.Create(nil);
+  try
+    XDS.FileName := AFileName;
+    XDS.Open;
+
+    TBookData.UpdateFields(XDS);
+    TBookData.ReviseFields(XDS);
+
+    XDS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfCDS);
+    XDS.Close;
+  finally
+    XDS.Free;
+  end;
+
+  // Verify the data that was saved to the ".cds' is valid
+  // Open Dataset
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.dbf')));
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.fpt')));
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.cds')));
+
+  CDS := TClientDataset.Create(nil);
+  try
+    CDS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
+
+    TBookData.ReviseFields(CDS);
+
+    CDS.Close;
+  finally
+    CDS.Free;
+  end;
+end;  { XDSUpdateTable }
 
 
 
@@ -1269,6 +1617,22 @@ end;  { XbaseCreateTable }
 function TDBIUnitTests.DataPath(const FileName: String = ''): String;
 begin
   Result := TestTempDir + FileName;
+end;
+
+
+class procedure TDBIUnitTests.DeleteTables(const AFileName: String);
+begin
+  // Delete the Datafile if it exists
+  SysUtils.DeleteFile(ChangeFileExt(AFileName, '.dbf'));
+  Assert(not SysUtils.FileExists(ChangeFileExt(AFileName, '.dbf')));
+
+  // Delete the Blobfile if it exists
+  SysUtils.DeleteFile(ChangeFileExt(AFileName, '.fpt'));
+  Assert(not SysUtils.FileExists(ChangeFileExt(AFileName, '.fpt')));
+
+  // Delete the Cdsfile if it exists
+  SysUtils.DeleteFile(ChangeFileExt(AFileName, '.cds'));
+  Assert(not SysUtils.FileExists(ChangeFileExt(AFileName, '.cds')));
 end;
 
 

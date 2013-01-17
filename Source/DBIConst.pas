@@ -142,7 +142,7 @@ const
   // NOTE: Use typed constants here otherwise you might get rounding
   //   errors in date comparisons.
 {$ifdef DELPHI6}
-  C_DBISignifyNullDateTime = -693593.0;
+  C_DBISignifyNullDateTime = -657434.0; //##JVR - this one matches "SysUtils.DateDelta" -693593.0;
   DBIMinDateTime: TDateTime = C_DBISignifyNullDateTime;         { 01/01/0100 12:00:00.000 AM = $FFF5F7E6 }
   DBISignifyNullDateTime: TDateTime = C_DBISignifyNullDateTime; { Must be the same as DBIMinDateTime }
 

@@ -105,8 +105,7 @@ type
     procedure SetMode(const Value: TDBIDataConnectionMode);
     procedure SetList(Value: TObjectList);
 
-    property Mode: TDBIDataConnectionMode
-      read GetMode write SetMode default cmData;
+    property Mode: TDBIDataConnectionMode read GetMode write SetMode default cmData;
 
   public
     constructor Create(AOwner: TComponent); override;
@@ -122,7 +121,7 @@ type
     property Active;
     property ClassTypeName;
     property DataSetField;
-    property Mode;              //** cmData of cmFields
+    property Mode;              //** cmData or cmFields
     property ObjectValidationProc;
     property ObjectView default True;
     property ReadOnly;
