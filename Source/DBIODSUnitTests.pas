@@ -30,6 +30,11 @@ interface
 
 {$I DBICompilers.inc}
 
+{$IFNDEF DELPHIXE3}
+  // Avoid the deprecation warning from TClientDataset.LoadFromFile in OM's patched D2006 DBClient.pas
+  {$WARN SYMBOL_DEPRECATED OFF}
+{$ENDIF}
+
 uses
   Classes, Contnrs, DBIStrings, DBIObjectListDatasets, DBIUnitTests,
 {$ifndef fpc}
