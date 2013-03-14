@@ -30,11 +30,6 @@ interface
 
 {$I DBICompilers.inc}
 
-{$IFNDEF DELPHIXE3}
-  // Avoid the deprecation warning from TClientDataset.LoadFromFile in OM's patched D2006 DBClient.pas
-  {$WARN SYMBOL_DEPRECATED OFF}
-{$ENDIF}
-
 uses
   DBIXbaseDatasets, DBIXbaseDataConnections, DBIDataset, DBIUnitTests,
 {$ifndef fpc}
@@ -81,6 +76,10 @@ type
 
 implementation
 
+{$ifdef omTesting}
+  // Avoid the deprecation warning from TClientDataset.LoadFromFile in OM's patched D2006 DBClient.pas
+  {$WARN SYMBOL_DEPRECATED OFF}
+{$endif}
 
 uses
 {$ifdef DELPHI6}
@@ -372,7 +371,8 @@ var
   TimeStamp: TTimeStamp;
   CombinedTimeStamp: TTimeStamp;
   ResultTimeStamp: TTimeStamp;
-  SetValue: TDateTime;
+  DateTimeValue: TDateTime;
+  DateValue: TDateTime;
   Today: TDateTime;
   ID: Word;
 
@@ -391,7 +391,9 @@ begin
       Today := XDS.FieldByName('Created').AsDateTime;
       TimeStamp := DateTimeToTimeStamp(Today);
 
-      Assert(Trunc(Today) = XDS.FieldByName('Date').AsDateTime, 'Dates do NOT match');
+      DateTimeValue := XDS.FieldByName('Date').AsDateTime;
+      DateValue := Trunc(Today);
+      Assert(DateValue = DateTimeValue, 'Dates do NOT match');
 
       DateTimeStamp := DateTimeToTimeStamp(XDS.FieldByName('Date').AsDateTime);
       DateTimeStamp.Time := 0;
@@ -423,19 +425,19 @@ begin
 
       // Now change it so that it doesn't match
       XDS.Edit;
-      SetValue := TimeStampToDateTime(DateTimeToTimeStamp(Now));
-      XDS.FieldByName('Created').AsDateTime := SetValue;
+      DateTimeValue := TimeStampToDateTime(DateTimeToTimeStamp(Now));
+      XDS.FieldByName('Created').AsDateTime := DateTimeValue;
       XDS.Post;
 
       // Are they the same?
       TimeStamp := DateTimeToTimeStamp(XDS.FieldByName('Created').AsDateTime);
-      ResultTimeStamp := DateTimeToTimeStamp(SetValue);
+      ResultTimeStamp := DateTimeToTimeStamp(DateTimeValue);
       Assert(ResultTimeStamp.Date = TimeStamp.Date);
       Assert(Round(ResultTimeStamp.Time/1000) * 1000 = Round(TimeStamp.Time/1000) * 1000);
 
       // Ok if that works then change it back again
       XDS.Edit;
-      XDS.FieldByName('Created').AsDateTime := Today; //##JVR TimeStampToDateTime(TimeStamp);
+      XDS.FieldByName('Created').AsDateTime := Today;
       XDS.Post;
 
       // And test it again

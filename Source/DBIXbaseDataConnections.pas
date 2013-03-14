@@ -3112,10 +3112,7 @@ var
   PData: TDBIRecordBuffer;
   Size: Integer;
   ConvBuff: array[0..32] of TDBIRecordElement;  // Numeric fields can be no larger than 20 Chars
-  FloatValue: Extended;
-{$ifndef DELPHI6}
   CurrencyValue: Currency;
-{$endif}
 
 begin
   PData := @RecordBuffer;
@@ -3141,16 +3138,15 @@ begin
 
   // Convert the dbase numeric type to an extended floating point value
 {$ifdef DELPHIXE2}
-  Result := DBITextToFloat(@ConvBuff[0], FloatValue, fvExtended);
+  Result := DBITextToFloat(@ConvBuff[0], CurrencyValue, fvCurrency);
 {$else}
-  Result := TextToFloat(@ConvBuff[0], FloatValue, fvExtended);
+  Result := TextToFloat(@ConvBuff[0], CurrencyValue, fvCurrency);
 {$endif}
 
   // Assign Floating point value to the Field Buffer
-{$ifdef DELPHI6}
-  DoubleToBCD(FloatValue, PBcd(FieldBuffer)^);
+{$ifdef fpc}
+  PCurrency(FieldBuffer)^ := CurrencyValue;
 {$else}
-  CurrencyValue := FloatValue;
   CurrToBCD(CurrencyValue, PBcd(FieldBuffer)^);
 {$endif}
 end;  { GetFieldBCD }
@@ -3169,22 +3165,17 @@ procedure TDBIXbaseDataConnection.PutFieldBCD(
   );
 var
   PMask: PAnsiChar;
-
-{$ifdef DELPHI6}
-  FloatValue: Double;
-{$else}
-  FloatValue: Currency;
-{$endif }
+  CurrencyValue: Currency;
 
 begin
   if (FieldBuffer = nil) then begin
     FillChar(RecordBuffer, FFields[FieldNo].FieldSize[0], Ord(' '));
   end
   else begin
-{$ifdef DELPHI6}
-    FloatValue := BcdToDouble(PBcd(FieldBuffer)^);
+{$ifdef fpc}
+    CurrencyValue := PCurrency(FieldBuffer)^;
 {$else}
-    BcdToCurr(PBcd(FieldBuffer)^, FloatValue);
+    BcdToCurr(PBcd(FieldBuffer)^, CurrencyValue);
 {$endif}
 
     PMask := PAnsiChar('%*.*f');
@@ -3192,11 +3183,11 @@ begin
       [
         FieldProps[FieldNo].iUnits1,
         FieldProps[FieldNo].iUnits2,
-        FloatValue
+        CurrencyValue
         ]
       );
 
-   {$ifdef DBDebug}
+{$ifdef DBDebug}
     ShowMessageFmt(
       'StrValue = %s, DoubleValue = %10.10f, BCDPrecision = %d, BCDScale = %d, Units1 = %d, Units2 = %d', [
        String(PAnsiChar(@RecordBuffer)),
@@ -3206,7 +3197,7 @@ begin
        FieldProps[FieldNo].iUnits1,
        FieldProps[FieldNo].iUnits2
       ]);
-   {$endif DBDebug}
+{$endif DBDebug}
   end;  { if }
 end;  { PutFieldBCD }
 
@@ -3457,17 +3448,6 @@ var
   TimeStamp: TTimeStamp;
   FPTimeStamp: TDBIXbaseFoxProTimeStamp;
 
-{$ifdef DBDebug}
-  PData: TDBIRecordBuffer;
-  Test: TDBIString;
-  DateTime: TDateTime;
-  Seconds: Integer;
-  Minutes: Integer;
-  Sec: Integer;
-  Min: Integer;
-  Hrs: Integer;
-{$endif DBDebug}
-
 begin
   Result := Int64(RecordBuffer) <> 0;
 
@@ -3487,37 +3467,7 @@ begin
     TimeStamp.Time := Round(FPTimeStamp.Time/1000) * 1000;
   end;
 
-{$ifdef DBDebug}
-  PData := TDBIRecordBuffer(@RecordBuffer);
-  Seconds := Round(TimeStamp.Time / 1000);
-  Sec := Seconds mod 60;
-  Minutes := Seconds div 60;
-  Min := Minutes mod 60;
-  Hrs := Minutes div 60;
-
-  DateTime := TimeStampToDateTime(TimeStamp);
-  Test := Format(
-    'Hex = %2.2x %2.2x %2.2x %2.2x %2.2x %2.2x %2.2x %2.2x  = %4d %4d, (HH:NN:SS) %2.2d:%2.2d:%2.2d, ', [
-    Byte(PData[0]),
-    Byte(PData[1]),
-    Byte(PData[2]),
-    Byte(PData[3]),
-    Byte(PData[7]),
-    Byte(PData[6]),
-    Byte(PData[5]),
-    Byte(PData[4]),
-    TimeStamp.Date,
-    TimeStamp.Time,
-    Hrs,
-    Min,
-    Sec
-    ]) + DateTimeToStr(DateTime);
-  PData := TDBIRecordBuffer(Test);
-  Move(PData^, FieldBuffer^, Length(Test));
-
-{$else}
-  PDateTimeRec(FieldBuffer)^.DateTime := TimeStampToMSecs(TimeStamp);
-{$endif}
+  PDateTime(FieldBuffer)^ := TimeStampToMSecs(TimeStamp);
 end;  { GetFieldDateTime }
 
 
@@ -3548,7 +3498,8 @@ begin
     FillChar(RecordBuffer, 8, #0);
   end
   else begin
-    TimeStamp := MSecsToTimeStamp(PDateTimeRec(FieldBuffer)^.DateTime);
+    TimeStamp := MSecsToTimeStamp(PDateTime(FieldBuffer)^);
+
     TDBIXbaseFoxProTimeStamp(RecordBuffer).Date := TimeStamp.Date + XbaseFoxProDateOffset;
     TDBIXbaseFoxProTimeStamp(RecordBuffer).Time := TimeStamp.Time;
   end;

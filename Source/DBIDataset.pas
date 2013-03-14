@@ -3772,6 +3772,10 @@ begin
             or (FieldDesc.iFldSubType = fldstHBINARY) then
           LType := BlobTypeMap[FieldDesc.iFldSubType];
       end;
+{$ifdef fpc}
+    fldTABLE:
+      LType := ftUnknown;
+{$else}
     fldTABLE:
       begin
         { TODO 1 -oJvr -cTDBIDataSet.AddFieldDesc() :
@@ -3790,7 +3794,9 @@ begin
         //##Jvr - 15/10/2001 12:07:57
       if FieldDesc.iFldSubType = fldstREFERENCE then LType := ftReference;
     end;
+{$endif}
   end;
+
   if LType <> ftUnknown then
   begin
     LFieldDef := TDBIFieldDef(FieldDefs.AddFieldDef);

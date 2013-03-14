@@ -30,11 +30,6 @@ interface
 
 {$I DBICompilers.inc}
 
-{$IFNDEF DELPHIXE3}
-  // Avoid the deprecation warning from TClientDataset.LoadFromFile in OM's patched D2006 DBClient.pas
-  {$WARN SYMBOL_DEPRECATED OFF}
-{$ENDIF}
-
 uses
   Classes, Contnrs, DBIStrings, DBIObjectListDatasets, DBIUnitTests,
 {$ifndef fpc}
@@ -157,6 +152,11 @@ type
 
 
 implementation
+
+{$ifdef omTesting}
+  // Avoid the deprecation warning from TClientDataset.LoadFromFile in OM's patched D2006 DBClient.pas
+  {$WARN SYMBOL_DEPRECATED OFF}
+{$endif}
 
 uses
 {$ifdef DELPHI6}
@@ -343,27 +343,31 @@ end;
 }
 procedure TDBIODSUnitTests.DateTimeConsts;
 var
-//##JVR  DateTimeString: String;
+  DateTimeString: String;
   DateTimeValue: TDateTime;
   DateTimeVariant: Variant;
 
 begin
   // Validate the DBIMinDateTime constant
-  StrToDateTime(DateTimeToStr(DBIMinDateTime));
-//(*##JVR
-  try
-    StrToDateTime(DateTimeToStr(DBIZeroDateTime));
-    Fail('DBIZeroDateTime: Should never reach this point');
+  DateTimeString := FormatDateTime(TDBIUnitTest.GetDateTimeFormat, DBIMinDateTime);
+  StrToDateTime(DateTimeString);
 
+  // Validate the DBIMaxDateTime constant
+  DateTimeString := FormatDateTime(TDBIUnitTest.GetDateTimeFormat, DBIMaxDateTime);
+  StrToDateTime(DateTimeString);
+
+  // Validate the DBIZeroDateTime constant - should fail!
+  try
+    DateTimeString := FormatDateTime(TDBIUnitTest.GetDateTimeFormat, DBIZeroDateTime);
+    StrToDateTime(DateTimeString);
+
+    Fail('DBIZeroDateTime: Should never reach this point');
   except
     on ETestFailed do raise;
   else
     // Do Nothing
   end;
-//*)
 
-  // Validate the DBIMinDateTime constant
-  StrToDateTime(DateTimeToStr(DBIMaxDateTime));
 (*##JVR
   try
     DateTimeString := DateTimeToStr(DBIMaxDateTime+2);

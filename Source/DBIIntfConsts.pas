@@ -786,7 +786,6 @@ const
   Default_LogicalBufferFirstFieldOffset = 0;
   Default_TemporaryRecordBufferSize = 8192;
   Default_StringFieldLength = 255;
-  Default_ValidationProcName = 'Validate';
 
 {$ifndef DELPHI6}
   sLineBreak = {$IFDEF LINUX} #10 {$ELSE} #13#10 {$ENDIF};

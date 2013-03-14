@@ -1929,18 +1929,7 @@ procedure TDBICustomListDataConnection.SetOptions(
   const Value: TDBIListDataConnectionOptions
   );
 begin
-  if (FOptions <> Value) then begin
-    // (osObjectValidation in FOptions)  ==>  NOT (osObjectValidation in Value)
-    if not (osObjectValidation in Value) then begin
-      FObjectValidationProc := Default_ValidationProcName;
-    end
-
-    // NOT (osObjectValidation in FOptions)  ==>  (osObjectValidation in Value)
-    else begin
-    end;
-
-    FOptions := Value;
-  end;
+  FOptions := Value;
 end;  { SetOptions }
 
 

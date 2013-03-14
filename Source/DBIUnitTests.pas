@@ -30,11 +30,6 @@ interface
 
 {$I DBICompilers.inc}
 
-{$IFNDEF DELPHIXE3}
-  // Avoid the deprecation warning from TClientDataset.LoadFromFile in OM's patched D2006 DBClient.pas
-  {$WARN SYMBOL_DEPRECATED OFF}
-{$ENDIF}
-
 uses
   Classes, Contnrs, DB, DBIStrings, DBIIntfConsts, DBIObjectListDatasets,
   DBIXbaseDatasets, DBIXbaseConsts,
@@ -290,6 +285,7 @@ type
     YieldRate: Double;
     Value: Integer;
     Status: AnsiString;
+    Created: String;
   end;
 
   TGadRecords = array[0..99] of TGadRecord;
@@ -599,7 +595,11 @@ type
     FID: Integer;
     FName: String;
     FBusiness: Boolean;
+{$ifndef fpc}
     FAddress: TAddressData;
+{$else}
+    FAddress: String;
+{$endif}
     FOther: TOtherData;
     FUntyped: TObject;
     FCreated: TDateTime;
@@ -634,7 +634,11 @@ type
     property ID: Integer read FID write FID default 0;
     property Name: String read FName write FName;
     property Business: Boolean read FBusiness write FBusiness default False;
+{$ifndef fpc}
     property Address: TAddressData read GetAddress write SetAddress;
+{$else}
+    property Address: String read FAddress write FAddress;
+{$endif}
     property Other: TOtherData read GetOther write setOther;
     property Untyped: TObject read GetUntyped write SetUntyped;
     property Created: TDateTime read FCreated write FCreated;
@@ -648,6 +652,11 @@ procedure Equalz(const Str1: String; const Str2: AnsiString);
 
 
 implementation
+
+{$ifdef omTesting}
+  // Avoid the deprecation warning from TClientDataset.LoadFromFile in OM's patched D2006 DBClient.pas
+  {$WARN SYMBOL_DEPRECATED OFF}
+{$endif}
 
 uses
   Windows, SysUtils, Dialogs, Forms, DBIConst, DBIUtils, DBIDataset;
@@ -809,21 +818,23 @@ end;
 
 class procedure TEntityData.ApplyValues(ADataset: TDataset; Index: Integer);
 var
+  Today: TDateTime;
   Fields: TFields;
   EntityData: TEntityRecords;
-{$ifndef fpc}
   AddressData: TAddressRecords;
-{$endif}
+
 begin
+ Today := GetDateTime(Index);
   EntityData := TEntityData.GetRecords;
   Fields := ADataset.Fields;
   Fields.FieldByName('ID').AsInteger := EntityData[Index].ID;
   Fields.FieldByName('Name').AsString := EntityData[Index].Name;
   Fields.FieldByName('Business').AsBoolean := EntityData[Index].Business;
-  Fields.FieldByName('Created').AsDateTime := GetDateTime(Index);
+  Fields.FieldByName('Created').AsDateTime := Today;
+
+  AddressData := TAddressData.GetRecords;
 
 {$ifndef fpc}
-  AddressData := TAddressData.GetRecords;
   Fields := (Fields.FieldByName('Address') as TADTField).Fields;
   Fields.FieldByName('ID').AsInteger := AddressData[Index].ID;
   Fields.FieldByName('First').AsString := AddressData[Index].First;
@@ -831,7 +842,9 @@ begin
   Fields.FieldByName('Address').AsString := AddressData[Index].Address;
   Fields.FieldByName('City').AsString := AddressData[Index].City;
   Fields.FieldByName('Code').AsInteger := AddressData[Index].Code;
-{$endif}  
+{$else}
+  Fields.FieldByName('Address').AsString := AddressData[Index].Address;
+{$endif}
 end;
 
 
@@ -842,7 +855,11 @@ begin
     TEntityData(Dest).FName := FName;
     TEntityData(Dest).FBusiness := FBusiness;
     TEntityData(Dest).FCreated := FCreated;
+{$ifndef fpc}
     TEntityData(Dest).FAddress.Assign(FAddress);
+{$else}
+    TEntityData(Dest).FAddress := FAddress;
+{$endif}
     TEntityData(Dest).FOther.Assign(FOther);
   end
   else begin
@@ -854,13 +871,13 @@ end;
 class procedure TEntityData.CheckValues(ADataset: TDataset; Index: Integer);
 var
   EntityData: TEntityRecords;
-{$ifndef fpc}
   AddressData: TAddressRecords;
+{$ifndef fpc}
   Field: TField;
-{$else}
-  Today: TDateTime;
 {$endif}
   Fields: TFields;
+//##DEBUGIT  Today: TDateTime;
+//##DEBUGIT  DateTimeString: array[0..1] of String;
 
 begin
   EntityData := TEntityData.GetRecords;
@@ -881,16 +898,17 @@ begin
   Assert(Fields.FieldByName('Name').AsString = EntityData[Index].Name);
   Assert(Fields.FieldByName('Business').AsBoolean = EntityData[Index].Business);
 
-//##DEBUG - Start
-{$ifdef fpc}
+{$ifdef DEBUGIT}
   Today := Fields.FieldByName('Created').AsDateTime;
-  ShowMessageFmt('"%s" = "%s"', [DateTimeToStr(Today), DateTimeToStr(GetDateTime(Index))]);
+  DateTimeString[0] := FormatDateTime(GetDateTimeFormat, Today);
+  DateTimeString[1] := FormatDateTime(GetDateTimeFormat, GetDateTime(Index));
+  ShowMessageFmt('"%s" = "%s"', [DateTimeString[0], DateTimeString[1]]);
 {$endif}
-//##DEBUG - End
-Assert(Fields.FieldByName('Created').AsDateTime = GetDateTime(Index));
 
-{$ifndef fpc}
+  Assert(Fields.FieldByName('Created').AsDateTime = GetDateTime(Index));
+
   AddressData := TAddressData.GetRecords;
+{$ifndef fpc}
   Fields := (Fields.FieldByName('Address') as TADTField).Fields;
   Assert(Fields.FieldByName('ID').AsInteger = AddressData[Index].ID);
   Assert(Fields.FieldByName('First').AsString = AddressData[Index].First);
@@ -898,7 +916,9 @@ Assert(Fields.FieldByName('Created').AsDateTime = GetDateTime(Index));
   Assert(Fields.FieldByName('Address').AsString = AddressData[Index].Address);
   Assert(Fields.FieldByName('City').AsString = AddressData[Index].City);
   Assert(Fields.FieldByName('Code').AsInteger = AddressData[Index].Code);
-{$endif}  
+{$else}
+  Assert(Fields.FieldByName('Address').AsString = AddressData[Index].Address);
+{$endif}
 end;
 
 
@@ -973,20 +993,24 @@ begin
 
   FOther.Free;
   FOther := nil;
-
+{$ifndef fpc}
   FAddress.Free;
   FAddress := nil;
-
+{$endif}
   inherited Destroy;
 end;
 
 
 function TEntityData.GetAddress: TAddressData;
 begin
+{$ifndef fpc}
   if not Assigned(FAddress) then begin
     FAddress := TAddressData.Create;
   end;
   Result := FAddress;
+{$else}
+  Result := nil;
+{$endif}
 end;
 
 
@@ -996,7 +1020,11 @@ const
     (FieldName: 'ID';       FieldType: ftInteger;  FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; ),
     (FieldName: 'Name';     FieldType: ftString;   FieldSize: 20; Precision: 0; Required: False; ReadOnly: False; ),
     (FieldName: 'Business'; FieldType: ftBoolean;  FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; ),
+{$ifndef fpc}
     (FieldName: 'Address';  FieldType: ftADT;      FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; ),
+{$else}
+    (FieldName: 'Address';  FieldType: ftString;   FieldSize: 30; Precision: 0; Required: False; ReadOnly: False; ),
+{$endif}
     (FieldName: 'Created';  FieldType: ftDateTime; FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; )
     );
 begin
@@ -1705,6 +1733,7 @@ begin
 {$endif}
   ADataset.FieldByName('Status').AsString := String(GadData[Index].Status);
   ADataset.FieldByName('Created').AsDateTime := Today;
+//##JVR  ADataset.FieldByName('Created').AsString := GadData[Index].Created;
   ADataset.FieldByName('Date').AsDateTime := Trunc(Today);
 
   // We post the record here to force the Created datetime value
@@ -1792,108 +1821,108 @@ end;
 class function TGadData.GetRecords: TGadRecords;
 const
   CData: TGadRecords = (
-    ( Age: 26; Gender: 'M'; YieldRate: 3; Value: 37; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 3; Value: 36; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 3.25; Value: 39; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 3.25; Value: 38; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 3.5; Value: 41; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 3.5; Value: 40; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 3.75; Value: 43; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 3.75; Value: 42; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 4; Value: 45; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 4; Value: 44; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 4.25; Value: 47; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 4.25; Value: 46; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 4.5; Value: 49; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 4.5; Value: 48; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 4.75; Value: 51; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 4.75; Value: 50; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 5; Value: 53; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 5; Value: 52; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 5.25; Value: 55; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 5.25; Value: 54; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 5.5; Value: 57; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 5.5; Value: 56; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 5.75; Value: 59; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 5.75; Value: 58; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 6; Value: 62; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 6; Value: 61; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 6.25; Value: 64; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 6.25; Value: 63; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 6.5; Value: 66; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 6.5; Value: 65; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 6.75; Value: 68; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 6.75; Value: 67; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 7; Value: 70; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 7; Value: 69; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 7.25; Value: 72; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 7.25; Value: 72; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 7.5; Value: 75; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 7.5; Value: 74; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 7.75; Value: 77; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 7.75; Value: 76; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 8; Value: 79; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 8; Value: 79; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 8.25; Value: 81; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 8.25; Value: 81; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 8.5; Value: 84; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 8.5; Value: 83; Status: 'abcd'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 8.75; Value: 86; Status: 'abc'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 8.75; Value: 85; Status: 'abc'; ),
-    ( Age: 26; Gender: 'M'; YieldRate: 9; Value: 88; Status: 'abcdef'; ),
-    ( Age: 26; Gender: 'F'; YieldRate: 9; Value: 88; Status: 'abcdef'; ),
-    ( Age: 35; Gender: 'M'; YieldRate: 6.5; Value: 68; Status: 'abcd'; ),
-    ( Age: 35; Gender: 'F'; YieldRate: 6.5; Value: 67; Status: 'abcd'; ),
-    ( Age: 35; Gender: 'M'; YieldRate: 6.75; Value: 70; Status: 'abc'; ),
-    ( Age: 35; Gender: 'F'; YieldRate: 6.75; Value: 69; Status: 'abc'; ),
-    ( Age: 35; Gender: 'M'; YieldRate: 7; Value: 72; Status: 'abcdef'; ),
-    ( Age: 35; Gender: 'F'; YieldRate: 7; Value: 71; Status: 'abcdef'; ),
-    ( Age: 35; Gender: 'M'; YieldRate: 7.25; Value: 75; Status: 'abc'; ),
-    ( Age: 35; Gender: 'F'; YieldRate: 7.25; Value: 73; Status: 'abc'; ),
-    ( Age: 35; Gender: 'M'; YieldRate: 7.5; Value: 77; Status: 'abcd'; ),
-    ( Age: 35; Gender: 'F'; YieldRate: 7.5; Value: 75; Status: 'abcd'; ),
-    ( Age: 47; Gender: 'M'; YieldRate: 4.5; Value: 59; Status: 'abcd'; ),
-    ( Age: 47; Gender: 'F'; YieldRate: 4.5; Value: 56; Status: 'abcd'; ),
+    ( Age: 26; Gender: 'M'; YieldRate: 3; Value: 37; Status: 'abcdef'; Created: '01/01/1900 01:01:01'; ),
+    ( Age: 26; Gender: 'F'; YieldRate: 3; Value: 36; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 3.25; Value: 39; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 3.25; Value: 38; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 3.5; Value: 41; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 3.5; Value: 40; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 3.75; Value: 43; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 3.75; Value: 42; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 4; Value: 45; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 4; Value: 44; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 4.25; Value: 47; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 4.25; Value: 46; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 4.5; Value: 49; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 4.5; Value: 48; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 4.75; Value: 51; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 4.75; Value: 50; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 5; Value: 53; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 5; Value: 52; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 5.25; Value: 55; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 5.25; Value: 54; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 5.5; Value: 57; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 5.5; Value: 56; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 5.75; Value: 59; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 5.75; Value: 58; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 6; Value: 62; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 6; Value: 61; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 6.25; Value: 64; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 6.25; Value: 63; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 6.5; Value: 66; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 6.5; Value: 65; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 6.75; Value: 68; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 6.75; Value: 67; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 7; Value: 70; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 7; Value: 69; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 7.25; Value: 72; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 7.25; Value: 72; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 7.5; Value: 75; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 7.5; Value: 74; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 7.75; Value: 77; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 7.75; Value: 76; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 8; Value: 79; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 8; Value: 79; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 8.25; Value: 81; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 8.25; Value: 81; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 8.5; Value: 84; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 8.5; Value: 83; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 8.75; Value: 86; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 8.75; Value: 85; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'M'; YieldRate: 9; Value: 88; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 26; Gender: 'F'; YieldRate: 9; Value: 88; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 35; Gender: 'M'; YieldRate: 6.5; Value: 68; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 35; Gender: 'F'; YieldRate: 6.5; Value: 67; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 35; Gender: 'M'; YieldRate: 6.75; Value: 70; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 35; Gender: 'F'; YieldRate: 6.75; Value: 69; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 35; Gender: 'M'; YieldRate: 7; Value: 72; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 35; Gender: 'F'; YieldRate: 7; Value: 71; Status: 'abcdef'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 35; Gender: 'M'; YieldRate: 7.25; Value: 75; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 35; Gender: 'F'; YieldRate: 7.25; Value: 73; Status: 'abc'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 35; Gender: 'M'; YieldRate: 7.5; Value: 77; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 35; Gender: 'F'; YieldRate: 7.5; Value: 75; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 47; Gender: 'M'; YieldRate: 4.5; Value: 59; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 47; Gender: 'F'; YieldRate: 4.5; Value: 56; Status: 'abcd'; Created: '01/01/1900 01:01:01';  ),
 
-{}  ( Age: 47; Gender: 'M'; YieldRate: 4.75; Value: 61; Status: 'ABC'; ),
+{}  ( Age: 47; Gender: 'M'; YieldRate: 4.75; Value: 61; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
 
-    ( Age: 47; Gender: 'F'; YieldRate: 4.75; Value: 57; Status: 'ABC'; ),
-    ( Age: 47; Gender: 'M'; YieldRate: 5; Value: 63; Status: 'ABCDEF'; ),
-    ( Age: 47; Gender: 'F'; YieldRate: 5; Value: 59; Status: 'ABCDEF'; ),
-    ( Age: 47; Gender: 'M'; YieldRate: 5.25; Value: 65; Status: 'ABC'; ),
-    ( Age: 47; Gender: 'F'; YieldRate: 5.25; Value: 61; Status: 'ABC'; ),
-    ( Age: 47; Gender: 'M'; YieldRate: 5.5; Value: 67; Status: 'ABCD'; ),
-    ( Age: 47; Gender: 'F'; YieldRate: 5.5; Value: 63; Status: 'ABCD'; ),
-    ( Age: 52; Gender: 'M'; YieldRate: 9.5; Value: 104; Status: 'ABC'; ),
-    ( Age: 52; Gender: 'F'; YieldRate: 9.5; Value: 100; Status: 'ABC'; ),
-    ( Age: 52; Gender: 'M'; YieldRate: 9.75; Value: 106; Status: 'AB'; ),
-    ( Age: 52; Gender: 'F'; YieldRate: 9.75; Value: 102; Status: 'AB'; ),
-    ( Age: 52; Gender: 'M'; YieldRate: 10; Value: 108; Status: 'ABCD'; ),
-    ( Age: 52; Gender: 'F'; YieldRate: 10; Value: 104; Status: 'ABCD'; ),
-    ( Age: 53; Gender: 'M'; YieldRate: 3; Value: 55; Status: 'ABCDEF'; ),
-    ( Age: 53; Gender: 'F'; YieldRate: 3; Value: 49; Status: 'ABCDEF'; ),
-    ( Age: 53; Gender: 'M'; YieldRate: 3.25; Value: 56; Status: 'ABC'; ),
-    ( Age: 53; Gender: 'F'; YieldRate: 3.25; Value: 51; Status: 'ABC'; ),
-    ( Age: 63; Gender: 'M'; YieldRate: 9.5; Value: 121; Status: 'ABC'; ),
-    ( Age: 63; Gender: 'F'; YieldRate: 9.5; Value: 112; Status: 'ABC'; ),
-    ( Age: 63; Gender: 'M'; YieldRate: 9.75; Value: 123; Status: 'AB'; ),
-    ( Age: 63; Gender: 'F'; YieldRate: 9.75; Value: 114; Status: 'AB'; ),
-    ( Age: 63; Gender: 'M'; YieldRate: 10; Value: 125; Status: 'ABCD'; ),
-    ( Age: 63; Gender: 'F'; YieldRate: 10; Value: 116; Status: 'ABCD'; ),
-    ( Age: 64; Gender: 'M'; YieldRate: 3; Value: 74; Status: 'ABCDEF'; ),
-    ( Age: 64; Gender: 'F'; YieldRate: 3; Value: 65; Status: 'ABCDEF'; ),
-    ( Age: 64; Gender: 'M'; YieldRate: 3.25; Value: 76; Status: 'ABC'; ),
-    ( Age: 64; Gender: 'F'; YieldRate: 3.25; Value: 66; Status: 'ABC'; ),
-    ( Age: 74; Gender: 'M'; YieldRate: 5.5; Value: 127; Status: 'ABC'; ),
-    ( Age: 74; Gender: 'F'; YieldRate: 5.5; Value: 111; Status: 'ABC'; ),
-    ( Age: 74; Gender: 'M'; YieldRate: 5.75; Value: 129; Status: 'AB'; ),
-    ( Age: 74; Gender: 'F'; YieldRate: 5.75; Value: 113; Status: 'AB'; ),
-    ( Age: 74; Gender: 'M'; YieldRate: 6; Value: 131; Status: 'ABCDE'; ),
-    ( Age: 74; Gender: 'F'; YieldRate: 6; Value: 115; Status: 'ABCDE'; ),
-    ( Age: 74; Gender: 'M'; YieldRate: 6.25; Value: 133; Status: 'AB'; ),
-    ( Age: 74; Gender: 'F'; YieldRate: 6.25; Value: 116; Status: 'AB'; ),
-    ( Age: 74; Gender: 'M'; YieldRate: 6.5; Value: 134; Status: 'ABC'; ),
-    ( Age: 74; Gender: 'F'; YieldRate: 6.5; Value: 118;Status: 'ABCD'; )
+    ( Age: 47; Gender: 'F'; YieldRate: 4.75; Value: 57; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 47; Gender: 'M'; YieldRate: 5; Value: 63; Status: 'ABCDEF'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 47; Gender: 'F'; YieldRate: 5; Value: 59; Status: 'ABCDEF'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 47; Gender: 'M'; YieldRate: 5.25; Value: 65; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 47; Gender: 'F'; YieldRate: 5.25; Value: 61; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 47; Gender: 'M'; YieldRate: 5.5; Value: 67; Status: 'ABCD'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 47; Gender: 'F'; YieldRate: 5.5; Value: 63; Status: 'ABCD'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 52; Gender: 'M'; YieldRate: 9.5; Value: 104; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 52; Gender: 'F'; YieldRate: 9.5; Value: 100; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 52; Gender: 'M'; YieldRate: 9.75; Value: 106; Status: 'AB'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 52; Gender: 'F'; YieldRate: 9.75; Value: 102; Status: 'AB'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 52; Gender: 'M'; YieldRate: 10; Value: 108; Status: 'ABCD'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 52; Gender: 'F'; YieldRate: 10; Value: 104; Status: 'ABCD'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 53; Gender: 'M'; YieldRate: 3; Value: 55; Status: 'ABCDEF'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 53; Gender: 'F'; YieldRate: 3; Value: 49; Status: 'ABCDEF'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 53; Gender: 'M'; YieldRate: 3.25; Value: 56; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 53; Gender: 'F'; YieldRate: 3.25; Value: 51; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 63; Gender: 'M'; YieldRate: 9.5; Value: 121; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 63; Gender: 'F'; YieldRate: 9.5; Value: 112; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 63; Gender: 'M'; YieldRate: 9.75; Value: 123; Status: 'AB'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 63; Gender: 'F'; YieldRate: 9.75; Value: 114; Status: 'AB'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 63; Gender: 'M'; YieldRate: 10; Value: 125; Status: 'ABCD'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 63; Gender: 'F'; YieldRate: 10; Value: 116; Status: 'ABCD'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 64; Gender: 'M'; YieldRate: 3; Value: 74; Status: 'ABCDEF'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 64; Gender: 'F'; YieldRate: 3; Value: 65; Status: 'ABCDEF'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 64; Gender: 'M'; YieldRate: 3.25; Value: 76; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 64; Gender: 'F'; YieldRate: 3.25; Value: 66; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 74; Gender: 'M'; YieldRate: 5.5; Value: 127; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 74; Gender: 'F'; YieldRate: 5.5; Value: 111; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 74; Gender: 'M'; YieldRate: 5.75; Value: 129; Status: 'AB'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 74; Gender: 'F'; YieldRate: 5.75; Value: 113; Status: 'AB'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 74; Gender: 'M'; YieldRate: 6; Value: 131; Status: 'ABCDE'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 74; Gender: 'F'; YieldRate: 6; Value: 115; Status: 'ABCDE'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 74; Gender: 'M'; YieldRate: 6.25; Value: 133; Status: 'AB'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 74; Gender: 'F'; YieldRate: 6.25; Value: 116; Status: 'AB'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 74; Gender: 'M'; YieldRate: 6.5; Value: 134; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
+    ( Age: 74; Gender: 'F'; YieldRate: 6.5; Value: 118;Status: 'ABCD'; Created: '01/01/1900 01:01:01';  )
   );
 begin
   Result := CData;
@@ -1942,6 +1971,8 @@ begin
 
     VerifyFields(ODS);
     AssertValues(ODS);
+
+    ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
 
     XDS := TDBIXbaseDataset.Create(nil);
     try
@@ -2080,13 +2111,19 @@ end;
 class procedure TBookData.ApplyValues(ADataset: TDataset; Index: Integer);
 var
   NewBooks: TBookRecords;
+  Purchased: TDateTime;
+  PurchasedString: String;
+
 begin
   NewBooks := TBookData.GetRecords;
+  PurchasedString :=  String(NewBooks[Index].Purchased);
+  Purchased := StrToDateTime(String(PurchasedString));
+
   ADataset.SetFields([
     NewBooks[Index].Sequence,
     NewBooks[Index].Name,
     NewBooks[Index].Author,
-    StrToDateTime(String(NewBooks[Index].Purchased)),
+    Purchased,
     NewBooks[Index].Price,
     NewBooks[Index].Currency,
     NewBooks[Index].Rating,
@@ -2180,6 +2217,9 @@ end;
 class procedure TBookData.CheckValues(ADataset: TDataset; Index: Integer);
 var
   NewBooks: TBookRecords;
+  Purchased: TDateTime;
+  PurchasedString: String;
+
 begin
   NewBooks := TBookData.GetRecords;
   Assert(ADataset.RecNo = (Index + 1));
@@ -2187,10 +2227,11 @@ begin
   Assert(ADataset.FieldByName('Sequence').AsInteger = NewBooks[Index].Sequence);
   Equalz(ADataset.FieldByName('Name').AsString , NewBooks[Index].Name);
   Equalz(ADataset.FieldByName('Author').AsString , NewBooks[Index].Author);
-  Equalz(
-    FormatDateTime(GetDateTimeFormat, ADataset.FieldByName('Purchased').AsDateTime),
-    NewBooks[Index].Purchased
-    );
+
+  Purchased := ADataset.FieldByName('Purchased').AsDateTime;
+  PurchasedString := FormatDateTime(GetDateTimeFormat, Purchased);
+  Equalz(PurchasedString, NewBooks[Index].Purchased);
+
   Assert(ADataset.FieldByName('Price').AsFloat = NewBooks[Index].Price);
   Equalz(ADataset.FieldByName('Currency').AsString , NewBooks[Index].Currency);
   Assert(ADataset.FieldByName('Rating').AsInteger = NewBooks[Index].Rating);
@@ -2635,10 +2676,7 @@ var
   Success: Boolean;
 
 begin
-//##NULLS
-{$ifdef fpc}
-  Exit;
-{$endif}
+  // Nulls testing - Value NOT Required
   Success := False;
 
   ADataset.First;
@@ -2794,7 +2832,7 @@ class procedure TDBIUnitTest.BuildFieldDefs(ADataset: TDataset; PFieldData: PFie
 var
   Index: Integer;
   FieldDef: TFieldDef;
-  
+
 begin
   if (ADataset is TObjectListDataset) then begin
     (ADataset as TObjectListDataset).ClassTypeName := Self.ClassName;
@@ -2804,8 +2842,8 @@ begin
   ADataset.Fields.Clear;
 
   AddFieldDefs(ADataset.FieldDefs, PFieldData, Count);
-//##NULLS
-{$ifndef fpc}
+
+  // Nulls testing - Value NOT Required
   Index := GetNullFieldSize;
   if (Index > 0) and (ADataset is TXbaseDataset) then begin
     FieldDef := ADataset.FieldDefs.AddFieldDef;
@@ -2818,7 +2856,6 @@ begin
     ShowMessageFmt('Added Fielddef "%s"', [FieldDef.Name]);
 {$endif}
   end;
-{$endif}
 end;
 
 
