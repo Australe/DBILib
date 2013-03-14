@@ -2028,9 +2028,9 @@ begin
     fldINT32:      Result := sizeofINT32;
     fldFLOAT:      Result := sizeofFLOAT;
 {$ifndef fpc}
-    fldBCD:        Result := SizeOf(TBcd);     // FCP uses a currency FieldBuffer
+    fldBCD:        Result := SizeOf(TBcd);     // Delphi uses a TBCD FieldBuffer
 {$else}
-    fldBCD:        Result := SizeOf(Currency); // Delphi uses a TBCD FieldBuffer
+    fldBCD:        Result := SizeOf(Currency); // FCP uses a currency FieldBuffer
 {$endif}
     fldBYTES:      Result := pFldDes^.iUnits1;
     fldTIME:       Result := sizeofTIME;
