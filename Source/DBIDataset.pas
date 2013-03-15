@@ -3747,12 +3747,7 @@ begin
     fldINT32:
       if FieldDesc.iFldSubType = fldstAUTOINC then LType := ftAutoInc;
     fldFLOAT, fldFLOATIEEE:
-      //##Jvr - 05/02/2001 14:08:33
-      // Set the precision value for float types
-      if FieldDesc.iFldSubType = fldstMONEY then
-        LType := ftCurrency
-      else
-        LPrecision := FieldDesc.iUnits1;
+      if FieldDesc.iFldSubType = fldstMONEY then LType := ftCurrency;
 
     {$ifdef DELPH6} fldFMTBCD, {$endif} fldBCD:
       begin

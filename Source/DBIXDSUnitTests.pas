@@ -700,8 +700,11 @@ const
 
 var
   XDS: TXBaseDataset;
+  FieldData: TOrdinalFields;
 
 begin
+  FieldData := TOrdinalData.GetFields;
+
   TOrdinalData.XDSCreateTable(DataPath(TableName));
 
   XDS := TXbaseDataset.Create(nil);
@@ -709,7 +712,7 @@ begin
     XDS.FileName := DataPath(TableName);
     XDS.Open;
 
-    TOrdinalData.VerifyFields(XDS);
+    TOrdinalData.VerifyFields(XDS, @FieldData, Length(FieldData));
     TOrdinalData.AssertValues(XDS);
 
     TOrdinalData.ClearValues(XDS);
@@ -747,14 +750,16 @@ const
 
 var
   XDS: TDBIXbaseDataset;
+  FieldData: TNumericFields;
 
 begin
+  FieldData := TNumericData.GetFields;
 
   XDS := TDBIXbaseDataset.Create(nil);
   try
     TNumericData.CreateFields(XDS);
     XDS.CreateDataset;
-    TNumericData.VerifyFields(XDS);
+    TNumericData.VerifyFields(XDS, @FieldData, Length(FieldData));
 
     TNumericData.OccupyValues(XDS);
     TNumericData.AssertValues(XDS);
@@ -767,7 +772,7 @@ begin
     XDS.FieldDefs.Clear;
     XDS.Open;
 
-    TNumericData.VerifyFields(XDS);
+    TNumericData.VerifyFields(XDS, @FieldData, Length(FieldData));
     TNumericData.AssertValues(XDS);
 
     XDS.Close;
@@ -785,7 +790,7 @@ begin
 
     XDS.Open;
 
-    TNumericData.VerifyFields(XDS);
+    TNumericData.VerifyFields(XDS, @FieldData, Length(FieldData));
     TNumericData.OccupyValues(XDS);
     TNumericData.AssertValues(XDS);
 

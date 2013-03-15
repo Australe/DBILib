@@ -69,6 +69,7 @@ type
 {$ifndef fpc}
     procedure FieldPropsCDS;
 {$endif}
+    procedure FieldDefs;
     procedure FieldPropsODS;
     procedure Filters;
     procedure FloatTypes;
@@ -432,6 +433,32 @@ end;
 {$endif}
 
 
+procedure TDBIODSUnitTests.FieldDefs;
+var
+  ODS: TDBIObjectListDataset;
+  FieldDef: TfieldDef;
+  
+begin
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    FieldDef := ODS.FieldDefs.AddFieldDef;
+    FieldDef.Name := 'FloatField';
+    FieldDef.DataType := ftFloat;
+    FieldDef.Size := 0;
+    FieldDef.Size := 0;
+
+    ODS.CreateDataset;
+
+    Assert(FieldDef.Size = 0, Format('FieldDef.Size = %d, Should be Zero', [FieldDef.Size]));
+    Assert(FieldDef.Precision = 0, Format('FieldDef.Precision = %d, Should be Zero', [FieldDef.Precision]));
+
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+end;
+
+
 {$ifndef fpc}
 procedure TDBIODSUnitTests.FieldPropsCDS;
 const
@@ -439,8 +466,11 @@ const
 
 var
   CDS: TDBIClientDataset;
+  FieldData: TStringFields;
 
 begin
+  FieldData := TStringData.GetFields;
+
   // Create String Data CDS
   CDS := TDBIClientDataset.Create(nil);
   try
@@ -449,7 +479,7 @@ begin
     TStringData.SetupDataset(CDS);
     TStringData.OccupyValues(CDS);
 
-    TStringData.VerifyFields(CDS);
+    TStringData.VerifyFields(CDS, @FieldData, Length(FieldData));
     TStringData.AssertValues(CDS);
 
     CDS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfXML);
@@ -462,7 +492,7 @@ begin
   CDS := TDBIClientDataset.Create(nil);
   try
     CDS.loadFromFile(DataPath(ChangeFileExt(TableName, '.cds')));
-    TStringData.VerifyFields(CDS);
+    TStringData.VerifyFields(CDS, @FieldData, Length(FieldData));
     TStringData.AssertValues(CDS);
 
     CDS.Close;
@@ -481,8 +511,11 @@ var
   CDS: TDBIClientDataset;
 {$endif}
   ODS: TDBIObjectListDataset;
+  FieldData: TStringFields;
 
 begin
+  FieldData := TStringData.GetFields;
+
   // Create new Objectlist Dattaset
   ODS := TDBIObjectListDataset.Create(nil);
   try
@@ -493,7 +526,7 @@ begin
     ODS.CreateDataset;
 
     TStringData.OccupyValues(ODS);
-    TStringData.VerifyFields(ODS);
+    TStringData.VerifyFields(ODS, @FieldData, Length(FieldData));
     TStringData.AssertValues(ODS);
 
     ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfCDS);
@@ -502,7 +535,7 @@ begin
 
     // Use the previously created Fieldefs and fields when opening the dataset
     ODS.Open;
-    TStringData.VerifyFields(ODS);
+    TStringData.VerifyFields(ODS, @FieldData, Length(FieldData));
     TStringData.AssertValues(ODS);
     ODS.Close;
   finally
@@ -521,7 +554,7 @@ begin
     // Load data from saved file
     ODS.LoadFromFile(DataPath(TableName));
 
-    TStringData.VerifyFields(ODS);
+    TStringData.VerifyFields(ODS, @FieldData, Length(FieldData));
     TStringData.AssertValues(ODS);
     ODS.Close;
 
@@ -546,7 +579,7 @@ begin
     ODS.FieldDefs.Clear;
     ODS.Fields.Clear;
     ODS.Open;
-    TStringData.VerifyFields(ODS);
+    TStringData.VerifyFields(ODS, @FieldData, Length(FieldData));
     TStringData.AssertValues(ODS);
     ODS.Close;
 
@@ -559,7 +592,7 @@ begin
   CDS := TDBIClientDataset.Create(nil);
   try
     CDS.loadFromFile(DataPath(ChangeFileExt(TableName, '.cds')));
-    TStringData.VerifyFields(CDS);
+    TStringData.VerifyFields(CDS, @FieldData, Length(FieldData));
     TStringData.AssertValues(CDS);
 
     // Create new Objectlist Dattaset
@@ -570,7 +603,7 @@ begin
 
       // Load data from ClientDataset
       ODS.loadFromDataset(CDS, [lmCreateDataset]);
-      TStringData.VerifyFields(ODS);
+      TStringData.VerifyFields(ODS, @FieldData, Length(FieldData));
       TStringData.AssertValues(ODS);
 
       CompareFieldProps(CDS, ODS);

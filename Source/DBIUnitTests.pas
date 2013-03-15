@@ -150,10 +150,10 @@ type
     class function CreateXbaseDataset: TDBIXbaseDataset;
     class function GetRecordCount: Integer; virtual;
 {$ifndef fpc}
-    class procedure FieldProps(ADataset: TDBIClientDataset); overload;
+    class procedure FieldProps(ADataset: TDBIClientDataset; PFieldData: PFieldRecords; const Count: Word); overload;
 {$endif}
-    class procedure FieldProps(ADataset: TDBIObjectListDataset); overload;
-    class procedure FieldProps(ADataset: TDBIXbaseDataset); overload;
+    class procedure FieldProps(ADataset: TDBIObjectListDataset; PFieldData: PFieldRecords; const Count: Word); overload;
+    class procedure FieldProps(ADataset: TDBIXbaseDataset; PFieldData: PFieldRecords; const Count: Word); overload;
 
   public
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); virtual; abstract;
@@ -168,7 +168,7 @@ type
     class procedure OccupyValues(ADataset: TDataset); virtual;
     class procedure RefillValues(ADataset: TDataset); virtual;
 //##JVR    class procedure UpdateValues(ADataset: TDataset); virtual; abstract;
-    class procedure VerifyFields(ADataset: TDataset); virtual;
+    class procedure VerifyFields(ADataset: TDataset; PFieldData: PFieldRecords; const Count: Word); virtual;
 
     class procedure DeleteTables(const AFileName: String); virtual;
     class procedure FieldValues(ADataset: TDataset);
@@ -367,7 +367,6 @@ type
     F8Point3: Double;
 
   protected
-    class function GetFields: TNumericFields;
     class function GetRecordCount: Integer; override;
     class function GetRecords: TNumericRecords;
 
@@ -376,6 +375,7 @@ type
     class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
+    class function GetFields: TNumericFields;
 
   published
     property ID: Integer read FID write FID;
@@ -420,7 +420,6 @@ type
     FInt64: Int64;
 
   protected
-    class function GetFields: TOrdinalFields;
     class function GetRecordCount: Integer; override;
     class function GetRecords: TOrdinalRecords;
 
@@ -429,6 +428,7 @@ type
     class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
+    class function GetFields: TOrdinalFields;
 
   published
     property _Byte: Byte read FByte write FByte;
@@ -503,7 +503,6 @@ type
 
   protected
     class procedure BuildDataset(ADataset: TDataset);
-    class function GetFields: TStringFields;
     class function GetRecordCount: Integer; override;
     class function GetRecords: TStringRecords;
 
@@ -516,6 +515,8 @@ type
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
+
+    class function GetFields: TStringFields;
 
     class procedure SetupDataset(ADataset: TDataset);
     class procedure StringFields(ADataset: TDataset);
@@ -717,6 +718,7 @@ function CheckField(
   PFieldData: PFieldRecord;
   PFieldProps: DBIIntfConsts.pDSFLDDesc
   ): Boolean;
+{$ifdef DebugInfo}
 var
   iFldType: Word;
 
@@ -736,7 +738,7 @@ begin
   end
 
   // Blob types
-  else if (PFieldProps^.iFldType = fldBLOB) then begin
+  else} if (PFieldProps^.iFldType = fldBLOB) then begin
     Result := Result and (FldSubTypeMap[ftMemo] = PFieldProps^.iFldSubType);
   end
 
@@ -751,7 +753,10 @@ begin
   else if (PFieldData^.FieldType = ftString) then begin
     Result := Result and (PFieldProps^.iUnits1 = PFieldData^.FieldSize);
   end;
-
+{$else}
+begin
+  Result := True;
+{$endif}
   Assert(Result, PFieldData^.FieldName + ' is not equal to the predefined Field');
 end;
 
@@ -925,6 +930,7 @@ end;
 class procedure TEntityData.ODSCreateEntity;
 var
   ODS: TDBIObjectListDataset;
+  FieldData: TEntityFields;
 
 begin
   // Create a new ObjectlistDataset, add data, and verify
@@ -934,7 +940,9 @@ begin
     CreateFieldDefs(ODS);
     ODS.CreateDataset;
 
-    VerifyFields(ODS);
+    FieldData := GetFields;
+    VerifyFields(ODS, @FieldData, Length(FieldData));
+
     OccupyValues(ODS);
     AssertValues(ODS);
   finally
@@ -948,7 +956,7 @@ begin
     ODS.ClassTypeName := Self.ClassName;
     ODS.Open;
 
-    VerifyFields(ODS);
+    VerifyFields(ODS, @FieldData, Length(FieldData));
     OccupyValues(ODS);
     AssertValues(ODS);
   finally
@@ -1379,6 +1387,7 @@ end;
 class procedure TStringData.StringFields(ADataset: TDataset);
 var
   Index: Integer;
+  FieldData: TStringFields;
 
 begin
   ADataset.Close;
@@ -1398,7 +1407,8 @@ begin
   end;
 
   BuildDataset(ADataset);
-  VerifyFields(ADataset);
+  FieldData := GetFields;
+  VerifyFields(ADataset, @FieldData, Length(FieldData));
   AssertValues(ADataset);
 end;
 
@@ -1941,6 +1951,7 @@ var
   Index: Integer;
   Today: TDateTime;
   GadData: TGadRecords;
+  FieldData: TGadFields;
 
 begin
   // Create Gad Table
@@ -1969,7 +1980,8 @@ begin
     CreateFields(ODS);
     ODS.CreateDataset;
 
-    VerifyFields(ODS);
+    FieldData := GetFields;
+    VerifyFields(ODS, @FieldData, Length(FieldData));
     AssertValues(ODS);
 
     ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
@@ -1978,11 +1990,11 @@ begin
     try
       CreateFieldDefs(XDS);
       XDS.CreateDataset;
-      VerifyFields(XDS);
+      VerifyFields(XDS, @FieldData, Length(FieldData));
 
       XDS.LoadFromDataset(ODS);
 
-      VerifyFields(XDS);
+      VerifyFields(XDS, @FieldData, Length(FieldData));
       AssertValues(XDS);
 {##JVR
       XDS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfCDS);
@@ -2930,9 +2942,13 @@ end;
 
 
 {$ifndef fpc}
-class procedure TDBIUnitTest.FieldProps(ADataset: TDBIClientDataset);
+class procedure TDBIUnitTest.FieldProps(
+  ADataset: TDBIClientDataset;
+  PFieldData: PFieldRecords;
+  const Count: Word
+  );
 var
-  Data: TStringDataList;
+//##JVR  Data: TStringDataList;
   CursorProps: DSIntf.DSProps;
   FieldProps: DBClient.TFieldDescList;
   Index: Integer;
@@ -2943,11 +2959,10 @@ begin
 
   SetLength(FieldProps, CursorProps.iFields);
   Assert(ADataset.DSBase.GetFieldDescs(DSIntf.PDSFldDesc(FieldProps)) = 0);
-{##JVR
-  for Index := Low(TBookFields) to High(TBookFields) do begin
-    CheckField(@TBookFields[Index], @FieldProps[Index]);
+  for Index := 0 to Count-1 do begin
+    CheckField(@(PFieldData^[Index]), @FieldProps[Index]);
   end;
-//}
+{##JVR
   Data := TStringDataList.Create;
   try
     Data.Add(Format('--- TClientDataset field definitions ---', []));
@@ -2959,27 +2974,31 @@ begin
   finally
     Data.Free;
   end;
+//}
 end;
 {$endif}
 
-class procedure TDBIUnitTest.FieldProps(ADataset: TDBIObjectListDataset);
+class procedure TDBIUnitTest.FieldProps(
+  ADataset: TDBIObjectListDataset;
+  PFieldData: PFieldRecords;
+  const Count: Word
+  );
 var
-  Data: TStringDataList;
+//##JVR  Data: TStringDataList;
   CursorProps: DBIIntfConsts.DSProps;
   FieldProps: DBIIntfConsts.TFieldDescList;
   Index: Integer;
 
 begin
   Assert(ADataset.DSBase.GetProps(CursorProps) = 0);
-  Assert(CursorProps.iFields = ADataset.Fields.Count);
+//##JVR  Assert(CursorProps.iFields = ADataset.Fields.Count);
 
   SetLength(FieldProps, CursorProps.iFields);
   Assert(ADataset.DSBase.GetFieldDescs(DBIIntfConsts.PDSFldDesc(FieldProps)) = 0);
-{##JVR
-  for Index := Low(TOrdinalDataFields) to High(TOrdinalDataFields) do begin
-    CheckField(@TStringDataFields[Index], @FieldProps[Index]);
+  for Index := 0 to Count-1 do begin
+    CheckField(@(PFieldData^[Index]), @FieldProps[Index]);
   end;
-//}
+{##JVR
   Data := TStringDataList.Create;
   try
     Data.Add(Format('--- TObjectListDataset field definitions ---', []));
@@ -2992,12 +3011,17 @@ begin
   finally
     Data.Free;
   end;
+//}
 end;
 
 
-class procedure TDBIUnitTest.FieldProps(ADataset: TDBIXbaseDataset);
+class procedure TDBIUnitTest.FieldProps(
+  ADataset: TDBIXbaseDataset;
+  PFieldData: PFieldRecords;
+  const Count: Word
+  );
 var
-  Data: TStringDataList;
+//##JVR  Data: TStringDataList;
   CursorProps: DBIIntfConsts.DSProps;
   FieldProps: DBIIntfConsts.TFieldDescList;
   Index: Integer;
@@ -3008,11 +3032,11 @@ begin
 
   SetLength(FieldProps, CursorProps.iFields);
   Assert(ADataset.DSBase.GetFieldDescs(DBIIntfConsts.PDSFldDesc(FieldProps)) = 0);
-{##JVR
-  for Index := Low(TBookFields) to High(TBookFields) do begin
-    CheckField(@TBookFields[Index], @FieldProps[Index]);
+
+  for Index := 0 to Count-1 do begin
+    CheckField(@(PFieldData^[Index]), @FieldProps[Index]);
   end;
-//}
+{##JVR
   Data := TStringDataList.Create;
   try
     Data.Add(Format('--- TXBaseDataset field definitions ---', []));
@@ -3024,6 +3048,7 @@ begin
   finally
     Data.Free;
   end;
+//}
 end;
 
 
@@ -3089,26 +3114,26 @@ begin
 end;
 
 
-class procedure TDBIUnitTest.VerifyFields(ADataset: TDataset);
-{$ifdef UseDebugInfo}
+class procedure TDBIUnitTest.VerifyFields(ADataset: TDataset; PFieldData: PFieldRecords; const Count: Word);
+{##JVR
 var
   Data: TStringDataList;
   Index: Integer;
-
+//}
 begin
   if ADataset is TDBIObjectListDataset then begin
-    FieldProps(ADataset as TDBIObjectListDataset);
+    FieldProps(ADataset as TDBIObjectListDataset, PFieldData, Count);
   end
 {$ifndef fpc}
   else if ADataset is TDBIClientDataset then begin
-    FieldProps(ADataset as TDBIClientDataset);
+    FieldProps(ADataset as TDBIClientDataset, PFieldData, Count);
   end
 {$endif}
   else if ADataset is TDBIXBaseDataset then begin
-    FieldProps(ADataset as TDBIXBaseDataset);
+    FieldProps(ADataset as TDBIXBaseDataset, PFieldData, Count);
   end;
 
-
+{##JVR
   Data := TStringDataList.Create;
   try
     Data.Add(Format('--- TObjectListDataset fields ---', []));
@@ -3121,9 +3146,7 @@ begin
   finally
     Data.Free;
   end;
-{$else}
-begin
-{$endif}
+//}
 end;
 
 
@@ -3138,7 +3161,7 @@ begin
     CreateFieldDefs(CDS);
     CDS.CreateDataset;
 
-    VerifyFields(CDS);
+//##JVR    VerifyFields(CDS, @FieldData, Length(FieldData));
     OccupyValues(CDS);
     AssertValues(CDS);
 
@@ -3167,7 +3190,7 @@ begin
     CreateFieldDefs(ODS);
     ODS.CreateDataset;
 
-    VerifyFields(ODS);
+//##JVR    VerifyFields(ODS);
     OccupyValues(ODS);
 
     ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
@@ -3180,7 +3203,7 @@ begin
       XDS.FileName := ChangeFileExt(ChangeFileExt(AFileName, '') + 'a', '.dbf');
       CreateFieldDefs(XDS);
       XDS.CreateDataset;
-      VerifyFields(XDS);
+//##JVR      VerifyFields(XDS);
       XDS.LoadFromDataset(ODS);
       AssertValues(XDS);
 
@@ -3212,7 +3235,7 @@ begin
     ODS.CreateDataset;
 
     ODS.LoadFromFile(AFileName);
-    VerifyFields(ODS);
+//##JVR    VerifyFields(ODS);
     AssertValues(ODS);
 
     ClearValues(ODS);
@@ -3233,7 +3256,7 @@ begin
   XDS := TDBIXBaseDataset.Create(nil);
   try
     XDS.LoadFromFile(AFileName);
-    VerifyFields(XDS);
+//##JVR    VerifyFields(XDS);
     AssertValues(XDS);
     XDS.Close;
   finally
@@ -3284,7 +3307,7 @@ begin
     XDS.FileName := ChangeFileExt(AFileName, '.dbf');
     XDS.CreateDataset;
 
-    VerifyFields(XDS);
+//##JVR    VerifyFields(XDS);
     OccupyValues(XDS);
     AssertValues(XDS);
 
