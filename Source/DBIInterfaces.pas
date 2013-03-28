@@ -55,7 +55,7 @@ interface
 
 uses
   Classes, SysUtils, TypInfo, DBIIntfConsts, DB, Contnrs, DBIConst, DBIStrings,
-  DBIFilters, DBIIndices;
+  DBIUTils, DBIFilters, DBIIndices;
 
 type
   TDBIFieldDef = class(TFieldDef)
@@ -977,6 +977,9 @@ type
     FMode: TDBIDataConnectionMode;
     FGetCurrentRecord: TDBIGetCurrentRecordProc;
 
+    // Null field support
+    FNullFlags: TDBINullFlags;
+
   protected
     procedure AddDataEventCallBack(DataEventCallBack: TDBIDataChangeEvent);
     function FindDataEventCallBack(DataEventCallBack: TDBIDataChangeEvent): Integer;
@@ -1034,6 +1037,7 @@ type
     property CanModify: Boolean read FCanModify write FCanModify;
     property FileName: TFileName read GetFileName write SetFileName;
     property Indices: TDBIIndexList read FIndices;
+    property NullFlags: TDBINullFlags read FNullFlags;
     property StreamMode: TDBIStreamMode read FStreamMode;
 
   public
@@ -1521,7 +1525,6 @@ uses
   Types,
 {$endif}
   Dialogs,
-  DBIUtils,
   DBIFileStreams;
 
 const
@@ -1646,6 +1649,7 @@ begin
   FGetCurrentRecord := Get;
 
   FIndices := TDBIIndexList.Create;
+  FNullFlags := TDBINullFlags.Create;
   FDataEventCallBackList := TObjectList.Create;
 end;  { Create }
 
@@ -1693,6 +1697,9 @@ begin
 
   FIndices.Free;
   FIndices := nil;
+
+  FNullFlags.Free;
+  FNullFlags := nil;
 
   FDataEventCallBackList.Free;
   FDataEventCallBackList := nil;

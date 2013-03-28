@@ -730,7 +730,7 @@ begin
     DataSet.First;
     Write('#');
     for Index := 0 to DataSet.Fields.Count - 1 do begin
-      if (DataSet.Fields[Index].FieldName <> Xbase_NullFlags) then begin
+      if (DataSet.Fields[Index].FieldName <> FieldName_NullFlags) then begin
         if Index <> 0 then begin
           Write('|');
         end;
@@ -741,7 +741,7 @@ begin
 
     while not DataSet.EOF do begin
       for Index := 0 to DataSet.Fields.Count - 1 do begin
-        if (DataSet.Fields[Index].FieldName <> Xbase_NullFlags) then begin
+        if (DataSet.Fields[Index].FieldName <> FieldName_NullFlags) then begin
           if Index <> 0 then begin
             Write('|');
           end;

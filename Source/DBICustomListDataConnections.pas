@@ -132,6 +132,11 @@ type
     procedure PutFieldMemo(DataObject: TObject; const FieldBuffer: TDBIFieldBuffer;
       const FieldName: TDBIFieldName; const FieldNo: Word);
 
+    function GetFieldNullFlags(DataObject: TObject; var FieldBuffer: TDBIFieldBuffer;
+      const FieldName: TDBIFieldName; const FieldNo: Word): Boolean;
+    procedure PutFieldNullFlags(DataObject: TObject; const FieldBuffer: TDBIFieldBuffer;
+      const FieldName: TDBIFieldName; const FieldNo: Word );
+
     function GetFieldDataset(DataObject: TObject; var FieldBuffer: TDBIFieldBuffer;
       const FieldName: TDBIFieldName; const FieldNo: Word): Boolean;
     procedure PutFieldDataset(DataObject: TObject; const FieldBuffer: TDBIFieldBuffer;
@@ -1571,6 +1576,51 @@ end;  { PutFieldMemo }
 
 // _____________________________________________________________________________
 {**
+  Jvr - 22/03/2013 06:54:22.<P>
+}
+function TDBICustomListDataConnection.GetFieldNullFlags(
+  DataObject: TObject;
+  var FieldBuffer: TDBIFieldBuffer;
+  const FieldName: TDBIFieldName;
+  const FieldNo: Word
+  ): Boolean;
+begin
+  // Field has no value - blank
+  Result := IsFieldkindOf(DataObject, FieldName, [tkInt64]);
+
+  // If FieldBuffer parameter is nil, then only return a True or False value
+  // indicating if there is data present or not (eg. not blank)
+  if (FieldBuffer = nil) or not Result then Exit;
+
+  PInt64(FieldBuffer)^ := GetInt64Prop(DataObject, FieldName);
+end;  { GetFieldNullFlags }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 22/03/2013 12:01:46.<P>
+}
+procedure TDBICustomListDataConnection.PutFieldNullFlags(
+  DataObject: TObject;
+  const FieldBuffer: TDBIFieldBuffer;
+  const FieldName: TDBIFieldName;
+  const FieldNo: Word
+  );
+begin
+  if not IsFieldkindOf(DataObject, FieldName, [tkInt64]) then Exit;
+
+  // Assign data to object property
+  if (FieldBuffer = nil) then begin
+    SetInt64Prop(DataObject, FieldName, Int64(0));
+  end
+  else begin
+    SetInt64Prop(DataObject, FieldName, PInt64(FieldBuffer)^);
+  end;
+end;  { PutFieldNullFlags }
+
+
+// _____________________________________________________________________________
+{**
   Jvr - 17/09/2001 11:59:10.<P>
 }
 function TDBICustomListDataConnection.GetFieldDataset(
@@ -2720,6 +2770,33 @@ var
   FieldNo: Integer;
   FieldDescs: TFieldDescList;
 
+  function IsNullFlagField(PFieldDesc: pDSFLDDesc): Boolean;
+  begin
+    Result := DBICompareText(PFieldDesc^.szName, FieldName_NullFlags) = 0;
+  end;
+
+
+  // For the object list dataset either all fields are nullable or they are not!
+  function InitializeNullFlags(const IsNullable: Boolean; const FieldCount: Word): Boolean;
+  var
+    NullFlagsIndex: Integer;
+    FieldNo: Integer;
+
+  begin
+    NullFlagsIndex := 0;
+    
+    // Null field flag information
+    Result := (FieldCount > 0) and IsNullable;
+
+    NullFlags.IsNullable := Result;
+    for FieldNo := 0 to FieldCount - 1 do begin
+      // Create Index values for the physical fields Null-Flags
+      if NullFlags.SetNullIndex(FieldNo, Result, NullFlagsIndex) then begin
+        Inc(NullFlagsIndex);
+      end;
+    end;
+  end;
+
 
   function AddFieldDesc(PropInfo: PPropInfo; var AFieldNo: Integer): pDSFLDDesc;
   const
@@ -2742,12 +2819,26 @@ var
     FieldName := TDBIFieldName(PropInfo.Name);
     StrLCopy(Result^.szName, PDBIChar(TDBIString(FieldName)), SizeOf(Result^.szName));
 
-    // If property is readonly then make field readonly
-    if not Assigned(PropInfo.SetProc) then begin
-      Attributes := [DB.faReadonly];
+    // Set Field Attributes
+    if IsNullFlagField(Result) then begin
+      Attributes := [DB.faReadOnly, DB.faHiddenCol];
     end
     else begin
-      Attributes := [];
+      // If property is readonly then make field readonly
+      if not Assigned(PropInfo.SetProc) then begin
+        Attributes := [DB.faReadonly];
+      end
+      else begin
+        Attributes := [];
+      end;
+
+      // Is Field nullable
+      if NullFlags.IsNullable then begin
+        Exclude(Attributes, DB.faRequired);
+      end
+      else begin
+        Include(Attributes, DB.faRequired);
+      end;
     end;
 
     // Initialise the Fieldtype according to the map
@@ -2782,7 +2873,7 @@ var
         FieldName
         ]);
     end;
-  end;
+  end;  { AddFieldDesc }
 
 
   function EncodeFieldDescs(DataClass: TClass; var AFieldNo: Integer): Integer;
@@ -2794,9 +2885,11 @@ var
     Index: Integer;
     PFieldDesc: pDSFLDDesc;
     Method: TMethod;
+    IsNullable: Boolean;
 
   begin
     Result := AFieldNo;
+    IsNullable := False;
     PFieldDesc := nil;
 
     if (DataClass = nil) then begin
@@ -2868,6 +2961,19 @@ var
             end;
           end;  { tkInteger }
 
+          tkInt64: begin
+            // Special case - _NULLFLAGS
+            IsNullable := IsNullFlagField(PFieldDesc);
+            if IsNullable then begin
+              PFieldDesc^.iFldType := fldBYTES;
+              PFieldDesc^.iFldSubType := fldstNONE;
+              PFieldDesc^.iFldLen := SizeOf(Int64);
+              PFieldDesc^.iUnits1 := 4;
+              PFieldDesc^.iUnits2 := 0;
+              PFieldDesc^.iUnits2 := 0;
+            end;
+          end;  { tkInt64 }
+
           tkSet, tkEnumeration: begin
             if DBICompareText(PropInfo^.PropType^.Name, 'Boolean') = 0 then begin
               PFieldDesc^.iFldType := fldBOOL;
@@ -2929,7 +3035,9 @@ var
     end;  { try..finally }
 
     Result := AFieldNo - Result;
-  end;
+
+    InitializeNullFlags(IsNullable, Length(FieldDescs));
+  end;  { EncodeFieldDescs }
 
 
 begin

@@ -2859,7 +2859,7 @@ begin
   Index := GetNullFieldSize;
   if (Index > 0) and (ADataset is TXbaseDataset) then begin
     FieldDef := ADataset.FieldDefs.AddFieldDef;
-    FieldDef.Name := Xbase_NullFlags;
+    FieldDef.Name := FieldName_NullFlags;
     FieldDef.DataType := ftBytes;
     FieldDef.Attributes := [db.faHiddenCol, db.faReadOnly];
     FieldDef.Size := Index;

@@ -787,6 +787,8 @@ const
   Default_TemporaryRecordBufferSize = 8192;
   Default_StringFieldLength = 255;
 
+  FieldName_NullFlags = '_NullFlags';      { Fieldname of Null Flags }
+
 {$ifndef DELPHI6}
   sLineBreak = {$IFDEF LINUX} #10 {$ELSE} #13#10 {$ENDIF};
 {$endif}

@@ -130,7 +130,6 @@ const
 
   // General Constants
   Xbase_MaxNameLen    = 10;            { Name limit (table, field etc) }
-  Xbase_NullFlags     = '_NullFlags';  { Fieldname of Null Flags - Foxpro only }
   
   // Locking consts
   // NOTE: A value of $0 indicates: not yet known

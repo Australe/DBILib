@@ -305,9 +305,6 @@ type
     FHeader: TDBIXbaseHeader;
     FFields: TDBIXbaseFields;
 
-    // Null field support
-    FNullFlags: TDBINullFlags;
-
   protected
     function AllocPhysicalBuffer: TDBIRecordBuffer; override;
     procedure FreePhysicalBuffer(var Buffer: TDBIRecordBuffer); override;
@@ -673,7 +670,6 @@ begin
   inherited Create(AOwner);
 
   FOptions := [xsStrictHeader];
-  FNullFlags := TDBINullFlags.Create;
 end;  { Create }
 
 
@@ -683,10 +679,6 @@ end;  { Create }
 }
 destructor TDBIXbaseDataConnection.Destroy;
 begin
-  Close;
-
-  FNullFlags.Free;
-  FNullFlags := nil;
 
   inherited Destroy;
 end;  { Destroy }
@@ -1203,7 +1195,7 @@ procedure TDBIXbaseDataConnection.GetMetaData;
         );
     end;
 
-    // Set Attributes, Size & Decimal values
+    // Set Field Attributes
     if (ffNullableField in PhysicalFieldProps.FieldFlags) then begin
       Attributes := [];
     end
@@ -1314,6 +1306,28 @@ procedure TDBIXbaseDataConnection.GetMetaData;
   end;
 
 
+  procedure InitializeNullFlags;
+  var
+    FieldNo: Integer;
+    NullFlagsIndex: Integer;
+    IsNullable: Boolean;
+
+  begin
+    // Physical Null field flag information
+    NullFlags.IsNullable :=
+      DBICompareText(FFields[FieldCount - 1].FieldName, FieldName_NullFlags) = 0;
+
+    NullFlagsIndex := 0;
+    for FieldNo := 0 to FieldCount - 1 do begin
+      // Create Index values for the physical fields Null-Flags
+      IsNullable := ffNullableField in FFields[FieldNo].FieldFlags;
+      if NullFlags.SetNullIndex(FieldNo, IsNullable, NullFlagsIndex) then begin
+        Inc(NullFlagsIndex);
+      end;
+    end;
+  end;  { InitializeNullFlags }
+
+
   procedure EncodePhysicalFieldDefs;
   const
     ValidFieldChars = ['0'..'9', 'A'..'Z', '_', 'a'..'z'];
@@ -1321,9 +1335,6 @@ procedure TDBIXbaseDataConnection.GetMetaData;
   var
     FieldNo: Integer;
     PhysicalFieldOffset: LongWord;
-    NullFlagsIndex: Integer;
-    IsNullable: Boolean;
-
 
   begin
     // First Field Starts at 1 (DelFlag starts at 0)
@@ -1354,20 +1365,22 @@ procedure TDBIXbaseDataConnection.GetMetaData;
       end;  { if }
     end;  { for }
     
-
+{##JVR
     // -------------------------------------------------------------------------
+    // InitializeNullFlags
     // Physical Null field flag information
-    FNullFlags.IsNullable :=
-      DBICompareText(FFields[FieldCount - 1].FieldName, XBase_NullFlags) = 0;
+    NullFlags.IsNullable :=
+      DBICompareText(FFields[FieldCount - 1].FieldName, FieldName_NullFlags) = 0;
 
     NullFlagsIndex := 0;
     for FieldNo := 0 to FieldCount - 1 do begin
       // Create Index values for the physical fields Null-Flags
       IsNullable := ffNullableField in FFields[FieldNo].FieldFlags;
-      if FNullFlags.SetNullIndex(FieldNo, IsNullable, NullFlagsIndex) then begin
+      if NullFlags.SetNullIndex(FieldNo, IsNullable, NullFlagsIndex) then begin
         Inc(NullFlagsIndex);
       end;
     end;
+//}    
   end;  { EncodePhysicalFieldDefs }
   
 
@@ -1375,6 +1388,7 @@ begin
   // Read the Metadata from the table
   ReadMetaData;
   EncodePhysicalFieldDefs;
+  InitializeNullFlags;
 
   EncodeLogicalFieldDefs;
   SetFieldProps(FieldProps);
@@ -2179,7 +2193,7 @@ begin
 
     fldBYTES: begin
       //##NULLFLAGS -  Is (xsShowNullFlags in FOptions) important here or not?
-      if StrIComp(PFieldProps^.szName, XBase_NullFlags) = 0 then begin
+      if StrIComp(PFieldProps^.szName, FieldName_NullFlags) = 0 then begin
         PhysicalFieldProps.FieldSize[0] := PFieldProps^.iUnits1;
         PhysicalFieldProps.FieldType := DT_NULLFLAGS;
         PhysicalFieldProps.FieldFlags := [ffHiddenField];
@@ -2357,11 +2371,11 @@ begin
   FillChar(Buffer, LogicalBufferSize, #0);
 
   // Setup the NullFlags buffer if this dataset supports it
-  if FNullFlags.IsNullable then begin
+  if NullFlags.IsNullable then begin
     FieldNo := FieldCount - 1;
     LogicalOffset := FieldProps[FieldNo].iFldOffsInRec;
     pFldBuf := @(TDBIRecordBuffer(@Buffer)[LogicalOffset]);
-    FNullFlags.SetBuffer(pFldBuf, FieldProps[FieldNo].iFldLen);
+    NullFlags.SetBuffer(pFldBuf, FieldProps[FieldNo].iFldLen);
   end;
 
   // Iterate through the fields in REVERSE ORDER and get the data
@@ -2423,7 +2437,7 @@ begin
     { TODO 5 -oJvr -cTDBIXbaseDataConnection.GetData() :
       NullFlags, Check for null value(s)
     }
-    IsBlank := (FFields[FieldNo].FieldType <> DT_NULLFLAGS) and FNullFlags.IsNull[FieldNo];
+    IsBlank := (FFields[FieldNo].FieldType <> DT_NULLFLAGS) and NullFlags.IsNull[FieldNo];
     if not IsBlank then begin
       // Setup Record Buffer
       pRecBuf := @(TDBIRecordBuffer(@PhysicalBuffer)[PhysicalOffset]);
@@ -2473,11 +2487,11 @@ begin
   FillChar(PhysicalBuffer, FHeader.RecordSize, #0);
 
   // Setup the NullFlags buffer if this dataset supports it
-  if FNullFlags.IsNullable then begin
+  if NullFlags.IsNullable then begin
     FieldNo := FieldCount - 1;
     LogicalOffset := FieldProps[FieldNo].iFldOffsInRec;
     pFldBuf := @(TDBIRecordBuffer(@Buffer)[LogicalOffset]);
-    FNullFlags.SetBuffer(pFldBuf, FieldProps[FieldNo].iFldLen);
+    NullFlags.SetBuffer(pFldBuf, FieldProps[FieldNo].iFldLen);
   end;
 
   // Update Xbase field data from logical field buffers
@@ -2554,7 +2568,7 @@ begin
 
     // Set the '_NullFlags' bit for this field to the 'IsBlank' value
     if (FFields[FieldNo].FieldType <> DT_NULLFLAGS) then begin
-      FNullFlags.IsNull[FieldNo] := IsBlank;
+      NullFlags.IsNull[FieldNo] := IsBlank;
     end;
 
 //##JVR    DBIDebug(Self, 'PutData', '[%s].blank = %d', [FieldProps[FieldNo].szName, Ord(IsBlank)]);
@@ -3385,10 +3399,7 @@ end;  { PutFieldIntegerFP }
 
 // _____________________________________________________________________________
 {**
-  Jvr - 08/05/2001 11:59:05 - Generic binary Get Field Value routine.
-                              <B>Note:</B><BR>
-                              Physical field length needs to be the same as
-                              the Logical field length.<P>
+  Jvr - 08/05/2001 11:59:05.<P>
 }
 function TDBIXbaseDataConnection.GetFieldNullFlags(
   const RecordBuffer;
@@ -3409,10 +3420,7 @@ end;  { GetFieldNullFlags }
 
 // _____________________________________________________________________________
 {**
-  Jvr - 08/05/2001 12:01:46 - Generic binary Put Field Value routine.
-                              <B>Note:</B><BR>
-                              Physical field length needs to be the same as
-                              the Logical field length.<P>
+  Jvr - 08/05/2001 12:01:46.<P>
 }
 procedure TDBIXbaseDataConnection.PutFieldNullFlags(
   var RecordBuffer;
