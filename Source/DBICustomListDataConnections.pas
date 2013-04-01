@@ -681,16 +681,24 @@ var
 
 begin
   Result := dsRecUnmodified;
-  LogicalOffset := Default_LogicalBufferFirstFieldOffset;
 
   // Initialise Buffer (Logical Size)
   FillChar(Buffer, LogicalBufferSize, #0);
-  FieldName := '';
 
+  // Setup the NullFlags buffer if this dataset supports it
+  if NullFlags.IsNullable then begin
+    FieldNo := FieldCount - 1;
+    LogicalOffset := FieldProps[FieldNo].iFldOffsInRec;
+    pFldBuf := @(TDBIRecordBuffer(@Buffer)[LogicalOffset]);
+    NullFlags.SetBuffer(pFldBuf, FieldProps[FieldNo].iFldLen);
+  end;
+
+//##JVR  LogicalOffset := Default_LogicalBufferFirstFieldOffset;
   for FieldNo := 0 to FieldCount - 1 do begin
+    LogicalOffset := FieldProps[FieldNo].iFldOffsInRec;
+    GetFieldProc := GetFieldUnknown;
     FieldName := GetFieldName(FieldNo);
     IsBlank := True;
-    GetFieldProc := GetFieldUnknown;
 
     // If an embedded object has been placed on the stack for this field then get it!
     if (FFieldObjectStack.Count > 0) then begin
@@ -702,7 +710,7 @@ begin
     end;  { if }
 
     if IsPublishedProp(FieldObject, FieldName) then begin
-      LogicalOffset := FieldProps[FieldNo].iFldOffsInRec;
+//##JVR      LogicalOffset := FieldProps[FieldNo].iFldOffsInRec;
 
       // Simple types don't support null (or nil) values therefore most of the
       // time IsBlank will be false.  The GetObjectFieldProc returns False
@@ -786,6 +794,14 @@ var
   IsBlank: Boolean;
 
 begin
+  // Setup the NullFlags buffer if this dataset supports it
+  if NullFlags.IsNullable then begin
+    FieldNo := FieldCount - 1;
+    LogicalOffset := FieldProps[FieldNo].iFldOffsInRec;
+    pFldBuf := @(TDBIRecordBuffer(@Buffer)[LogicalOffset]);
+    NullFlags.SetBuffer(pFldBuf, FieldProps[FieldNo].iFldLen);
+  end;
+
   for FieldNo := 0 to FieldCount - 1 do begin
     FieldName := GetFieldName(FieldNo);
     LogicalOffset := FieldProps[FieldNo].iFldOffsInRec;
@@ -2831,7 +2847,7 @@ var
       else begin
         Attributes := [];
       end;
-
+{##NULL
       // Is Field nullable
       if NullFlags.IsNullable then begin
         Exclude(Attributes, DB.faRequired);
@@ -2839,6 +2855,7 @@ var
       else begin
         Include(Attributes, DB.faRequired);
       end;
+//}
     end;
 
     // Initialise the Fieldtype according to the map
