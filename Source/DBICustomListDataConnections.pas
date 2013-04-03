@@ -957,66 +957,22 @@ function TDBICustomListDataConnection.GetFieldString(
   const FieldName: TDBIFieldName;
   const FieldNo: Word
   ): Boolean;
-const
-  Caller = 'GetFieldStringv';
-
 var
   AData: AnsiString;
   WData: WideString;
   DataSize: Integer;
-  PropKind: TTypeKind;
 
 begin
-  PropKind := PropType(DataObject, FieldName);
-  case PropKind of
-    tkString, tkLString {$ifdef fpc} , tkAString {$endif} : begin
-      case FieldProps[FieldNo].iFldType of
-        fldWideString, fldUNICODE: begin
-          WData := WideString(GetStrProp(DataObject, FieldName));
-          Result := Length(WData) > 0;
-        end;
-
-      else { fldZString }
-        AData := AnsiString(GetStrProp(DataObject, FieldName));
-        Result := Length(AData) > 0;
-      end;
-    end;
-{$WARNINGS OFF}
-    tkWString {$ifdef DELPHI2009}, tkUString {$endif} : begin
-      case FieldProps[FieldNo].iFldType of
-        fldWideString, fldUNICODE: begin
-          WData := WideString(GetWideStrProp(DataObject, FieldName));
-          Result := Length(WData) > 0;
-        end;
-
-      else { fldZString }
-        AData := AnsiString(GetWideStrProp(DataObject, FieldName));
-        Result := Length(AData) > 0;
-      end;
-    end;
-{$WARNINGS ON}
-
-    tkChar, tkWChar: begin
-      case FieldProps[FieldNo].iFldType of
-        fldWideString, fldUNICODE: begin
-          SetLength(WData, 1);
-          WData := WideChar(GetOrdProp(DataObject, FieldName));
-          Result := Length(WData) > 0;
-        end;
-
-      else
-        SetLength(AData, 1);
-        AData := AnsiChar(GetOrdProp(DataObject, FieldName));
-        Result := Length(AData) > 0;
-      end;
-    end;
-
-  else
-    Result := False;
+  case FieldProps[FieldNo].iFldType of
+    fldWideString, fldUNICODE: begin
+      WData := DBIUnicodeGetStrProp(DataObject, FieldName);
+      Result := Length(WData) > 0;
+    end
     
-    Error(nil, Caller, '1130', '"%s" is NOT a supported String Property', [FieldName]);
+  else
+    AData := DBIAnsiGetStrProp(DataObject, FieldName);
+    Result := Length(AData) > 0;
   end;
-
 
   // If FieldBuffer parameter is nil, then only return a True or False value
   // indicating if there is data present or not (eg. not blank)
@@ -1046,6 +1002,34 @@ procedure TDBICustomListDataConnection.PutFieldString(
   const FieldName: TDBIFieldName;
   const FieldNo: Word
   );
+var
+  AData: AnsiString;
+  WData: WideString;
+
+begin
+  // Assign data to object property
+  if (FieldBuffer = nil) then begin
+    case FieldProps[FieldNo].iFldType of
+      fldWIDESTRING, fldUNICODE:
+        DBIUnicodeSetStrProp(DataObject, FieldName, '');
+      else
+        DBIAnsiSetStrProp(DataObject, FieldName, '');
+    end;
+  end
+  else begin
+    case FieldProps[FieldNo].iFldType of
+      fldWIDESTRING, fldUNICODE: begin
+        WData := WideString(PWideChar(FieldBuffer));
+        DBIUnicodeSetStrProp(DataObject, FieldName, WData);
+      end;
+
+    else
+      AData := AnsiString(PAnsiChar(FieldBuffer));
+      DBIAnsiSetStrProp(DataObject, FieldName, AData);
+    end;
+  end;
+end;  { PutFieldString }
+(*##JVR
 const
   Caller = 'PutFieldString';
 
@@ -1117,6 +1101,7 @@ begin
     Error(nil, Caller, '1130', '"%s" is NOT a supported String Property', [FieldName]);
   end;
 end;  { PutFieldString }
+//*)
 
 // _____________________________________________________________________________
 {**
@@ -1447,6 +1432,20 @@ end;  { PutFieldDateTime }
                               Result returns True if NOT Blank.<BR>
   Jvr - 31/08/2001 12:10:11 - Added TStrings support for Memo fields<P>
 }
+//(*##JVR
+const
+  tkStringTypes = [
+      tkString
+    , tkLString
+    , tkWString
+{$ifdef DELPHI2009}
+    , tkUString
+{$endif}
+{$ifdef fpc}
+    , tkAString
+{$endif}
+    ];
+//*)
 function TDBICustomListDataConnection.GetFieldMemo(
   DataObject: TObject;
   var FieldBuffer: TDBIFieldBuffer;
@@ -1469,14 +1468,16 @@ begin
 
   try
     PropKind := PropType(DataObject, FieldName);
-    if not (PropKind in [tkString, tkLString {$ifdef fpc} , tkAString {$endif} , tkClass]) then begin
+//{##JVR
+    if (PropKind <> tkClass) and not (PropKind in tkStringTypes) then begin
       Error(nil, Caller, '1035',
         'Illegal Object Datatype: %s',
         [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
         );
     end;
-
+//}
     if (PropKind <> tkClass) then begin
+//##JVR      DataString := TDBIString(DBIAnsiGetStrProp(DataObject, FieldName));
       DataString := TDBIString(GetStrProp(DataObject, FieldName));
     end
     else begin
@@ -1541,13 +1542,15 @@ begin
 
   try
     PropKind := PropType(DataObject, FieldName);
-    if not (PropKind in [tkString, tkLString {$ifdef fpc} , tkAString {$endif} , tkClass]) then begin
+//(*##JVR
+    if (PropKind <> tkClass) and not (PropKind in tkStringTypes) then begin
+//##JVR    if not (PropKind in [tkString, tkLString {$ifdef fpc} , tkAString {$endif} , tkClass]) then begin
       Error(nil, Caller, '1110',
         'Illegal Object Datatype: %s',
         [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
         );
     end;
-
+//*)
     if (FieldBuffer = nil) then begin
       BlobIndex := 0;
       BlobData := '';
@@ -1566,6 +1569,7 @@ begin
       // Property is of type String
       if (PropKind <> tkClass) then begin
         SetStrProp(DataObject, FieldName, TDBIText(BlobData));
+//##JVR        DBIAnsiSetStrProp(DataObject, FieldName, TDBIText(BlobData));
       end
 
       // Property is of type TStrings

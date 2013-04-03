@@ -254,6 +254,12 @@ type
   function DBIAnsiPos(const Substr, S: TDBIString): Integer;
   function DBIAnsiQuotedStr(const S: TDBIString; Quote: TDBIChar): TDBIString;
 
+  function DBIAnsiGetStrProp(Instance: TObject; const PropName: String): AnsiString;
+  procedure DBIAnsiSetStrProp(Instance: TObject; const PropName: String; const AData: AnsiString);
+
+  function DBIUnicodeGetStrProp(Instance: TObject; const PropName: String): WideString;
+  procedure DBIUnicodeSetStrProp(Instance: TObject; const PropName: String; const WData: WideString);
+
   function DBICharNext(var P: PDBIChar): PDBIChar;
   function DBICompareStr(const S1, S2: TDBIString): Integer; assembler;
   function DBICompareText(const S1, S2: TDBIString): Integer; assembler;
@@ -404,6 +410,154 @@ begin
 end;
 
 {$endif}
+
+
+
+
+
+
+{ Rtti }
+
+function DBIAnsiGetStrProp(Instance: TObject; const PropName: String): AnsiString;
+const
+  Caller = 'DBIAnsiGetStrProp';
+
+var
+  PropKind: TTypeKind;
+
+begin
+{$WARNINGS OFF}
+  Result := '';
+
+  PropKind := PropType(Instance, PropName);
+  case PropKind of
+    tkString, tkLString {$ifdef fpc} , tkAString {$endif} : begin
+      Result := AnsiString(GetStrProp(Instance, PropName));
+    end;
+
+    tkWString {$ifdef DELPHI2009}, tkUString {$endif} : begin
+      Result := AnsiString(GetWideStrProp(Instance, PropName));
+    end;
+
+    tkChar, tkWChar: begin
+      SetLength(Result, 1);
+      Result := AnsiChar(GetOrdProp(Instance, PropName));
+    end;
+
+  else
+    raise Exception.CreateFmt(
+      '%s(): "%s" is NOT a supported String Property', [Caller, PropName]
+      );
+  end;
+{$WARNINGS ON}
+end;
+
+
+procedure DBIAnsiSetStrProp(Instance: TObject; const PropName: String; const AData: AnsiString);
+const
+  Caller = 'DBIAnsiSetStrProp';
+
+var
+  PropKind: TTypeKind;
+
+begin
+{$WARNINGS OFF}
+  PropKind := PropType(Instance, PropName);
+  case PropKind of
+    tkString, tkLString {$ifdef fpc} , tkAString {$endif} : begin
+{$ifdef Delphi2009}
+      SetAnsiStrProp(Instance, PropName, AData);
+{$else}
+      SetStrProp(Instance, PropName, AData);
+{$endif}
+    end;
+
+    tkWString {$ifdef DELPHI2009} , tkUString {$endif} : begin
+      SetWideStrProp(Instance, PropName, WideString(AData));
+    end;
+
+    tkChar, tkWChar: begin
+      SetOrdProp(Instance, PropName, Ord(AData[1]));
+    end;
+
+{$WARNINGS ON}
+  else
+    raise Exception.CreateFmt(
+      '%s(): "%s" is NOT a supported String Property', [Caller, PropName]
+      );
+  end;
+end;
+
+
+function DBIUnicodeGetStrProp(Instance: TObject; const PropName: String): WideString;
+const
+  Caller = 'DBIUnicodeGetStrProp';
+
+var
+  PropKind: TTypeKind;
+
+begin
+{$WARNINGS OFF}
+  Result := '';
+
+  PropKind := PropType(Instance, PropName);
+  case PropKind of
+    tkString, tkLString {$ifdef fpc} , tkAString {$endif} : begin
+      Result := WideString(GetStrProp(Instance, PropName));
+    end;
+
+    tkWString {$ifdef DELPHI2009}, tkUString {$endif} : begin
+      Result := WideString(GetWideStrProp(Instance, PropName));
+    end;
+
+    tkChar, tkWChar: begin
+      SetLength(Result, 1);
+      Result := WideChar(GetOrdProp(Instance, PropName));
+    end;
+
+  else
+    raise Exception.CreateFmt(
+      '%s(): "%s" is NOT a supported String Property', [Caller, PropName]
+      );
+  end;
+{$WARNINGS ON}
+end;
+
+
+procedure DBIUnicodeSetStrProp(Instance: TObject; const PropName: String; const WData: WideString);
+const
+  Caller = 'DBIUnicodeSetStrProp';
+
+var
+  PropKind: TTypeKind;
+
+begin
+{$WARNINGS OFF}
+  PropKind := PropType(Instance, PropName);
+  case PropKind of
+    tkString, tkLString {$ifdef fpc} , tkAString {$endif} : begin
+{$ifdef Delphi2009}
+      SetAnsiStrProp(Instance, PropName, AnsiString(WData));
+{$else}
+      SetStrProp(Instance, PropName, AnsiString(WData));
+{$endif}
+    end;
+
+    tkWString {$ifdef DELPHI2009} , tkUString {$endif} : begin
+      SetWideStrProp(Instance, PropName, WData);
+    end;
+    
+    tkChar, tkWChar: begin
+      SetOrdProp(Instance, PropName, Ord(WData[1]));
+    end;
+
+  else
+    raise Exception.CreateFmt(
+      '%s(): "%s" is NOT a supported String Property', [Caller, PropName]
+      );
+  end;
+{$WARNINGS ON}
+end;
 
 
 
