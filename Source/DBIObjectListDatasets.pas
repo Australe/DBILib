@@ -50,8 +50,6 @@ type
     procedure SetOptions(const Value: TDBIListDataConnectionOptions);
     procedure SetStringFieldSize(const Value: Integer);
 
-    procedure InitFieldDefsFromMetaData; virtual;
-
     property ClassTypeName: String
       read GetClassTypeName write SetClassTypeName;
 
@@ -251,236 +249,6 @@ uses
 
 // _____________________________________________________________________________
 {**
-  Jvr - 28/05/2001 14:03:34.<P>
-}
-procedure TDBICustomListDataset.InitFieldDefsFromMetaData;
-const
-  Caller = 'InitFieldDefsFromMetaData';
-
-  procedure GetPropertyList(ClassInfo: PTypeInfo; List: TList);
-  var
-    Index, PropCount: Integer;
-     PropList: PPropList;
-
-  begin
-    if not Assigned(ClassInfo) then begin
-      raise Exception.Create(
-        'No Runtime class information available for this class "' +
-        '!'#13 +
-        'Make sure your class is derived from TPersistent or that {$M+} is used.'#13 +
-        'Watch out for forward declarations!'
-      );
-    end;
-
-
-    PropCount := GetTypeData(ClassInfo)^.PropCount;
-    if PropCount > 0 then begin
-      GetMem(PropList, PropCount * SizeOf(Pointer));
-      try
-        GetPropInfos(ClassInfo, PropList);
-        List.Count := PropCount;
-        for Index := 0 to Pred(PropCount) do begin
-          List.Items[Index] := PropList[Index];
-        end;
-      finally
-        FreeMem(PropList);
-      end;
-    end;
-  end;  { GetPropertyList }
-
-
-  function GetClassType(const ClassName: String): TClass;
-  begin
-    Result := GetClass(ClassName);
-
-    // This section may need to be expanded to accommodate more standard class types
-    if (Result = nil) then begin
-      if SameText(ClassName, TObjectList.ClassName) then begin
-        Result := TObjectList;
-      end
-      else if SameText(ClassName, TList.ClassName) then begin
-        Result := TList;
-      end;
-    end;  { if }
-
-    if (Result = nil) then begin
-      Error(nil, Caller+'::GetClassType', '235', SClassNotFound, [ClassName]);
-    end;
-  end;  { GetClassType }
-
-
-  procedure CreateFieldDefs(DataClass: TClass; AFieldDefs: TFieldDefs);
-  var
- {$ifndef fpc}
-    PropClass: TClass;
- {$endif}
-    PropertyList: TList;
-    PropInfo: PPropInfo;
-    Index: Integer;
-    FieldDef: TFieldDef;
-
-  begin
-    PropertyList := TList.Create;
-    try
-      GetPropertyList(DataClass.ClassInfo, PropertyList);
-      for Index := 0 to PropertyList.Count - 1 do begin
-        PropInfo := PropertyList[Index];
-
-        FieldDef := AFieldDefs.AddFieldDef;
-        FieldDef.Name := String(PropInfo.Name);
-//##JVR        FieldDef.DataType := Field.DataType;
-//##JVR        FieldDef.Size := Field.Size;
-
-        { TODO 1 -oJvr -cTDBICustomListDataset.InitFieldDefsFromMetaData() :
-          CreateFieldDefs
-          Property (Field) is required, Not sure how this would be supported!!!
-
-        if Field.Required then begin
-          FieldDef.Attributes := [faRequired];
-        end;
-        }
-        // If Property (Field) is readonly
-        if not Assigned(PropInfo.SetProc) then begin
-          FieldDef.Attributes := FieldDef.Attributes + [DB.faReadonly];
-        end;
-
-        { TODO 1 -oJvr -cTDBICustomListDataset.InitFieldDefsFromMetaData() :
-          CreateFieldDefs
-          Not actively supporting BCD
-
-        if (Field.DataType = ftBCD) and (Field is TBCDField) then begin
-          FieldDef.Precision := TBCDField(Field).Precision;
-        end;
-        }
-
-        { TODO 1 -oJvr -cTDBICustomListDataset.InitFieldDefsFromMetaData() :
-          CreateFieldDefs
-          No support for sub-objects currently available
-
-        if Field is TObjectField then begin
-          CreateFieldDefs(TObjectField(Field).Fields, FieldDef.ChildDefs);
-        end;
-        }
-
-        // Create FieldDef items base on the property type
-        case PropInfo^.PropType^.Kind of
-{$ifndef fpc}
-          tkClass: begin
-            // Get the property class type (it must be registered)
-//##JVR            PropClass := GetClassType(PropInfo^.PropType^.Name);
-            PropClass := TDBICustomListDataConnection.GetTypeData(PropInfo).ClassType;
-            Assert(PropClass <> nil);
-
-            // It's a 'TObjectList' or derived from it
-            if PropClass.InheritsFrom(TObjectList) then begin
-              FieldDef.DataType := ftDataSet;
-              FieldDef.Size := 0;  // Possible candidate for sub recordcount
-
-              { TODO 3 -oJvr -cTDBICustomListDataset.InitFieldDefsFromMetaData() :
-                CreateFieldDefs
-                Instead of using RegisterClassAlias we need to write our own
-                registration mechanism to deal with list properties.
-              }
-              // Create the Childefs for the nested class
-              CreateFieldDefs(GetClass(String(PropInfo.Name)), FieldDef.ChildDefs);
-            end
-
-            // It's derived from 'TStrings'
-            else if PropClass.InheritsFrom(TStrings) then begin
-              FieldDef.DataType := ftMemo;
-              FieldDef.Size := 0;
-            end
-
-            // Otherwise it's some other object - use 'Abstract Data Type'
-            else begin
-              FieldDef.DataType := ftADT;
-              FieldDef.Size := 0;
-
-              // Create the Childefs for the nested class
-              CreateFieldDefs(PropClass, FieldDef.ChildDefs);
-            end;
-          end;  { tkClass }
-{$endif}
-          tkString, tkWString, tkLString {$ifdef fpc} , tkAString {$endif} : begin
-            FieldDef.DataType := ftString;
-            FieldDef.Size := StringFieldSize;
-          end;  { tkString, tkWString, tkLString, tkAString }
-
-          tkInteger: begin
-            FieldDef.DataType := ftInteger;
-          end;  { tkInteger }
-
-          tkInt64: begin
-            FieldDef.DataType := ftLargeInt;
-          end;  { tkInt64 }
-
-          tkFloat: begin
-            if DBICompareText(PropInfo^.PropType^.Name, 'TDateTime') = 0 then begin
-              FieldDef.DataType := ftDateTime;
-            end
-            else begin
-              FieldDef.DataType := ftFloat;
-              FieldDef.Precision := 4;
-            end;
-          end;  { tkFloat }
-
-          tkChar: begin
-            FieldDef.DataType := ftString;
-            FieldDef.Size := 1;
-          end;  { tkChar }
-
-          tkSet, tkEnumeration: begin
-            if DBICompareText(PropInfo^.PropType^.Name, 'Boolean') = 0 then begin
-              FieldDef.DataType := ftBoolean;
-            end
-            else begin
-              FieldDef.DataType := ftInteger;
-            end;
-          end;  { tkSet, tkEnumeration }
-
-        else
-          Error(nil, Caller, '290', 'Unsupported data type', []);
-        end;  { case }
-      end;  { for }
-    finally
-      PropertyList.Free;
-    end;  { try..finally }
-  end;  { CreateFieldDefs }
-
-begin
-  // Create FieldDefs from persistent fields if needed
-  if (FieldDefs.Count = 0) then begin
-//##JVR    Inc(FieldDefs.FInternalUpdateCount);
-
-    FieldDefs.BeginUpdate;
-    try
-      CreateFieldDefs(GetClass(ClassTypeName), FieldDefs);
-    finally
-      FieldDefs.EndUpdate;
-//##JVR      Dec(FieldDefs.FInternalUpdateCount);
-    end;
-  end;
-end;  { InitFieldDefsFromMetaData }
-
-(*
-// _____________________________________________________________________________
-{**
-  Jvr - 28/05/2001 14:02:28.<P>
-}
-procedure TDBICustomListDataset.CreateDataset;
-begin
-  InitFieldDefsFromMetaData;
-
-  inherited CreateDataset;
-end;
-*)
-
-// =============================================================================
-// 'TDBICustomListDataset' Public Methods
-// =============================================================================
-
-// _____________________________________________________________________________
-{**
   Jvr - 29/01/2003 15:07:56.<P>
 }
 function TDBICustomListDataset.AppendObject(DataObject: TObject): Integer;
@@ -581,11 +349,6 @@ begin
   end;
 end;  { NotifyDataEvent }
 
-
-
-// =============================================================================
-// 'TDBICustomListDataset' Protected Methods
-// =============================================================================
 
 function TDBICustomListDataset.GetClassTypeName: String;
 begin
@@ -749,9 +512,7 @@ end;  { SetStringFieldSize }
 
 
 
-// =============================================================================
-// 'TDBICustomObjectListDataset' methods
-// =============================================================================
+{ TDBICustomObjectListDataset }
 
 // _____________________________________________________________________________
 {**
@@ -838,11 +599,7 @@ end;  { SetList }
 
 
 
-
-
-// =============================================================================
-// 'TDBICustomStringsDataset' methods
-// =============================================================================
+{ TDBICustomStringsDataset }
 
 // _____________________________________________________________________________
 {**

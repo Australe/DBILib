@@ -693,7 +693,6 @@ begin
     NullFlags.SetBuffer(pFldBuf, FieldProps[FieldNo].iFldLen);
   end;
 
-//##JVR  LogicalOffset := Default_LogicalBufferFirstFieldOffset;
   for FieldNo := 0 to FieldCount - 1 do begin
     LogicalOffset := FieldProps[FieldNo].iFldOffsInRec;
     GetFieldProc := GetFieldUnknown;
@@ -710,8 +709,6 @@ begin
     end;  { if }
 
     if IsPublishedProp(FieldObject, FieldName) then begin
-//##JVR      LogicalOffset := FieldProps[FieldNo].iFldOffsInRec;
-
       // Simple types don't support null (or nil) values therefore most of the
       // time IsBlank will be false.  The GetObjectFieldProc returns False
       // (e.g. for a blank string or a nil object) if the value is blank.
@@ -1029,79 +1026,7 @@ begin
     end;
   end;
 end;  { PutFieldString }
-(*##JVR
-const
-  Caller = 'PutFieldString';
 
-var
-  PropKind: TTypeKind;
-  AData: AnsiString;
-  WData: WideString;
-
-begin
-  PropKind := PropType(DataObject, FieldName);
-  case PropKind of
-    tkString, tkLString {$ifdef fpc} , tkAString {$endif} : begin
-      // Assign data to object property
-      if (FieldBuffer = nil) then begin
-        SetStrProp(DataObject, FieldName, '');
-      end
-      else begin
-        case FieldProps[FieldNo].iFldType of
-          fldWIDESTRING, fldUNICODE: begin
-            WData := WideString(PWideChar(FieldBuffer));
-{$ifdef Delphi2009}
-            SetAnsiStrProp(DataObject, FieldName, AnsiString(WData));
-{$else}
-            SetStrProp(DataObject, FieldName, AnsiString(WData));
-{$endif}
-          end;
-
-        else
-          AData := AnsiString(PAnsiChar(FieldBuffer));
-{$ifdef Delphi2009}
-          SetAnsiStrProp(DataObject, FieldName, AData);
-{$else}
-            SetStrProp(DataObject, FieldName, AData);
-{$endif}
-        end;
-      end;
-    end;
-{$WARNINGS OFF}
-    tkWString {$ifdef DELPHI2009} , tkUString {$endif} : begin
-      // Assign data to object property
-      if (FieldBuffer = nil) then begin
-        SetWideStrProp(DataObject, FieldName, '');
-      end
-      else begin
-        case FieldProps[FieldNo].iFldType of
-          fldWIDESTRING, fldUNICODE: begin
-            WData := WideString(PWideChar(FieldBuffer));
-            SetWideStrProp(DataObject, FieldName, WData);
-          end;
-
-        else
-          AData := AnsiString(PAnsiChar(FieldBuffer));
-          SetWideStrProp(DataObject, FieldName, WideString(AData));
-        end;
-      end;
-    end;
-{$WARNINGS ON}
-    tkChar, tkWChar: begin
-      // Assign data to object property
-      if (FieldBuffer = nil) then begin
-        SetOrdProp(DataObject, FieldName, 0);
-      end
-      else begin
-        SetOrdProp(DataObject, FieldName, Ord(FieldBuffer^));
-      end;
-    end;
-
-  else
-    Error(nil, Caller, '1130', '"%s" is NOT a supported String Property', [FieldName]);
-  end;
-end;  { PutFieldString }
-//*)
 
 // _____________________________________________________________________________
 {**
@@ -1432,20 +1357,6 @@ end;  { PutFieldDateTime }
                               Result returns True if NOT Blank.<BR>
   Jvr - 31/08/2001 12:10:11 - Added TStrings support for Memo fields<P>
 }
-//(*##JVR
-const
-  tkStringTypes = [
-      tkString
-    , tkLString
-    , tkWString
-{$ifdef DELPHI2009}
-    , tkUString
-{$endif}
-{$ifdef fpc}
-    , tkAString
-{$endif}
-    ];
-//*)
 function TDBICustomListDataConnection.GetFieldMemo(
   DataObject: TObject;
   var FieldBuffer: TDBIFieldBuffer;
@@ -1468,16 +1379,15 @@ begin
 
   try
     PropKind := PropType(DataObject, FieldName);
-//{##JVR
+
     if (PropKind <> tkClass) and not (PropKind in tkStringTypes) then begin
       Error(nil, Caller, '1035',
         'Illegal Object Datatype: %s',
         [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
         );
     end;
-//}
+
     if (PropKind <> tkClass) then begin
-//##JVR      DataString := TDBIString(DBIAnsiGetStrProp(DataObject, FieldName));
       DataString := TDBIString(GetStrProp(DataObject, FieldName));
     end
     else begin
@@ -1542,15 +1452,14 @@ begin
 
   try
     PropKind := PropType(DataObject, FieldName);
-//(*##JVR
+
     if (PropKind <> tkClass) and not (PropKind in tkStringTypes) then begin
-//##JVR    if not (PropKind in [tkString, tkLString {$ifdef fpc} , tkAString {$endif} , tkClass]) then begin
       Error(nil, Caller, '1110',
         'Illegal Object Datatype: %s',
         [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
         );
     end;
-//*)
+
     if (FieldBuffer = nil) then begin
       BlobIndex := 0;
       BlobData := '';
@@ -1569,7 +1478,6 @@ begin
       // Property is of type String
       if (PropKind <> tkClass) then begin
         SetStrProp(DataObject, FieldName, TDBIText(BlobData));
-//##JVR        DBIAnsiSetStrProp(DataObject, FieldName, TDBIText(BlobData));
       end
 
       // Property is of type TStrings

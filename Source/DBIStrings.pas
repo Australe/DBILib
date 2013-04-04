@@ -38,6 +38,20 @@ interface
 uses
   Classes, SysUtils, TypInfo;
 
+// Rtti
+const
+  tkStringTypes = [
+      tkString
+    , tkLString
+    , tkWString
+{$ifdef DELPHI2009}
+    , tkUString
+{$endif}
+{$ifdef fpc}
+    , tkAString
+{$endif}
+    ];
+
 const
   DBIMaxListSize = MaxInt div 16;
 
@@ -465,11 +479,11 @@ begin
   PropKind := PropType(Instance, PropName);
   case PropKind of
     tkString, tkLString {$ifdef fpc} , tkAString {$endif} : begin
-{$ifdef Delphi2009}
+    {$ifdef Delphi2009}
       SetAnsiStrProp(Instance, PropName, AData);
-{$else}
+    {$else}
       SetStrProp(Instance, PropName, AData);
-{$endif}
+    {$endif}
     end;
 
     tkWString {$ifdef DELPHI2009} , tkUString {$endif} : begin
@@ -536,11 +550,11 @@ begin
   PropKind := PropType(Instance, PropName);
   case PropKind of
     tkString, tkLString {$ifdef fpc} , tkAString {$endif} : begin
-{$ifdef Delphi2009}
+    {$ifdef Delphi2009}
       SetAnsiStrProp(Instance, PropName, AnsiString(WData));
-{$else}
+    {$else}
       SetStrProp(Instance, PropName, AnsiString(WData));
-{$endif}
+    {$endif}
     end;
 
     tkWString {$ifdef DELPHI2009} , tkUString {$endif} : begin
