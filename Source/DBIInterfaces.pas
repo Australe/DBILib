@@ -78,24 +78,32 @@ type
 
   TDBIRecordElement = Byte;
   TDBIRecordBuffer = PByte;
-  TDBIValueBuffer = TArray<Byte>;
 {$else}
   TDBIByte = AnsiChar;
   PDBIByte = PAnsiChar;
 
   TDBIRecordElement = AnsiChar;
   TDBIRecordBuffer = PAnsiChar;
-  TDBIValueBuffer = Pointer;
 {$endif}
 
 
 {$ifdef DELPHIXE2}
-  TDBIRecordData = PByte;
   TDBIDataEventInfo = NativeInt;
 {$else}
-  TDBIRecordData = Pointer;
   TDBIDataEventInfo = LongInt;
 {$endif}
+
+
+{$ifdef DELPHIXE3}
+  TDBIBookmark = TBookmark;
+  TDBIRecordData = PByte;
+  TDBIValueBuffer = TArray<Byte>;
+{$else}
+  TDBIBookmark = Pointer;
+  TDBIRecordData = Pointer;
+  TDBIValueBuffer = Pointer;
+{$endif}
+
 
   TDBIFieldBuffer = PByte;
 

@@ -710,7 +710,7 @@ const
     0, 0, 0, 0, 0, fldstHBINARY, fldstHMEMO, 0, 0, 0, fldstGUID
     {$ifdef DELPHI6} , fldDATETIME, 0 {$endif}
     {$ifdef DELPHI2006} , fldstFIXED, fldstWIDEMEMO {$ifndef fpc}, fldstORATIMESTAMP, fldstORAINTERVAL {$endif} {$endif}
-    {$ifdef DELPHIXE3} , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 {$endif}
+    {$ifdef DELPHIXE2} , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 {$endif}
     );
 
   DataTypeMap: array[0..MAXLOGFLDTYPES - 1] of TFieldType = (

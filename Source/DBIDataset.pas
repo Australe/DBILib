@@ -240,7 +240,7 @@ type
   TFetchOption = (foRecord, foBlobs, foDetails);
   TFetchOptions = set of TFetchOption;
 
-{$ifdef Delphi2009}
+{$ifdef DelphiXE3}
   TDBIFieldList = TList<TField>;
 {$else}
   TDBIFieldList = TList;
@@ -254,7 +254,7 @@ type
   end;
 
 
-{$ifdef Delphi2009}
+{$ifdef DelphiXE3}
   TDBIExtendedField = class(TExtendedField)
   protected
     function GetAsExtended: Extended; override;
@@ -561,6 +561,9 @@ type
     procedure ClearCalcFields(Buffer: TDBIRecordBuffer); override;
     procedure CloseCursor; override;
     procedure DataConvert(Field: TField; Source, Dest: TDBIValueBuffer; ToNative: Boolean); overload; override;
+{$ifdef DelphiXE3}
+    procedure DataConvert(Field: TField; Source, Dest: Pointer; ToNative: Boolean); overload; override; //##JVR deprecated 'Use overloaded method instead';
+{$endif DelphiXE3}
 {$ifdef _AGGREGATES}
     procedure DataEvent(Event: TDataEvent; Info: TDBIDataEventInfo); override;  {##NEW Info: NativeInt }
 {$endif}
@@ -582,7 +585,7 @@ type
 {$ifdef _UNUSED}
     function GetAppServer: IAppServer; virtual;
 {$endif}
-    procedure GetBookmarkData(Buffer: TDBIRecordBuffer; Data: TBookmark); overload; override;
+    procedure GetBookmarkData(Buffer: TDBIRecordBuffer; Data: TDBIBookmark); overload; override;
     function GetBookmarkFlag(Buffer: TDBIRecordBuffer): TBookmarkFlag; override;
     function GetCanModify: Boolean; override;
     function GetDataSource: TDataSource; override;
@@ -617,7 +620,7 @@ type
     procedure InternalSetOptionalParam(const ParamName: string; const Value: OleVariant;
       IncludeInDelta: Boolean = False; FieldNo: Integer = 0);
 {. $endif}
-    procedure InternalGotoBookmark(Bookmark: TBookmark); overload; override;
+    procedure InternalGotoBookmark(Bookmark: TDBIBookmark); overload; override;
     procedure InternalHandleException; override;
     procedure InternalInitFieldDefs; override;
     procedure InternalInitRecord(Buffer: TDBIRecordBuffer); override;
@@ -649,7 +652,7 @@ type
 {$ifdef _UNUSED}
     procedure SetAppServer(Value: IAppServer); virtual;
 {$endif}
-    procedure SetBookmarkData(Buffer: TDBIRecordBuffer; Data: TBookmark); overload; override;
+    procedure SetBookmarkData(Buffer: TDBIRecordBuffer; Data: TDBIBookmark); overload; override;
     procedure SetBookmarkFlag(Buffer: TDBIRecordBuffer; Value: TBookmarkFlag); override;
 {$ifdef _UNUSED}
     procedure SetCommandText(Value: WideString); virtual;
@@ -825,6 +828,10 @@ type
     function GetCurrentRecord(Buffer: TDBIRecordBuffer): Boolean; override;
     function GetFieldData(Field: TField; Buffer: TDBIValueBuffer): Boolean; overload; override;
     function GetFieldData(FieldNo: Integer; Buffer: TDBIValueBuffer): Boolean; overload; override;
+{$ifdef DelphiXE3}
+    function GetFieldData(Field: TField; Buffer: Pointer): Boolean; overload; override; //##JVR deprecated 'Use overloaded method instead';
+    function GetFieldData(FieldNo: Integer; Buffer: Pointer): Boolean; overload; override; //##JVR deprecated 'Use overloaded method instead';
+{$endif DelphiXE3}
 {$ifdef _AGGREGATES}
     function GetGroupState(Level: Integer): TGroupPosInds;
 {$endif}
@@ -3854,7 +3861,7 @@ begin
       Inc(RecBuf, FRecordSize + Field.Offset);
       Result := Boolean(RecBuf[0]);
       if Result and (Buffer <> nil) then
-{$ifdef Delphi2009}
+{$ifdef DelphiXE3}
         Move(RecBuf[1], Buffer[0], Field.DataSize);
 {$else}
         Move(RecBuf[1], Buffer^, Field.DataSize);
@@ -3879,6 +3886,44 @@ begin
     Result := not IsBlank;
   end;
 end;
+
+
+{$ifdef DelphiXE3}
+function TDBIDataset.GetFieldData(Field: TField; Buffer: Pointer): Boolean;
+var
+  IsBlank: LongBool;
+  RecBuf: PByte;
+begin
+  Result := False;
+  if GetActiveRecBuf(RecBuf) then
+    with Field do
+      if FieldKind in [fkData, fkInternalCalc] then
+      begin
+        Check(FDSCursor.GetField(RecBuf, FieldNo, Buffer, IsBlank));
+        Result := not IsBlank;
+      end else
+        if State in [dsBrowse, dsEdit, dsInsert, dsCalcFields] then
+        begin
+          Inc(RecBuf, FRecordSize + Offset);
+          Result := Boolean(RecBuf[0]);
+          if Result and (Buffer <> nil) then
+            Move(RecBuf[1], Buffer^, DataSize);
+        end;
+end;
+
+function TDBIDataset.GetFieldData(FieldNo: Integer; Buffer: Pointer): Boolean;
+var
+  RecBuf: PByte;
+  IsBlank: LongBool;
+begin
+  Result := GetActiveRecBuf(RecBuf);
+  if Result then
+  begin
+    Check(FDSCursor.GetField(RecBuf, FieldNo, Buffer, IsBlank));
+    Result := not IsBlank;
+  end;
+end;
+{$endif DelphiXE3}
 
 
 // _____________________________________________________________________________
@@ -3971,7 +4016,7 @@ begin
   begin
     if State = dsInternalCalc then Exit;
     Inc(RecBuf, FRecordSize + Field.Offset);
-{$ifndef Delphi2009}
+{$ifndef DelphiXE3}
     Boolean(RecBuf[0]) := LongBool(Buffer);
     if Boolean(RecBuf[0]) then Move(Buffer^, RecBuf[1], Field.DataSize);
 {$else}
@@ -4076,6 +4121,35 @@ begin
   end else
     inherited;
 end;
+
+
+{$ifdef DelphiXE3}
+procedure TDBIDataset.DataConvert(Field: TField; Source, Dest: Pointer; ToNative: Boolean);
+var
+  ByteLen, StrLen: Integer;
+begin
+  if Field.DataType = ftWideString then
+  begin
+    if ToNative then
+    begin
+      // Convert from null terminated to length prefixed
+      StrLen := Length(PChar(Source));
+      if StrLen > Field.Size then
+        StrLen := Field.Size;
+      Word(Dest^) := StrLen * 2; // length prefix is byte count
+      Move(PChar(Source)^, (PChar(Dest)+1)^, Word(Dest^));
+    end else
+    begin
+      // Convert from length prefixed to null terminated
+      ByteLen := Word(Source^);
+      Move((PChar(Source)+1)^, PChar(Dest)^, ByteLen);
+      (PChar(Dest) + (ByteLen div 2))^ := #$00;
+    end;
+  end else
+    inherited;
+end;
+{$endif DelphiXE3}
+
 
 
 
@@ -4324,7 +4398,7 @@ end;
 
   Jvr - 17/09/2001 16:53:36.<P>
 }
-procedure TDBIDataset.InternalGotoBookmark(Bookmark: TBookmark);
+procedure TDBIDataset.InternalGotoBookmark(Bookmark: TDBIBookmark);
 begin
   CheckIsInitialised('InternalGotoBookmark', '508');
   Check(FDSCursor.MoveToBookmark(Bookmark));
@@ -4372,9 +4446,9 @@ end;
   OKASIS.
   Jvr - 17/09/2001 16:53:02.<P>
 }
-procedure TDBIDataset.GetBookmarkData(Buffer: TDBIRecordBuffer; Data: TBookmark);
+procedure TDBIDataset.GetBookmarkData(Buffer: TDBIRecordBuffer; Data: TDBIBookmark);
 begin
-{$ifdef Delphi2009}
+{$ifdef DelphiXE3}
   Move(Buffer[FBookmarkOfs], Data[0], BookmarkSize);
 {$else}
   Move(Buffer[FBookmarkOfs], Data^, BookmarkSize);
@@ -4387,9 +4461,9 @@ end;
   OKASIS.
   Jvr - 17/09/2001 16:52:43.<P>
 }
-procedure TDBIDataset.SetBookmarkData(Buffer: TDBIRecordBuffer; Data: TBookmark);
+procedure TDBIDataset.SetBookmarkData(Buffer: TDBIRecordBuffer; Data: TDBIBookmark);
 begin
-{$ifdef Delphi2009}
+{$ifdef DelphiXE3}
   Move(Data[0], ActiveBuffer[FBookmarkOfs], BookmarkSize);
 {$else}
   Move(Data^, ActiveBuffer[FBookmarkOfs], BookmarkSize);
@@ -4938,7 +5012,7 @@ procedure TDBIDataset.SortOnFields(Cursor: IDBICursor; const Fields: string;
   CaseInsensitive, Descending: Boolean);
 var
   I: Integer;
-  FieldList: TList{$ifdef Delphi2009}<TField>{$endif};
+  FieldList: TDBIFieldList;
   DescFlags, CaseFlags: DSKEYBOOL;
 
   function GetFlags(Flag: LongBool; out FlagArray: DSKEYBOOL): Pointer;
@@ -4956,7 +5030,7 @@ var
   end;
 
 begin
-  FieldList := TList{$ifdef Delphi2009}<TField>{$endif}.Create;
+  FieldList := TDBIFieldList.Create;
   try
     GetFieldList(FieldList, Fields);
     for I := 0 to FieldList.Count - 1 do
@@ -5935,7 +6009,7 @@ function TDBIDataset.LocateRecord(const KeyFields: string;
   const KeyValues: Variant; Options: TLocateOptions;
   SyncCursor: Boolean): Boolean;
 var
-  Fields: TList{$ifdef Delphi2009}<TField>{$endif};
+  Fields: TDBIFieldList;
   Buffer: TDBIRecordBuffer;
   I, FieldCount, PartialLength: Integer;
   Status: DBIResult;
@@ -5948,7 +6022,7 @@ begin
   CursorPosChanged;
   CheckProviderEOF;
   Buffer := TempBuffer;
-  Fields := TList{$ifdef Delphi2009}<TField>{$endif}.Create;
+  Fields := TDBIFieldList.Create;
   try
     GetFieldList(Fields, KeyFields);
     CaseInsensitive := loCaseInsensitive in Options;
@@ -7680,7 +7754,7 @@ var
               PSingle(@Buffer[FieldOffset])^ := DataField.AsFloat;
             end;
 
-{$ifdef DELPHI2009}
+{$ifdef DELPHIXE3}
             fldFLOATIEEE: begin
               if DataField is TExtendedField then begin
                 PExtended(@Buffer[FieldOffset])^ := (DataField as TExtendedField).AsExtended;
@@ -8154,7 +8228,7 @@ begin
 
   case FieldType of
     db.ftBytes:    Result := TDBIBytesField;
-{$ifdef Delphi2009}
+{$ifdef DelphiXE3}
     db.ftExtended: Result := TDBIExtendedField;
 {$endif}
   end;
@@ -8166,7 +8240,7 @@ end;  { GetFieldClass }
 
 { TDBIExtendedField }
 
-{$ifdef Delphi2009}
+{$ifdef DelphiXE3}
 function TDBIExtendedField.GetAsExtended: Extended;
 var
   Data: TValueBuffer;
