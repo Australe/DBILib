@@ -4,13 +4,14 @@ uses
   Forms,
   Windows,
   SysUtils,
+  DB,
+  MidasLib,
   DBClient,
   omLocals,
   omMVCManagers,
   omApplications,
   omActivitySelfTests,
   DBILibAllUnitTests;
-
 
 begin
   Application.Initialize;

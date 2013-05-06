@@ -738,7 +738,7 @@ begin
   end
 
   // Blob types
-  else} if (PFieldProps^.iFldType = fldBLOB) then begin
+  else if (PFieldProps^.iFldType = fldBLOB) then begin
     Result := Result and (FldSubTypeMap[ftMemo] = PFieldProps^.iFldSubType);
   end
 
@@ -1541,6 +1541,7 @@ var
   OrdinalData: TOrdinalRecords;
 begin
   OrdinalData := TOrdinalData.GetRecords;
+
   Assert(not ADataset.FieldByName('_Word').IsNull);
   _Integer := ADataset.FieldByName('_Word').AsInteger;
   Assert(Word(_Integer) = OrdinalData[Index]._Word);
