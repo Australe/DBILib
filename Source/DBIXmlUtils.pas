@@ -327,12 +327,17 @@ begin
 {$ifdef DELPHI2009}
             ftByte:        Write(cdsFieldByte);
             ftLongWord:    Write(cdsFieldLongWord);
-            ftSingle:      Write(cdsFieldSingle);
 
-           // There is a bug in clientdataset for TExtendedField,
-           // so this field type has been mapped to double instead
+            // There is a bug in clientdataset for TExtendedField,
+            // so this field type has been mapped to double instead
             ftExtended:    Write(cdsFieldFloat);
-           //##JVR ftExtended:    Write(cdsFieldExtended);
+            //##JVR ftExtended:    Write(cdsFieldExtended);
+
+            // Guess what now they have broken TSingleField as well,
+            // so this field type has been mapped to double instead
+            ftSingle:      Write(cdsFieldFloat);
+            //##JVR ftSingle:      Write(cdsFieldSingle);
+
 {$endif}
             ftFloat:       Write(cdsFieldFloat);
             ftCurrency:    Write(cdsFieldCurrency);

@@ -50,8 +50,9 @@ const
   DBIPageMaximumSize = 32 * DBIPageBlockSize;
   DBIPageBufferSize = 16 * DBIPageBlockSize;
 
+
 type
-  TDBIHandle = Integer;                // File handle type
+  TDBIHandle = THandle;                // File handle type
 
   TDBIHandleStreamOption = (soWriteThrough, soForceFlush);
   TDBIHandleStreamOptions = set of TDBIHandleStreamOption;
@@ -716,14 +717,14 @@ var
 begin
   if (Mode and fmCreate = fmCreate) then begin
     Handle := FileCreate(AFileName);
-    if (Handle < 0) then begin
+    if (Handle = INVALID_HANDLE_VALUE) then begin
       raise EFCreateError.CreateResFmt(@SFCreateError, [AFileName]);
     end;
   end
 
   else begin
     Handle := FileOpen(AFileName, Mode);
-    if (Handle < 0) then begin
+    if (Handle = INVALID_HANDLE_VALUE) then begin
       raise EFOpenError.CreateResFmt(@SFOpenError, [AFileName]);
     end;
   end;  { if }
