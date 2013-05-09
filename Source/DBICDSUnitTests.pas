@@ -71,8 +71,7 @@ uses
   DB,
   DBIConst,
   DBIDataset,
-  DBIXbaseDatasets,
-  DBIXemelles;
+  DBIXbaseDatasets;
 
 
 
