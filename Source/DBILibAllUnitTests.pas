@@ -27,6 +27,9 @@ uses
 
   // Tests
   DBIUnitTests,
+{$ifdef omTesting}
+  DBICDSUnitTests,
+{$endif}
   DBIODSUnitTests,
   DBIXDSUnitTests;
 
