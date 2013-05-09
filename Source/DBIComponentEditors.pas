@@ -29,12 +29,14 @@ unit DBIComponentEditors;
 interface
 
 uses
-  DSDesign, DBReg, DBIConst, DBIObjectListDatasets;
+  Classes, Forms, Dialogs, DB, DBReg, DBIConst, DBIObjectListDatasets, DSDesign,
+  {$ifdef Delphi6} DesignIntf {$else} DsgnIntf {$endif} ;
 
 type
   TObjectListDatasetEditor = class(TDataSetEditor)
   private
     FCanCreate: Boolean;
+
   protected
     function GetDSDesignerClass: TDSDesignerClass; override;
 
@@ -58,15 +60,7 @@ procedure Register;
 implementation
 
 uses
-  SysUtils,
-  Consts,
-  Dialogs,
-{$ifdef Delphi6}
-  DesignIntf;
-{$else}
-  DsgnIntf;
-{$endif}
-
+  SysUtils, Consts, Controls, ComCtrls, DBIDesigners;
 
 type
 {
@@ -276,7 +270,7 @@ end;
 procedure TObjectListDatasetEditor.ExecuteVerb(Index: Integer);
 begin
   if (Index <= inherited GetVerbCount - 1) then begin
-    inherited ExecuteVerb(Index);
+    TDBIFieldsEditor.ShowFieldsEditor(Designer, TDataSet(Component), GetDSDesignerClass);
   end
   else begin
     Dec(Index, inherited GetVerbCount);
@@ -386,7 +380,6 @@ begin
     end;
   end;  { with }
 end;  { GetVerbCount }
-
 
 
 

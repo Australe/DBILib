@@ -39,6 +39,7 @@ requires
 contains
   DBIComponentEditors in 'DBIComponentEditors.pas',
   DBIPropertyEditors in 'DBIPropertyEditors.pas',
-  DBIReg in 'DBIReg.pas';
+  DBIReg in 'DBIReg.pas',
+  DBIDesigners in 'DBIDesigners.pas' {FormODSDesigner};
 
 end.

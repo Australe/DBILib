@@ -32,11 +32,20 @@ requires
   rtl,
   vcl,
   dclDB,
-  DBILibD2006;
+  DBILibD2006,
+  dbrtl,
+  vcldesigner,
+  designide,
+  xmlrtl,
+  vclactnband,
+  vclx,
+  dclstd,
+  vcldb;
 
 contains
   DBIComponentEditors in 'DBIComponentEditors.pas',
   DBIPropertyEditors in 'DBIPropertyEditors.pas',
-  DBIReg in 'DBIReg.pas';
+  DBIReg in 'DBIReg.pas',
+  DBIDesigners in 'DBIDesigners.pas';
 
 end.

@@ -36,7 +36,7 @@ interface
 {$endif}
 
 uses
-  Classes, SysUtils, TypInfo, DB, DBIConst, DBIIntfConsts;
+  Windows, Messages, Classes, SysUtils, TypInfo, DB, DBIConst, DBIIntfConsts;
 
 const
   OpenModes: array[Boolean] of Word = (fmOpenReadWrite, fmOpenRead);
@@ -100,6 +100,26 @@ type
   end;  { TDBINullFlags }
 
 
+type
+  TDBIOpenEditor = function (const AFileName: TFileName): Boolean of object;
+
+  TDBIApplication = class(TPersistent)
+  protected
+    class function EnumWindowsCallback(Handle: HWnd; Param: LParam): Boolean; Stdcall; static;
+    class function FindFormByClassName(Handle: HWnd; const AClassName: String): Boolean;
+    class function MainFormClassName: String;
+    class function UniqueID: LongInt;
+
+  public
+    class function Activate(var Message: TMessage): Boolean;
+    class function FindApplication(var Message: TMessage): Boolean;
+    class function OpenEditor(var Message: TMessage; DoOpenEditor: TDBIOpenEditor): Boolean; overload;
+    class function OpenEditor: Boolean; overload;
+    class function RestoreApplication(var Message: TMessage): Boolean; overload;
+    class function SetupApplication(MainFormClass: TClass): Boolean; overload;
+  end;
+
+
 // General Helper routines
 procedure Check(Status: DBIResult);
 
@@ -145,7 +165,151 @@ var                           { Taken from Delphi System.pas }
 implementation
 
 uses
-  Windows, WinSock, DBIFileStreams, DBIXbaseConsts;
+  WinSock, Controls, Forms, DBIFileStreams, DBIXbaseConsts;
+
+
+{ TDBIApplication }
+
+const
+  WM_OPENEDITOR = WM_USER + 1;
+  WM_NOTEXISTS = WM_USER + 2;
+  WM_RESTOREAPP = WM_USER + 3;
+
+var
+  WM_FINDINSTANCE: Cardinal;
+  _MainFormClass: TClass;
+  _PreviousWnd: HWnd = 0;
+
+  
+class function TDBIApplication.Activate(var Message: TMessage): Boolean;
+begin
+  Result := Message.Msg = CM_ACTIVATE;
+  if Result then begin
+    OpenEditor;
+  end;
+end;
+
+
+class function TDBIApplication.EnumWindowsCallback(Handle: HWnd; Param: LParam): Boolean; Stdcall;
+begin
+  Result := not FindFormByClassName(Handle, MainFormClassName);
+  if not Result then begin
+    _PreviousWnd := Handle;
+  end;
+end;
+
+
+class function TDBIApplication.FindApplication(var Message: TMessage): Boolean;
+begin
+  Result := Message.Msg = WM_FINDINSTANCE;
+  if Result then begin
+    Message.Result := UniqueID;
+  end
+end;
+
+
+class function TDBIApplication.FindFormByClassName(Handle: HWnd; const AClassName: String): Boolean;
+var
+  ClassName: array[0..31] of AnsiChar;
+
+begin
+  GetClassName(Handle, ClassName, SizeOf(ClassName));
+  Result := StrIComp(ClassName, PChar(AClassName)) = 0;
+  Result := Result and (SendMessage(Handle, WM_FindINSTANCE, 0, 0) = UniqueID);
+end;
+
+
+class function TDBIApplication.MainFormClassName: String;
+begin
+  Assert(Assigned(_MainFormClass));
+  
+  Result := _MainFormClass.ClassName;
+end;
+
+
+class function TDBIApplication.OpenEditor: Boolean;
+var
+  Atom: TAtom;
+
+begin
+  Result := _PreviousWnd <> 0;
+  if not Result then begin
+    _PreviousWnd := Application.MainForm.Handle;
+  end;
+
+  Result := ParamCount > 0;
+  if Result then begin
+    Atom := GlobalAddAtom(PChar(ParamStr(1)));
+    SendMessage(_PreviousWnd, WM_OPENEDITOR, Atom, 0);
+    GlobalDeleteAtom(Atom);
+  end;
+end;
+
+
+class function TDBIApplication.OpenEditor(var Message: TMessage; DoOpenEditor: TDBIOpenEditor): Boolean;
+var
+  TempFileName: String;
+
+begin
+  Result := Message.Msg = WM_OPENEDITOR;
+  if Result then begin
+    SetLength(TempFileName, MAX_PATH);
+    GlobalGetAtomName(TMessage(Message).WParam, PChar(TempFileName), MAX_PATH);
+    SetLength(TempFileName, StrLen(PChar(TempFileName)));
+
+    // Set focus to this application
+    if IsIconic(Application.Handle) then begin
+      Application.Restore;
+    end
+    else begin
+      Application.BringToFront;
+    end;
+
+    DoOpenEditor(TempFileName);
+  end
+end;
+
+
+class function TDBIApplication.RestoreApplication(var Message: TMessage): Boolean;
+begin
+  Result := Message.Msg = WM_RESTOREAPP;
+  if Result then begin
+    PostMessage(Application.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
+  end;
+end;
+
+
+class function TDBIApplication.SetupApplication(MainFormClass: TClass): Boolean;
+const
+  ErrorMessage = 'Application initialization failed to register window message for "%s"';
+  
+begin
+  _MainFormClass := MainFormClass;
+  _PreviousWnd := 0;
+
+  WM_FINDINSTANCE := RegisterWindowMessage(PChar(Application.Title));
+  if (WM_FINDINSTANCE = 0) then begin
+    raise Exception.CreateFmt(ErrorMessage, [Application.Title]);
+  end;
+
+  EnumWindows(@TDBIApplication.EnumWindowsCallback, 0);
+  Result := _PreviousWnd <> 0;
+
+  if Result then begin
+  	SetForegroundWindow(_PreviousWnd);
+    PostMessage(_PreviousWnd, WM_RESTOREAPP, 0, 0);
+    OpenEditor;
+  end;
+end;
+
+
+class function TDBIApplication.UniqueID: LongInt;
+begin
+  Result := $75BCD15;
+end;
+
+
+
 
 
 { TDBIFieldMap }

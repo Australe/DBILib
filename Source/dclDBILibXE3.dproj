@@ -68,6 +68,9 @@
         <DCCReference Include="DBIComponentEditors.pas"/>
         <DCCReference Include="DBIPropertyEditors.pas"/>
         <DCCReference Include="DBIReg.pas"/>
+        <DCCReference Include="DBIDesigners.pas">
+            <Form>FormODSDesigner</Form>
+        </DCCReference>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
