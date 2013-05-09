@@ -210,7 +210,7 @@ end;
 
 class function TDBIApplication.FindFormByClassName(Handle: HWnd; const AClassName: String): Boolean;
 var
-  ClassName: array[0..31] of AnsiChar;
+  ClassName: array[0..31] of Char;
 
 begin
   GetClassName(Handle, ClassName, SizeOf(ClassName));
