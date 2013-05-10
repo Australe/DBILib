@@ -3148,19 +3148,22 @@ end;
 }
 procedure TDBIDataset.SaveToFile(AFileName: String; Format: TDBIDataFormat);
 begin
-  if (AFileName = '') then AFileName := GetFileName;
-  if (AFileName = '') then DatabaseError(SInvalidFilename, Self);
+  // Prevent writing a zero-byte file
+  if Active or (Assigned(FDSBase) and (DatasetField = nil)) then begin
+    if (AFileName = '') then AFileName := GetFileName;
+    if (AFileName = '') then DatabaseError(SInvalidFilename, Self);
 
-  Format := SelectFormat(AFileName, Format);
+    Format := SelectFormat(AFileName, Format);
 
-  if (Format = dfCDS) then begin
-    DBIXmlUtils.SaveAsXmlFile(AFileName, Self);
-  end
-  else if (Format = dfPSV) then begin
-    DBIUtils.SaveAsPsvFile(AFileName, Self);
-  end
-  else begin
-    DataConnection.SaveToFile(AFileName, Format);
+    if (Format = dfCDS) then begin
+      DBIXmlUtils.SaveAsXmlFile(AFileName, Self);
+    end
+    else if (Format = dfPSV) then begin
+      DBIUtils.SaveAsPsvFile(AFileName, Self);
+    end
+    else begin
+      DataConnection.SaveToFile(AFileName, Format);
+    end;
   end;
 end;
 
