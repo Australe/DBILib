@@ -16,18 +16,22 @@ uses
   DBIIntfConsts,
   DBIObjectListDataConnections,
   DBIObjectListDatasets,
+  DBIStreamAdapters,
   DBIStrings,
   DBIStringsDataConnections,
+  DBITokenizers,
+  DBITokenizerConsts,
   DBIUtils,
   DBIXBaseBlobConnections,
   DBIXBaseConsts,
   DBIXBaseDataConnections,
   DBIXbaseDatasets,
+  DBIXmlDataConnections,
   DBIXmlUtils,
 
   // Tests
   DBIUnitTests,
-{$ifdef omTesting}
+{$ifdef __omTesting}
   DBICDSUnitTests,
 {$endif}
   DBIODSUnitTests,

@@ -105,7 +105,6 @@ type
 
   TDBIApplication = class(TPersistent)
   protected
-    class function EnumWindowsCallback(Handle: HWnd; Param: LParam): Boolean; Stdcall; static;
     class function FindFormByClassName(Handle: HWnd; const AClassName: String): Boolean;
     class function MainFormClassName: String;
     class function UniqueID: LongInt;
@@ -190,15 +189,6 @@ begin
 end;
 
 
-class function TDBIApplication.EnumWindowsCallback(Handle: HWnd; Param: LParam): Boolean; Stdcall;
-begin
-  Result := not FindFormByClassName(Handle, MainFormClassName);
-  if not Result then begin
-    _PreviousWnd := Handle;
-  end;
-end;
-
-
 class function TDBIApplication.FindApplication(var Message: TMessage): Boolean;
 begin
   Result := Message.Msg = WM_FINDINSTANCE;
@@ -279,6 +269,15 @@ begin
 end;
 
 
+function EnumWindowsCallback(Handle: HWnd; Param: LParam): Boolean; Stdcall;
+begin
+  Result := not TDBIApplication.FindFormByClassName(Handle, TDBIApplication.MainFormClassName);
+  if not Result then begin
+    _PreviousWnd := Handle;
+  end;
+end;
+
+
 class function TDBIApplication.SetupApplication(MainFormClass: TClass): Boolean;
 const
   ErrorMessage = 'Application initialization failed to register window message for "%s"';
@@ -292,7 +291,7 @@ begin
     raise Exception.CreateFmt(ErrorMessage, [Application.Title]);
   end;
 
-  EnumWindows(@TDBIApplication.EnumWindowsCallback, 0);
+  EnumWindows(@EnumWindowsCallback, 0);
   Result := _PreviousWnd <> 0;
 
   if Result then begin
@@ -566,44 +565,6 @@ end;
 
 // _____________________________________________________________________________
 {**
-  Jvr - 21/02/2013 14:03:23 - Moved from DBIConst<P>
-}
-function DBIForceDirectories(Dir: string): Boolean;
-{$ifdef DELPHI6}
-begin
-  Result := ForceDirectories(Dir);
-end;
-{$else}
-var
-  E: EInOutError;
-
-  function DBIDirectoryExists(const Directory: String): Boolean;
-  var
-    Code: longWord;
-  begin
-    Code := GetFileAttributes(PChar(Directory));
-    Result := (longInt(Code) <> -1) and (FILE_ATTRIBUTE_DIRECTORY and Code <> 0);
-  end;
-
-begin
-  Result := True;
-  if (Dir = '') then begin
-    E := EInOutError.Create(SCannotCreateDir);
-    E.ErrorCode := 3;
-    raise E;
-  end;
-  Dir := ExcludeTrailingBackSlash(Dir);
-
-  if (Length(Dir) < 3) or DBIDirectoryExists(Dir)
-    or (ExtractFilePath(Dir) = Dir) then Exit; // avoid 'xyz:\' problem.
-
-  Result := DBIForceDirectories(ExtractFilePath(Dir)) and CreateDir(Dir);
-end;
-{$endif}
-
-
-// _____________________________________________________________________________
-{**
   Jvr - 08/05/2002 13:16:58.<P>
 }
 procedure DBIGetPropertyList(ClassInfo: PTypeInfo; List: TList);
@@ -647,9 +608,51 @@ var
   Size: LongWord;
 begin
   Size := SizeOf(Buffer);
+{$ifdef Delphi6}
+  if not Windows.GetUserNameW(@Buffer[0], Size) then RaiseLastOSError;
+{$else}
   Win32Check(Windows.GetUserNameW(@Buffer[0], Size));
+{$endif}
   Result := WideString(Buffer);
 end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 21/02/2013 14:03:23 - Moved from DBIConst<P>
+}
+function DBIForceDirectories(Dir: string): Boolean;
+{$ifdef DELPHI6}
+begin
+  Result := ForceDirectories(Dir);
+end;
+{$else}
+var
+  E: EInOutError;
+
+  function DBIDirectoryExists(const Directory: String): Boolean;
+  var
+    Code: longWord;
+  begin
+    Code := GetFileAttributes(PChar(Directory));
+    Result := (longInt(Code) <> -1) and (FILE_ATTRIBUTE_DIRECTORY and Code <> 0);
+  end;
+
+begin
+  Result := True;
+  if (Dir = '') then begin
+    E := EInOutError.Create(SCannotCreateDir);
+    E.ErrorCode := 3;
+    raise E;
+  end;
+  Dir := ExcludeTrailingBackSlash(Dir);
+
+  if (Length(Dir) < 3) or DBIDirectoryExists(Dir)
+    or (ExtractFilePath(Dir) = Dir) then Exit; // avoid 'xyz:\' problem.
+
+  Result := DBIForceDirectories(ExtractFilePath(Dir)) and CreateDir(Dir);
+end;
+{$endif}
 
 
 // _____________________________________________________________________________
