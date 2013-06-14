@@ -59,6 +59,7 @@ type
 
   published
     procedure AutoFieldDefs;
+    procedure BinaryTypes;
     procedure CreateBooks;
     procedure CreateGad;
 {$ifndef fpc}
@@ -168,6 +169,7 @@ uses
   Dialogs,
   DB,
   DBIConst,
+  DBIUtils,
   DBIDataset,
   DBIXbaseDatasets;
 
@@ -195,13 +197,110 @@ begin
   try
     ODS.ClassTypeName := TBookData.ClassName;
     ODS.StringFieldSize := 1024;
-    
+
     // No fielddefs are defined because we are relying on the dataset to create
     // them automatically from the object's published properties
     ODS.Open;
 
     TBookData.OccupyValues(ODS);
     TBookData.AssertValues(ODS);
+
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+end;
+
+
+procedure TDBIODSUnitTests.BinaryTypes;
+const
+  Caller = 'v';
+  TableName = 'oBinaryTypes.cds';
+
+var
+{$ifndef fpc}
+  CDS: TDBIClientDataset;
+{$endif}
+  ODS: TObjectListDataset;
+  ODSClone: TObjectListDataset;
+  Index: Integer;
+  Delta, Usage: Int64;
+
+begin
+{$ifndef fpc}
+  // Create a new ObjectlistDataset, add data, and verify
+  CDS := TDBIClientDataset.Create(nil);
+  try
+    TBinaryData.CreateFieldDefs(CDS);
+    CDS.CreateDataset;
+
+    TBinaryData.OccupyValues(CDS);
+    TBinaryData.AssertValues(CDS);
+
+    CDS.SaveToFile(DataPath('cBinaryTypes.xml'));
+    CDS.Close;
+  finally
+    CDS.Free;
+  end;
+
+{$ifdef OnHold}
+  ODS := TObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := TBinaryData.ClassName;
+
+    // Verify Data was loaded correctly from CDS Xml file
+    ODS.LoadFromFile(DataPath('cBinaryTypes.xml'));
+    TBinaryData.AssertValues(ODS);
+
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+{$endif}
+{$endif}
+
+
+  // Create a new Dataset
+  TBinaryData.ODSCreateTable(DataPath(TableName));
+
+  ODS := TObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := TBinaryData.ClassName;
+
+    // Verify Data was written correctly to file
+    ODS.List.Clear;
+    ODS.LoadFromFile(DataPath(TableName));
+    TBinaryData.AssertValues(ODS);
+
+
+    ODSClone := TObjectListDataset.Create(nil);
+    try
+      ODSClone.ClassTypeName := TBinaryData.ClassName;
+      ODSClone.FieldDefs.Assign(ODS.FieldDefs);
+      ODSClone.CloneCursor(ODS, True);
+
+      Delta := 0;
+      for Index := 0 to 1000 do begin
+        ODSClone.Active := False;
+        ODSClone.Active := True;
+        TBinaryData.AssertValues(ODSClone);
+
+        Usage := GetProcessMemoryUsage;
+        if (Index > 1) then begin
+          Delta := Usage - Delta;
+          Assert(Delta = 0, Format('Increased memory usage of *%d bytes', [Delta]));
+        end;
+        Delta := Usage;
+
+        DBIDebug(Self, Caller, 'Memory Usage = [%f KB]', [Usage / 1024]);
+      end;
+
+
+      ODSClone.Close;
+    finally
+      ODSClone.Free;
+    end;
+
 
     ODS.Close;
   finally
@@ -391,6 +490,9 @@ end;
 
 
 procedure TDBIODSUnitTests.DefaultStringAttributes;
+const
+  TableName = 'DefaultStringAttributes.xml';
+  
 var
   ODS: TObjectListDataset;
 
@@ -411,10 +513,25 @@ begin
 
     ODS.Open;
     TStringData.AssertValues(ODS);
+    ODS.SaveToFile(DataPath(TableName));
     ODS.Close;
+
   finally
     ODS.Free;
   end;
+
+
+  ODS := TObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypename := TStringData.ClassName;
+    ODS.LoadFromFile(DataPath(TableName));
+    TStringData.AssertValues(ODS);
+    ODS.Close;
+
+  finally
+    ODS.Free;
+  end;
+
 end;
 
 

@@ -94,36 +94,13 @@ type
 {$endif}
 
   public
+    class function GetProcessMemoryUsage: Int64;
+
     function DataPath(const FileName: String = ''): String;
 
     property Parent: TomTestSuite read GetParent;
 
   end;  { TDBIUnitTests }
-
-
-const
-  // Dataset TFieldType Aliases
-  ftSigned16 = ftSmallInt;
-  ftSigned32 = ftInteger;
-  ftUnsigned16 = ftWord;
-  ftAnsiString = ftString;
-  ftUnicodeString = ftWideString;
-
-{$ifdef Delphi2009}
-  ftSigned8 = ftShortInt;
-  ftUnsigned8 = ftByte;
-  ftUnsigned32 = ftLongWord;
-  ftFloat4 = ftSingle;
-  ftFloat10 = ftExtended;
-  ftDefaultString = ftWideString;
-{$else}
-  ftSigned8 = ftSmallInt;
-  ftUnsigned8 = ftWord;
-  ftUnsigned32 = ftInteger;
-  ftFloat4 = ftFloat;
-  ftFloat10 = ftFloat;
-  ftDefaultString = ftString;
-{$endif}
 
 
 type
@@ -178,6 +155,48 @@ type
 {$endif}    
     class procedure ODSCreateTable(AFileName: String); virtual;
     class procedure XDSCreateTable(AFileName: String); virtual;
+  end;
+
+
+type
+  TBinaryRecord = record
+    ID: Integer;
+    Comment: String;
+    Notes: String;
+    Created: TDateTime;
+  end;
+
+  TBinaryRecords = array[0..3] of TBinaryRecord;
+  TBinaryFields = array[0..3] of TFieldRecord;
+
+type
+  TBinaryData = class(TDBIUnitTest)
+  private
+    FID: Integer;
+    FComment: String;
+    FNotes: String;
+    FCreated: TDateTime;
+
+  protected
+    class function GetBlobData1: String;
+    class function GetBlobData2: String;
+
+    class function GetFields: TBinaryFields;
+    class function GetRecordCount: Integer; override;
+
+  public
+    class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
+    class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
+    class procedure CreateFields(ADataset: TDataset); override;
+    class procedure CreateFieldDefs(ADataset: TDataset); override;
+    class function GetRecords: TBinaryRecords;
+
+  published
+    property ID: Integer read FID write FID;
+    property Comment: String read FComment write FComment;
+    property Notes: String read FNotes write FNotes;
+    property Created: TDateTime read FCreated write FCreated;
+
   end;
 
 
@@ -660,7 +679,7 @@ implementation
 {$endif}
 
 uses
-  Windows, SysUtils, Dialogs, Forms, DBIConst, DBIUtils, DBIDataset;
+  Windows, PSAPI, SysUtils, Dialogs, Forms, DBIConst, DBIUtils, DBIDataset;
 
 
 { Helpers }
@@ -1480,10 +1499,10 @@ end;
 class function TFloatData.GetFields: TFloatFields;
 const
   CData: TFloatFields = (
-    (FieldName: '_Single';   FieldType: ftFloat4;   FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_Double';   FieldType: ftFloat;    FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_Extended'; FieldType: ftFloat10;  FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_Currency'; FieldType: ftCurrency; FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; )
+    (FieldName: '_Single';   FieldType: ftFloat4;     FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
+    (FieldName: '_Double';   FieldType: ftFloat;      FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
+    (FieldName: '_Extended'; FieldType: ftFloatIEEE;  FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
+    (FieldName: '_Currency'; FieldType: ftCurrency;   FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; )
   );
 begin
   Result := CData;
@@ -2677,6 +2696,213 @@ end;
 
 
 
+{ TBinaryData }
+
+class procedure TBinaryData.ApplyValues(ADataset: TDataset; Index: Integer);
+var
+  BinaryData: TBinaryRecords;
+
+begin
+  BinaryData := TBinaryData.GetRecords;
+
+  ADataset.FieldByName('ID').AsInteger := BinaryData[Index].ID;
+  ADataset.FieldByName('Comment').AsString := BinaryData[Index].Comment;
+  ADataset.FieldByName('Notes').AsString := BinaryData[Index].Notes;
+  ADataset.FieldByName('Created').AsDateTime := Now;
+end;
+
+
+class procedure TBinaryData.CheckValues(ADataset: TDataset; Index: Integer);
+var
+  BinaryData: TBinaryRecords;
+
+{$ifdef DebugInfo}
+  procedure SaveData(const Data, Afilename: String);
+  var
+    Strings: TStringList;
+
+  begin
+    Strings := TStringList.Create;
+    try
+      Strings.Text := Data;
+      Strings.SaveToFile('C:\Temp\' + AfileName);
+    finally
+      Strings.Free;
+    end;
+  end;
+{$endif}
+
+begin
+  BinaryData := TBinaryData.GetRecords;
+  Assert(ADataset.RecNo = (Index + 1));
+
+  Assert(ADataset.FieldByName('ID').AsInteger = BinaryData[Index].ID);
+  Assert(ADataset.FieldByName('Comment').AsString = BinaryData[Index].Comment);
+
+{$ifdef DebugInfo}
+  if (ADataset.FieldByName('Notes').AsString <> BinaryData[Index].Notes) then begin
+    SaveData(ADataset.FieldByName('Notes').AsString, Format('NotesMemo%d.text', [Index]));
+    SaveData(BinaryData[Index].Notes, Format('NotesData%d.text', [Index]));
+  end;
+{$endif}
+
+  Assert(ADataset.FieldByName('Notes').AsString = BinaryData[Index].Notes);
+end;
+
+
+class procedure TBinaryData.CreateFieldDefs(ADataset: TDataset);
+var
+  BinaryFields: TBinaryFields;
+begin
+  BinaryFields := TBinaryData.GetFields;
+  BuildFieldDefs(ADataset, @BinaryFields, Length(BinaryFields));
+end;
+
+
+class procedure TBinaryData.CreateFields(ADataset: TDataset);
+var
+  BinaryFields: TBinaryFields;
+begin
+  BinaryFields := TBinaryData.GetFields;
+  BuildFields(ADataset, @BinaryFields, Length(BinaryFields));
+end;
+
+
+class function TBinaryData.GetBlobData1: String;
+begin
+  Result := GetRecords[0].Notes;
+end;
+
+
+class function TBinaryData.GetBlobData2: String;
+begin
+  Result := GetRecords[1].Notes;
+end;
+
+
+class function TBinaryData.GetFields: TBinaryFields;
+const
+  CData: TBinaryFields = (
+    (FieldName: 'ID';      FieldType: ftInteger;  FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; ),
+    (FieldName: 'Comment'; FieldType: ftMemo;     FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; ),
+    (FieldName: 'Notes';   FieldType: ftMemo;     FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; ),
+    (FieldName: 'Created'; FieldType: ftDateTime; FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; )
+    );
+
+begin
+  Result := CData;
+end;
+
+
+class function TBinaryData.GetRecordCount: Integer;
+begin
+  Result := Length(TBinaryData.GetRecords);
+end;
+
+
+class function TBinaryData.GetRecords: TBinaryRecords;
+const
+  CBlobData1 =
+    'The Software & Information Industry Association (“SIIA”) appreciates the opportunity to submit comments to the Federal Trade Commission (“FTC”) and the Department of Justice on the impacts of Patent Assertion Entity activities on innovation and' +
+    ' competition. SIIA files the following comments on behalf of itself and its members.'#13 +
+    'The innovative companies that make up SIIA’s membership rely upon patent protection to protect their inventions, but also depend upon the ability to manufacture, develop, and sell their products free from improper assertions of patent rights. C' +
+    'onsequently, SIIA’s members'#13 +
+    'are involved in patent litigation as both patentees and accused infringers; they cannot be categorized as generally plaintiffs or generally defendants.'#13 +
+    'SIIA members have benefited from owning thousands of patents. Yet they also rely on the boundaries to patent protection, as these boundaries preserve and protect their ability to innovate. As such, SIIA’s collective membership sits at the cross' +
+    'roads of the countervailing interests in the ongoing debate on patent litigation reform and the evolving patent marketplace.'#13 +
+    'One of the most significant problems facing the patent system and innovation more generally is the growing amount of litigation being brought by companies that do not innovate, make or sell anything, but exist simply to buy patents from others ' +
+    'for the sole purpose of suing legitimate companies for patent infringement.1 Abusive patent lawsuits from these Patent Assertion Entities (PAEs) are a tremendous blight on innovation and competition. Studies have shown that the abusive lawsuits' +
+    ' brought by PAEs have cost the U.S. economy $500 billion over the last twenty years.2 The direct costs of PAE assertions are more than $29 billion annually, which have doubled from 2009 to 2011 and represent a 400% increase since 2005.3 There a' +
+    're also the various indirect costs to businesses such as diversion of resources, delays in new products, and loss of market share. These indirect costs must not be discounted merely because they are more difficult to quantify.'#13 +
+    'In the past four years, publicly-traded operating companies have lost over $80 billion per year due to PAE activities.4 Litigation costs can range from less than $1 million to more than $5 million.5 At $6.9 million the median damage award paid ' +
+    'out to a PAE is about twice as much as the median award ($3.7 million) paid to an operating company.6 The average PAE'#13 +
+    'settlement costs small or medium sized companies $1.33 million and large companies $7.27 million.7'#13 +
+    'Because the PAE business model can be profitable the problem has gotten significantly worse as the number of PAE lawsuits rises exponentially. Between 2001 and 2011 PAE litigation increased 500%8 and in 2012 PAEs filed an astonishing 62% of all' +
+    ' patent suits filed.9 Most of those suits are being brought against innovative high-tech companies and their customers that form the backbone of the U.S. economy. PAE litigation in the high tech industries represented 75% of all active patent l' +
+    'itigation matters in those industries.10'#13 +
+    'Having established the extent to which the PAE business model threatens competition in innovative industries, we move to the specific PAE practices that cause such problems in the first place. PAEs are masters at abusing and manipulating the pa' +
+    'tent system. They find flaws in the patent system and exploit them to their advantage and the disadvantage of the innovative industries, their customers and the public. One way PAEs abuse the system is by purchasing multiple weak, vague and/or ' +
+    'older patents and then threatening serial enforcement actions and demanding portfolio-wide licenses.11 This approach allows the PAE to extract money from their victims through the enforcement of weak or likely-invalid patents. As a PAE adds mor' +
+    'e and more patents to its portfolio, the incentive for their victims to defend themselves in litigation diminishes to a point where the only rational response is to capitulate to the PAE’s demands. If a company does not submit to the PAE’s dema' +
+    'nd and agree to a license, the PAE may threaten a series of enforcement actions. For example, PAEs who have aggregated large number of patents may claim that a company infringed hundreds of patents,'#13 +
+    'but then only assert a few of those patents while holding back others in order to threatened subsequent suits.12'#13 +
+    'This problem is exacerbated by another flaw in the patent system. Under the present system it is too easy for PAE’s to hide behind legal fictions and not identify themselves as a Real-Party-in-Interest (RPI) of their patents. Partnerships, LLCs' +
+    ', subsidiaries, and other legal entities can hold and assert patent rights while the connection between these entities and their corporate parents is often unknown or obscure to the public. Importantly, this secrecy makes it very difficult to d' +
+    'etermine what patents a PAE owns, to know whether a patent is owned by a party from which the prospective licensee has already been granted a license, and to determine the ultimate economic beneficiary of any monies obtained through infringed c' +
+    'laims demands or suits. It also allows a PAE to increase its market power by acquiring a portfolio containing substitute patents that would have been competing technologies if owned by a different entity. This dynamic, in conjunction with there' +
+    ' being no requirement that patent transfers be recorded with the U.S. Patent and Trademark Office or elsewhere, creates an environment that is ripe for abuse and gamesmanship. It allows PAEs to effectively “hide” their patent portfolio to the d' +
+    'etriment of their prey.'#13 +
+    'The availability of complete, current and accurate RPI information would help (actual and potential) litigants make informed decisions on settlement and result in greater efficiencies in litigation. It’s difficult for a party to make an informe' +
+    'd decision whether to settle if they do not really know who they are dealing with or what they are actually getting in the settlement.13'#13 +
+    'Another flaw being exploited by PAEs is the existing asymmetry in the cost of litigation. PAEs have no cost for R&D, no cost for marketing or sales, no employees and no facilities. They add nothing to the economy. They simply exist to sue. When' +
+    ' they sue legitimate companies that actually employ people, sell products, and provide services, there is a significant imbalance in the cost of that litigation.'#13 +
+    'The PAE business model is to make the litigation as expensive and disruptive as possible to force the legitimate company to settle. They request millions of documents, electronic and'#13 +
+    'otherwise, and schedule multiple depositions. They can do this with impunity as PAEs have few, if any, documents to produce or witnesses to be deposed. And if they lose, there is virtually no downside to the PAE given the currently high standar' +
+    'd under current law awarding costs to a defendant. This asymmetry in the cost of litigating the case is a major factor in forcing legitimate companies to settle the lawsuits. Even if the legitimate company would ultimately win the case, they of' +
+    'ten settle as it is the lower cost option. Unfortunately, this simply encourages the filing of even more PAE suits and prevents bad patents from being challenged in litigation.'#13 +
+    'Another relatively new PAE tactic that attempts to take advantage of the asymmetry in discovery costs is the practice of suing a high-tech company’s customers, as opposed to the company itself.14 In fact, one study stated that 55% of unique PAE' +
+    ' defendants make $10 million or less in revenue, and 66% make less than $100 million a year.15 These suits settle for significantly less than if the PAE were to sue the operating company because the customers have no interest in contesting the ' +
+    'PAE’s claims. However, because settlements can be reached quickly and with hundreds of customers at one time (while the PAE expends little money and resources to settle the case) the PAE is able to extract similar money from its patents as if i' +
+    't were to sue the operating company itself. Because the operating company must indemnify its customers under the terms of their agreement, the upshot of these tactics is that the operating company is unable to challenge the patent and ends up p' +
+    'aying as much in total damages as if were a defendant in the case, while at the same time likely straining its relationship with its customers.'#13 +
+    'The operating company will often attempt to intervene in the case, but such efforts are often unsuccessful. Even when the operating company is able to intervene, the suit does not go away but rather morphs into a new, more expensive suit. And b' +
+    'ecause the company’s customers can be located anywhere the company often finds itself battling numerous suits in numerous jurisdictions simultaneously at significant expense and time.'#13 +
+    'The economic imbalance of these abusive litigation behaviors needs to be corrected so that patent disputes can be resolved based on the merits of the case, not on the cost of the litigation. Patent trolls lose the vast majority of all lawsuits ' +
+    'actually brought to trial. Studies'#13 +
+    'have shown that when cases go to trial, PAEs win a mere 9.2% of the time.16 Another recent study found that when PAE suits proceed to judgment on the merits, PAEs lose 92% of the time.17 As then FTC-Chairman Jon Leibowitz observed “even if you ' +
+    'are not bowled over, it is clear that the time has come to address PAE activity and its possible costs to civil society.”18 Removing the cost imbalance will help address the problem by leveling the playing field between legitimate companies and' +
+    ' PAEs and force PAEs to more carefully consider both the merits and the economics of pursuing litigation.'#13 +
+    'Addressing the problems resulting from the litigation cost imbalance is not a silver bullet solution. There are steps that the high-tech community and the federal government should take to fight back against the abusive practices of PAEs. Joint' +
+    ' conduct and enforcement actions by high-tech companies could reduce costs associated with litigating PAE suits. Examples of joint conduct that may benefit consumers and overcome collective action problem, include mutual agreements to disarm PA' +
+    'Es, joint efforts to purchase patents to keep them away from PAEs, and joint agreements among operating companies to negotiate with PAEs through defensive patent aggregators.'#13 +
+    'Joint conduct and enforcement actions against PAEs by industry can only go so far. The PAE problem has grown at an alarming pace. The costs PAEs inflict on innovative industries, startups and consumers continue to mount. PAEs’ actions harm comp' +
+    'etition, and potentially violate antitrust laws.19 We need the Federal Government to step in and follow through on the pledge to address the problem made by President Obama last month.20 At minimum, the PTO needs to step up its quality program ' +
+    'metrics so that there are demonstrable fewer poor quality patents.'#13 +
+    'We urge the Federal Trade Commission and Department of Justice to act. For its part, the FTC should continue to bring attention to the critically important issues raised in its 2011 report. In particular, the FTC should continue to advocate for' +
+    ' reforms to address: oversized patent damage awards, asymmetry in patent litigation costs, flaws in the patent assignment system and rampant functional claiming in high-tech patents. Due to the murky nature of PAE activities and the dearth of p' +
+    'ublicly available information on their activities, the FTC'#13 +
+    'should also conduct a 6(b) study in order to better understand the ways in which patent trolls violate the antitrust laws and harm innovation and competition.'#13 +
+    'In closing, we would like to thank you for the opportunity to provide these comments. If you have questions regarding these comments or would like any additional information please feel free to contact Keith Kupferschmid, SIIA’s General Counsel' +
+    ' and Senior Vice President of Intellectual Property, at [phone] or [email].'#13 +
+    'Ken Wasch President, SIIA';
+
+  CBlobData2 = 'A quick brown fox jumps over the lazy dog';
+
+  CData: TBinaryRecords = (
+    (
+      ID: 0;
+      Comment: 'Blob record one';
+      Notes: CBlobData1;
+    ), (
+      ID: 1;
+      Comment: 'Blob record two';
+      Notes: CBlobData2;
+    ), (
+      ID: 2;
+      Comment: 'Blob record three';
+      Notes: CBlobData1;
+    ), (
+      ID: 3;
+      Comment: 'Blob record four';
+      Notes: CBlobData2;
+    )
+  );
+
+var
+  Index: Integer;
+
+begin
+  Result := CData;
+
+  for Index := Low(CData) to High(CData) do begin
+    Result[Index].Created := Now;
+  end;
+end;
+
+
+
+
+
 { TDBIUnitTest}
 
 class procedure TDBIUnitTest.AssertBlanks(ADataset: TDataset);
@@ -3265,6 +3491,19 @@ begin
   end;
 
 
+  // Load the table into a ObjectListDataset from an Xml file and verify data
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := Self.ClassName;
+    ODS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
+    AssertValues(ODS);
+
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+
+
   // Load the table into a ClientDataset and verify data
 {$ifndef fpc}
   CDS := TDBIClientDataset.Create(nil);
@@ -3372,6 +3611,29 @@ begin
 end;
 
 
+class function TDBIUnitTests.GetProcessMemoryUsage: Int64;
+var
+  PMC: PPROCESS_MEMORY_COUNTERS;
+  SizeOfPMC: Integer;
+
+begin
+  SizeOfPMC := SizeOf(_PROCESS_MEMORY_COUNTERS);
+
+  GetMem(PMC, SizeOfPMC);
+  try
+    PMC^.cb := SizeOfPMC;
+    if (GetProcessMemoryInfo(GetCurrentProcess, PMC, SizeOfPMC)) then begin
+      Result := PMC^.WorkingSetSize;
+    end
+    else begin
+      Result := -1;
+    end;
+  finally
+    FreeMem(PMC);
+  end;
+end;
+
+
 function TDBIUnitTests.GetParent: TomTestSuite;
 begin
   Result := Self;
@@ -3405,11 +3667,12 @@ end;
 
 
 initialization
-  Classes.RegisterClass(TGadData);
+  Classes.RegisterClass(TBinaryData);
   Classes.RegisterClass(TBookData);
   Classes.RegisterClass(TBookCategory);
-  Classes.RegisterClass(TOrdinalData);
   Classes.RegisterClass(TFloatData);
+  Classes.RegisterClass(TGadData);
+  Classes.RegisterClass(TOrdinalData);
   Classes.RegisterClass(TStringData);
   Classes.RegisterClass(TEntityData);
 

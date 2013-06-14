@@ -623,42 +623,6 @@ uses
   Dialogs;
 
 
-
-// _____________________________________________________________________________
-{**
-  Jvr - 10/13/2003 3:08:31 PM - Initial code.<p>
-}
-type
-  TDBIDateOrder = (doMDY, doDMY, doYMD);
-
-function DBIGetDateOrder(const DateFormat: string): TDBIDateOrder;
-var
-  Index: Integer;
-
-begin
-  Result := doMDY;
-  Index := 1;
-
-  while Index <= Length(DateFormat) do begin
-    case Chr(Ord(DateFormat[Index]) and $DF) of
-      'E': Result := doYMD;
-      'Y': Result := doYMD;
-      'M': Result := doMDY;
-      'D': Result := doDMY;
-    else
-      Inc(Index);
-      Continue;
-    end;
-    
-    Exit;
-  end;
-  Result := doMDY;
-end;  { GetDateOrder }
-
-
-
-
-
 { TDBIXbaseDataConnection }
 
 // _____________________________________________________________________________
@@ -3499,7 +3463,7 @@ procedure TDBIXbaseDataConnection.PutFieldDateTime(
   FieldNo: Word
   );
 var
-  TimeStamp: TTimeStamp;  { TTimeStamp declared in SysUtils }
+  TimeStamp: TTimeStamp;
 
 begin
   if (FieldBuffer = nil) then begin
@@ -3516,35 +3480,19 @@ end;  { PutFieldDateTime }
 
 // _____________________________________________________________________________
 {**
-  Jvr - 10/13/2003 3:15:23 PM - Added DateTime zone detection code.<p>
+  Jvr - 10/13/2003 3:08:31 PM - Updated code.<p>
 }
 function TDBIXbaseDataConnection.GetFieldDate(
   const RecordBuffer;
   var FieldBuffer: TDBIFieldBuffer;
   FieldNo: Word
   ): Boolean;
-const
-  DateArray: array[TDBIDateOrder, 0..2, 0..1] of Integer = (
-    ((5, 2), (7, 2), (1, 4)),  // YYYYMMDD - > doMDY
-    ((7, 2), (5, 2), (1, 4)),  // YYYYMMDD - > doDMY
-    ((1, 4), (5, 2), (7, 2))   // YYYYMMDD - > doYMD
-  );
-
 var
-  TimeStamp: TTimeStamp;  { TTimeStamp declared in SysUtils }
+  TimeStamp: TTimeStamp;
   DateTime: TDateTime;
-  DateString: String;
-  DataString: TDBIString;
-  DateOrder: TDBIDateOrder;
   Data: array[0..10] of AnsiChar;
 
 begin
-{$ifndef Delphi2007}
-  DateOrder := DBIGetDateOrder(ShortDateFormat);
-{$else}
-  DateOrder := DBIGetDateOrder(FormatSettings.ShortDateFormat);
-{$endif}
-
   // Convert Buffer to String;
   FillChar(Data, SizeOf(Data), #0);
   Move(RecordBuffer, Data, FFields[FieldNo].FieldSize[0]);
@@ -3554,14 +3502,7 @@ begin
   // indicating if there is data present or not (eg. not blank)
   if (FieldBuffer = nil) or not Result then Exit;
 
-  DataString := TDBIString(PAnsiChar(@Data));
-  DateString := String(
-    Copy(DataString, DateArray[DateOrder][0][0], DateArray[DateOrder][0][1]) + '/' +
-    Copy(DataString, DateArray[DateOrder][1][0], DateArray[DateOrder][1][1]) + '/' +
-    Copy(DataString, DateArray[DateOrder][2][0], DateArray[DateOrder][2][1]) + '/' + ' 00:00:00'
-    );
-
-  DateTime := StrToDateTime(DateString);
+  DateTime := DBIStrDateStampToDateTime(PAnsiChar(@Data));
   TimeStamp := DateTimeToTimeStamp(DateTime);
   PDateTimeRec(FieldBuffer)^.Date := TimeStamp.Date;
 end;  { GetFieldDate }

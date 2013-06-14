@@ -134,7 +134,10 @@ function DBIForceDirectories(Dir: string): Boolean;
 function DBIGetUserName: WideString;
 function DBILocalHostName: String;
 function DBIModuleName: String;
+function DBIStrDateStampToDateTime(PDateStamp: PAnsiChar): TDateTime;
+function DBIStrTimeStampToDateTime(PTimeStamp: PAnsiChar; const MilliSeconds: Boolean = True): TDateTime;
 function DBITempFolder: String;
+
 
 {$ifndef DELPHI6}
 function FileIsReadOnly(const FileName: string): Boolean;
@@ -146,8 +149,8 @@ function GetEnvironmentVariable(lpName: PChar; lpBuffer: PChar; nSize: Cardinal)
 
 function GetFieldTypeName(const DataType: TFieldType): String;
 
-procedure SaveAsPsvStream(Stream: TStream; DataSet: TDataSet);
-procedure SaveAsPsvFile(const AFileName: String; ADataSet: TDataSet);
+procedure SaveToPsvStream(Stream: TStream; DataSet: TDataSet);
+procedure SaveToPsvFile(const AFileName: String; ADataSet: TDataSet);
 
 function SwapDWord(Value: LongWord): LongWord;
 function SwapDouble(Value: Double): Double;
@@ -701,6 +704,85 @@ begin
 end;  { DBIModuleName }
 
 
+type
+  TDBITimeStampBytes = array[0..20] of Byte;
+  PDBITimeStampBytes = ^TDBITimeStampBytes;
+
+function DBIStrDateStampToDateTime(PDateStamp: PAnsiChar): TDateTime;
+var
+  Year, Month, Day: Word;
+  PDateStampBytes: PDBITimeStampBytes;
+
+begin
+  PDateStampBytes := PDBITimeStampBytes(PDateStamp);
+
+  Year :=
+    ((PDateStampBytes[0] - $30) * 1000) +
+    ((PDateStampBytes[1] - $30) * 100) +
+    ((PDateStampBytes[2] - $30) * 10) +
+     (PDateStampBytes[3] - $30);
+
+  Month :=
+    ((PDateStampBytes[4] - $30) * 10) +
+     (PDateStampBytes[5] - $30);
+
+  Day :=
+    ((PDateStampBytes[6] - $30) * 10) +
+     (PDateStampBytes[7] - $30);
+
+  Result := EncodeDate(Year, Month, Day);
+end;
+
+
+function DBIStrTimeStampToDateTime(PTimeStamp: PAnsiChar; const MilliSeconds: Boolean = True): TDateTime;
+var
+  Year, Month, Day, Hour, Minute, Sec, MSec: Word;
+  PTimeStampBytes: PDBITimeStampBytes;
+
+begin
+  PTimeStampBytes := PDBITimeStampBytes(PTimeStamp);
+
+  Year :=
+    ((PTimeStampBytes[0] - $30) * 1000) +
+    ((PTimeStampBytes[1] - $30) * 100) +
+    ((PTimeStampBytes[2] - $30) * 10) +
+     (PTimeStampBytes[3] - $30);
+
+  Month :=
+    ((PTimeStampBytes[4] - $30) * 10) +
+     (PTimeStampBytes[5] - $30);
+
+  Day :=
+    ((PTimeStampBytes[6] - $30) * 10) +
+     (PTimeStampBytes[7] - $30);
+
+  Hour :=
+    ((PTimeStampBytes[9] - $30) * 10) +
+    (PTimeStampBytes[10] - $30);
+
+  Minute :=
+    ((PTimeStampBytes[12] - $30) * 10) +
+     (PTimeStampBytes[13] - $30);
+
+  Sec :=
+    ((PTimeStampBytes[15] - $30) * 10) +
+     (PTimeStampBytes[16] - $30);
+
+
+  if Milliseconds then begin
+    MSec :=
+      ((PTimeStampBytes[17] - $30) * 100) +
+      ((PTimeStampBytes[18] - $30) * 10) +
+       (PTimeStampBytes[19] - $30);
+  end
+  else begin
+    MSec := 0;
+  end;
+
+  Result := EncodeDate(Year, Month, Day) + EncodeTime(Hour, Minute, Sec, MSec);
+end;
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 09/11/2004 13:18:53 - Initial code.<p>
@@ -873,7 +955,7 @@ end;  { SystemErrorMessageParam }
 
   Jvr - 20/05/2002 16:45:09.<P>
 }
-procedure SaveAsPsvStream(Stream: TStream; DataSet: TDataSet);
+procedure SaveToPsvStream(Stream: TStream; DataSet: TDataSet);
 var
   Index: Integer;
 
@@ -928,9 +1010,9 @@ end;  { SaveAsPsvStream }
 {**
   Jvr - 27/02/2001 18:12:53.<P>
 }
-procedure SaveAsPsvFile(const AFileName: String; ADataSet: TDataSet);
+procedure SaveToPsvFile(const AFileName: String; ADataSet: TDataSet);
 const
-  Caller = 'SaveAsPsvFile';
+  Caller = 'SaveToPsvFile';
 
 var
   LocalStream: TStream;
@@ -944,7 +1026,7 @@ begin
       [{No Options}]
       );
     try
-      SaveAsPsvStream(LocalStream, ADataSet);
+      SaveToPsvStream(LocalStream, ADataSet);
     finally
       LocalStream.Free;
     end;

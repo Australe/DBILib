@@ -176,6 +176,9 @@ type
       ValidKinds: TDBITypeKinds
       ): Boolean;
 
+    procedure LoadFromXBaseFile(const AFileName: TFileName);
+    procedure LoadFromXBaseStream(AStream: TStream);
+    
     procedure ValidateObject(DataObject: TObject); virtual;
 
     property BlobData: TObjectList read FBlobData;
@@ -682,6 +685,11 @@ var
 begin
   Result := dsRecUnmodified;
 
+  // First of all, Free the Blob Objects in the BlobData list (if there are any)
+  // This will free any Blob Objects left hanging around by a previous call to GetData.
+  // I am concerned about threading issues.  This will have to be tested of course!
+  FBlobData.Clear;
+
   // Initialise Buffer (Logical Size)
   FillChar(Buffer, LogicalBufferSize, #0);
 
@@ -888,9 +896,8 @@ begin
   end;  { for }
 
   // Now Free the Blob Objects in the BlobData list (if there are any)
-  // This will free any Blob Objects left hanging around by GetData as well
-  // The Objects Blob placed in FBlobData by GetData should
-  // probably be Cleared elsewhere but I don't know of an appropriate place.
+  // This will free any Blob Objects left hanging around by PutData().
+  // I am concerned about threading issues.  This will have to be tested of course!
   FBlobData.Clear;
 end;  { PutData }
 
@@ -2402,8 +2409,7 @@ end;  { CopyBlobs }
 
 // _____________________________________________________________________________
 {**
-  Jvr - 25/07/2002 16:02:55 - Initial code.<br>
-  Jvr - 09/12/2004 18:29:49 - Replaced RecordAttribute with DataInfo.<p>
+  Jvr - 12/06/2013 10:29:22 - Initial code.<br>
 }
 procedure TDBICustomListDataConnection.LoadFromStream(
   AStream: TStream;
@@ -2411,6 +2417,25 @@ procedure TDBICustomListDataConnection.LoadFromStream(
   );
 const
   Caller = 'LoadFromStream';
+
+begin
+  if (Format <> dfXbase) and (Format <> dfXbasePlus) then begin
+    Error(nil, Caller, '2445', 'Only Xbase streams are supported', []);
+  end
+  else begin
+    LoadFromXBaseStream(AStream);
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 25/07/2002 16:02:55 - Initial code.<br>
+  Jvr - 09/12/2004 18:29:49 - Replaced RecordAttribute with DataInfo.<p>
+}
+procedure TDBICustomListDataConnection.LoadFromXBaseStream(AStream: TStream);
+const
+  Caller = 'LoadFromXBaseStream';
 
 var
   LocalConnection: TDBIXBaseDataConnection;
@@ -2420,10 +2445,6 @@ var
   Position: Integer;
 
 begin
-  if (Format <> dfXbase) and (Format <> dfXbasePlus) then begin
-    Error(nil, Caller, '2445', 'Only Xbase streams are supported', []);
-  end;
-
   LocalConnection := TDBIXBaseDataConnection.Create(Owner);
   try
     LocalConnection.DataStream := AStream;
@@ -2456,25 +2477,35 @@ begin
     LocalConnection.Close;
   finally
     LocalConnection.Free;
-  end;  { try..finally }
-end;  { LoadFromStream }
+  end;
+end;
 
 
 // _____________________________________________________________________________
 {**
   Load a ObjectList DataConnection from a file, Xml or dbf.
-
-  Jvr - 27/11/2000 14:30:35 - Initial code.<br>
-  Jvr - 15/05/2001 14:21:05 - Added StatusFilter filtering functionality.<br>
-  Jvr - 09/12/2004 18:39:13 - Replaced RecordAttribute with DataInfo.<p>
 }
 procedure TDBICustomListDataConnection.LoadFromFile(
   AFileName: String;
   const Format: TDBIDataFormat
   );
-const
-  Caller = 'LoadFromFile';
+begin
+  if (Format in [dfXbase, dfXbasePlus]) then begin
+    LoadFromXBaseFile(AFileName);
+  end
+  else begin
+    DatabaseError('Unsupported file format');
+  end;
+end;  { LoadFromFile }
 
+
+// _____________________________________________________________________________
+{**
+  Jvr - 27/11/2000 14:30:35 - Initial code.<br>
+  Jvr - 15/05/2001 14:21:05 - Added StatusFilter filtering functionality.<br>
+  Jvr - 09/12/2004 18:39:13 - Replaced RecordAttribute with DataInfo.<p>
+}
+procedure TDBICustomListDataConnection.LoadFromXBaseFile(const AFileName: TFileName);
 var
   LocalConnection: TDBIXBaseDataConnection;
   RecordBuffer: TDBIRecordBuffer;
@@ -2483,10 +2514,6 @@ var
   Position: Integer;
 
 begin
-  if (Format = dfCDS) then begin
-    Error(nil, Caller, '2510', 'Loading from XML not supported yet!', []);
-  end;
-
   LocalConnection := TDBIXBaseDataConnection.Create(Owner);
   try
     LocalConnection.FileName := AFileName;
@@ -2521,8 +2548,8 @@ begin
     LocalConnection.Close;
   finally
     LocalConnection.Free;
-  end;  { try..finally }
-end;  { LoadFromFile }
+  end;
+end;
 
 
 // _____________________________________________________________________________

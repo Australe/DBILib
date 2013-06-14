@@ -3081,14 +3081,18 @@ procedure TDBIDataset.LoadFromStream(
   OpenMode: TDBIOpenMode
   );
 begin
-  Close;
-  DataConnection.LoadFromStream(AStream, Format);
-//##JVR  ReadDataPacket(Stream, False);
+  if (Format = dfCDS) then begin
+    DBIXmlUtils.LoadFromXmlStream(AStream, Self);
+  end
+  else begin
+    Close;
+    DataConnection.LoadFromStream(AStream, Format);
 
-  // Activate the dataset
-  case OpenMode of
-    omOpen: Open;
-    omCreateDataset: CreateDataset;
+    // Activate the dataset
+    case OpenMode of
+      omOpen: Open;
+      omCreateDataset: CreateDataset;
+    end;
   end;
 end;  { LoadFromStream }
 
@@ -3099,19 +3103,15 @@ end;  { LoadFromStream }
 }
 procedure TDBIDataset.SaveToStream(AStream: TStream; Format: TDBIDataFormat);
 begin
-//##XML
   if (Format = dfCDS) then begin
-    DBIXmlUtils.SaveAsXmlStream(AStream, Self);
+    DBIXmlUtils.SaveToXmlStream(AStream, Self);
   end
   else if (Format = dfPSV) then begin
-    DBIUtils.SaveAsPsvStream(AStream, Self);
+    DBIUtils.SaveToPsvStream(AStream, Self);
   end
   else begin
     DataConnection.SaveToStream(AStream, Format);
   end;
-
-//##JVR  WriteDataPacket(Stream, False, (Format=dfXML));
-
 end;  { SaveToStream }
 
 
@@ -3130,13 +3130,20 @@ begin
   if (AFileName = '') then AFileName := GetFileName;
   if (AFileName = '') then DatabaseError(SInvalidFilename, Self);
 
-  Close;
-  DataConnection.LoadFromFile(AFileName, SelectFormat(AFileName, Format));
+  Format := SelectFormat(AFileName, Format);
 
-  // Activate the dataset
-  case OpenMode of
-    omOpen: Open;
-    omCreateDataset: CreateDataset;
+  if (Format = dfCDS) then begin
+    DBIXmlUtils.LoadFromXmlFile(AFileName, Self);
+  end
+  else begin
+    Close;
+    DataConnection.LoadFromFile(AFileName, Format);
+
+    // Activate the dataset
+    case OpenMode of
+      omOpen: Open;
+      omCreateDataset: CreateDataset;
+    end;
   end;
 end;
 
@@ -3156,10 +3163,10 @@ begin
     Format := SelectFormat(AFileName, Format);
 
     if (Format = dfCDS) then begin
-      DBIXmlUtils.SaveAsXmlFile(AFileName, Self);
+      DBIXmlUtils.SaveToXmlFile(AFileName, Self);
     end
     else if (Format = dfPSV) then begin
-      DBIUtils.SaveAsPsvFile(AFileName, Self);
+      DBIUtils.SavetoPsvFile(AFileName, Self);
     end
     else begin
       DataConnection.SaveToFile(AFileName, Format);

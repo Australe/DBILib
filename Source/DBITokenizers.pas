@@ -113,6 +113,7 @@ type
     property BufferIndex: Integer read GetBufferIndex write SetBufferIndex;
     property Eof: Boolean read FLexerEof write SetEof default False;
     property LexerChar: TDBIChar read FLexerChar write FLexerChar;
+    property LexerCharMap: TDBILexerCharacterMap read FLexerCharMap;
     property LexerStatus: TDBITokenStatus read FLexerStatus;
     property LexerTokenType: TDBITokenType read GetTokenType;
     property Token: TDBILexerToken read GetToken;
@@ -872,6 +873,12 @@ var
   PSymbol2Data: PLexerSymbolData;
 
 begin
+  // If the first character is of type ctrl or binary then call inherited
+  if (LexerChar > Chr_Tilde) or (LexerChar < Chr_Bang) then begin
+    inherited LexSymbol;
+    Exit;
+  end;
+
   Token.AsChar := LexerChar;
 
   PSymbol1Data := @(FLexerCharMap[LexerChar]);

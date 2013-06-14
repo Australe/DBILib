@@ -111,6 +111,7 @@ const
   Chr_Smaller_Slash          = '</';
 
   Chr_Dollar_OpenCurlyBracket= '${';
+  Chr_Ampersand_Hash         = '&#';
 
   // Special Escaped Symbols
   Chr_EscapeAtSign           = '\@';

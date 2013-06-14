@@ -379,7 +379,7 @@ type
 
   PDSDataPacketFldDesc = ^TDSDataPacketFldDesc;
   TDSDataPacketFldDesc = packed record
-    szFieldName: MIDASNAME;           { Column Name }
+    szFieldName: MIDASNAME;         { Column Name }
     iFieldType: Integer;            { Column Type }
     iAttributes: Word;              { Column attributes }
   end;
@@ -496,7 +496,6 @@ const
   dsCASCADEUPDATES   = 2;
 
 { Field Types (Logical) - Originally from BDE.PAS }
-
   fldUNKNOWN         = 0;
   fldZSTRING         = 1;               { Null terminated string }
   fldDATE            = 2;               { Date     (32 bit) }
@@ -537,20 +536,16 @@ const
 
 {$ifdef DELPHI2009}
   fldEXTENDED        = fldFLOATIEEE;
-  ftFloatIEEE        = ftExtended;
 {$else}
   fldEXTENDED        = fldFLOAT;        { Extended is mapped to DOUBLE }
-  ftFloatIEEE        = ftFloat;
 {$endif}
 
 { Sub Types (Logical) }
 
 { fldFLOAT subtype }
-
   fldstMONEY         = 21;              { Money }
 
 { fldBLOB subtypes }
-
   fldstNONE = 0;
   fldstMEMO          = 22;              { Text Memo }
   fldstBINARY        = 23;              { Binary data }
@@ -566,7 +561,6 @@ const
   fldstBFILE         = 36;              { BFILE }
 
 { fldZSTRING/fldWIDESTRING subtype }
-
   fldstPASSWORD      = 1;               { Password }
   fldstFIXED         = 31;              { CHAR type }
   fldstUNICODE       = 32;              { Unicode }
@@ -577,8 +571,32 @@ const
   fldstORATIMESTAMP  = 39;              { ORACLE TIMESTAMP }
 
 { fldINT32 subtype }
-
   fldstAUTOINC       = 29;
+
+const
+  // Dataset TFieldType Aliases
+  ftSigned16         = ftSmallInt;
+  ftSigned32         = ftInteger;
+  ftUnsigned16       = ftWord;
+  ftAnsiString       = ftString;
+  ftUnicodeString    = ftWideString;
+
+{$ifdef Delphi2009}
+  ftSigned8          = ftShortInt;
+  ftUnsigned8        = ftByte;
+  ftUnsigned32       = ftLongWord;
+  ftFloat4           = ftSingle;
+  ftFloatIEEE        = ftExtended;
+  ftDefaultString    = ftWideString;
+{$else}
+  ftSigned8          = ftSmallInt;
+  ftUnsigned8        = ftWord;
+  ftUnsigned32       = ftInteger;
+  ftFloat4           = ftFloat;
+  ftFloatIEEE        = ftFloat;
+  ftDefaultString    = ftString;
+{$endif}
+
 
 const
 {##DELPHI5
