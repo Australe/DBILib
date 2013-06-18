@@ -106,6 +106,14 @@ type
     procedure LexEof; virtual;
     procedure LexNop; virtual;
 
+    procedure MapSymbol(
+      const ALexerProc: TDBILexerProcedure;
+      const ASymbol: TDBIChar;
+      const ATokenType: TDBITokenType = Tok_Default;
+      const ATokenKind: TDBITokenKind = tkSymbol;
+      const ATokenStatus: TDBITokenStatus = tsNoChange
+      );
+
     procedure SetBufferIndex(const Value: Integer);
     procedure SetEof(const Value: Boolean);
     procedure SetStatus(Value: TDBITokenStatus);
@@ -125,14 +133,6 @@ type
     function GetChar: Boolean; virtual;
     procedure PutChar(const Value: TDBIChar); virtual;
 
-    procedure MapSymbol(
-      const ALexerProc: TDBILexerProcedure;
-      const ASymbol: TDBIChar;
-      const ATokenType: TDBITokenType = Tok_Default;
-      const ATokenKind: TDBITokenKind = tkSymbol;
-      const ATokenStatus: TDBITokenStatus = tsNoChange
-      );
-
     procedure NextToken; virtual;
 
     procedure PutBack(const Value: AnsiString); overload;
@@ -149,15 +149,11 @@ type
     FLexerSymbolMap: TDBILexerSymbolMap;
 
   protected
-    procedure LexSymbol; override;
+    procedure LexDualSymbol; virtual;
     procedure LexInitialise; override;
     procedure LexIdentifier; virtual;
     procedure LexNumber; virtual;
     procedure LexWhiteSpace; virtual;
-
-  public
-    function GetChar: Boolean; override;
-    procedure PutChar(const Value: TDBIChar); override;
 
     procedure MapDualSymbol(
       const ALexerProc: TDBILexerProcedure;
@@ -175,6 +171,10 @@ type
       const ATokenKind: TDBITokenKind = tkSymbol;
       const ATokenStatus: TDBITokenStatus = tsNoChange
       );
+
+  public
+    function GetChar: Boolean; override;
+    procedure PutChar(const Value: TDBIChar); override;
 
     property Eof;
     property Text;
@@ -623,7 +623,7 @@ var
   PSymbolData: PLexerSymbolData;
 
 begin
-  Token.AsString := LexerChar;
+  Token.AsChar := LexerChar;
   PSymbolData := @(FLexerCharMap[LexerChar]);
   Token.TokenType := PSymbolData^.TokenType;
 
@@ -866,18 +866,17 @@ end;
 {**
   Jvr - 24/02/2005 20:17:02 - Initial code.<br>
 }
-procedure TDBICustomAsciiLexer.LexSymbol;
+procedure TDBICustomAsciiLexer.LexDualSymbol;
 var
   PSymbolData: PLexerSymbolData;
   PSymbol1Data: PLexerSymbolData;
   PSymbol2Data: PLexerSymbolData;
 
 begin
-  // If the first character is of type ctrl or binary then call inherited
-  if (LexerChar > Chr_Tilde) or (LexerChar < Chr_Bang) then begin
-    inherited LexSymbol;
-    Exit;
-  end;
+{$ifdef DebugInfo}
+  // If the first character is of type ctrl or binary then Kaboom
+  Assert(not ((LexerChar > Chr_Tilde) or (LexerChar < Chr_Bang)) );
+{$endif}
 
   Token.AsChar := LexerChar;
 
@@ -888,13 +887,15 @@ begin
   // If the second character type is of type ctrl, alpha, numeric or binary
   // then the token is a single character symbol
   if (PSymbol2Data.TokenType > Tok_Tilde) or (PSymbol2Data.TokenType < Tok_Bang) then begin
-    PSymbolData := PSymbol1Data;
+
+    // Get the Single character mapped symbol data
+    PSymbolData := @(FLexerSymbolMap[PSymbol1Data.TokenType, Tok_Unassigned]);
   end
 
   // Otherwise we need to check the Dual Symbol Map befor proceeding
   else begin
 
-    // Get the Dual character mapped type
+    // Get the Dual character mapped symbol data
     PSymbolData := @(FLexerSymbolMap[PSymbol1Data.TokenType, PSymbol2Data^.TokenType]);
 
     // Are these two symbols mapped to a TokenType?
@@ -924,11 +925,9 @@ begin
 
   end;
 
-  // Call the mapped lexer function if it is assigned and is a dual type
-  if (PSymbolData <> PSymbol1Data) and Assigned(PSymbolData^.LexerProc) then begin
-    if not Eof then begin
-      PSymbolData.LexerProc;
-    end;
+  // Call the mapped lexer function if it is assigned and not Eof
+  if Assigned(PSymbolData^.LexerProc) and not Eof then begin
+    PSymbolData.LexerProc;
   end;
 end;
 
@@ -962,8 +961,6 @@ end;
 procedure TDBICustomAsciiLexer.LexInitialise;
 var
   Character: TDBIChar;
-  TokenType: TDBITokenType;
-  OtherType: TDBITokenType;
 
 begin
   inherited LexInitialise;
@@ -981,20 +978,6 @@ begin
   // Numbers
   for Character := '0' to '9' do begin
     MapSymbol(LexNumber, Character, Tok_NoChange, tkNumber);
-  end;
-
-  // Symbols
-  for Character := Chr_Bang to Chr_Tilde do begin
-    TokenType := FLexerCharMap[Character].TokenType;
-    if (TokenType >= Tok_Bang) and (TokenType <= Tok_Tilde) then begin
-      FLexerCharMap[Character].LexerProc := LexSymbol;
-    end;
-  end;
-
-  for TokenType := Low(TDBILexerSymbolMap) to High(TDBILexerSymbolMap) do begin
-    for OtherType := Low(TDBILexerSymbolArray) to High(TDBILexerSymbolArray) do begin
-      MapDualSymbolType(nil, TokenType, OtherType, Tok_None);
-    end;
   end;
 
   // Underscore Identifier
@@ -1067,7 +1050,41 @@ procedure TDBICustomAsciiLexer.MapDualSymbol(
   const ATokenKind: TDBITokenKind = tkSymbol;
   const ATokenStatus: TDBITokenStatus = tsNoChange
   );
+var
+  LexerProc: TDBILexerProcedure;
+
 begin
+  // This Dual symbol data is for Single Char Symbols
+  // It only needs to be initialised once!
+  if not Assigned (FLexerSymbolMap[TokenCharacterMap[Symbols[0]], Tok_Unassigned].LexerProc) then begin
+    // Assign FLexerCharMap[Char].LexerProc to [Token1, Tok_UnAssigned]
+    // If the LexecProc is LexSymbol, then assign nil,
+    // because the LexDualSymbol has allready performed the LexSymbol task
+    //
+    // The LexecProc in this case is the Lexer procedure to be called from LexDualSymbol,
+    // to post process the datastream after the detected Lead-in symbol(s)
+    LexerProc := LexSymbol;
+    if TMethod(LexerProc).Code <> TMethod(FLexerCharMap[Symbols[0]].LexerProc).Code then begin
+      LexerProc := FLexerCharMap[Symbols[0]].LexerProc;
+    end
+    else begin
+      LexerProc := nil;
+    end;
+
+    MapDualSymbolType(
+      LexerProc,
+      TokenCharacterMap[Symbols[0]],
+      Tok_UnAssigned,
+      FLexerCharMap[Symbols[0]].TokenType,
+      FLexerCharMap[Symbols[0]].TokenKind,
+      FLexerCharMap[Symbols[0]].TokenStatus
+      );
+
+    // Change FLexerCharMap[Char].LexerProc from LexSymbol to LexDualSymbol
+    FLexerCharMap[Symbols[0]].LexerProc := LexDualSymbol;
+  end;
+
+  // Dual symbol data for Char pairs
   MapDualSymbolType(
     ALexerProc,
     TokenCharacterMap[Symbols[0]],

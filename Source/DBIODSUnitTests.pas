@@ -243,7 +243,7 @@ begin
     CDS.Free;
   end;
 
-{$ifdef OnHold}
+
   ODS := TObjectListDataset.Create(nil);
   try
     ODS.ClassTypeName := TBinaryData.ClassName;
@@ -256,7 +256,6 @@ begin
   finally
     ODS.Free;
   end;
-{$endif}
 {$endif}
 
 

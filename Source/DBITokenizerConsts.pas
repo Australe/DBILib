@@ -161,7 +161,7 @@ const
 
 type
  TDBITokenType = (
-    Tok_UnAssigned,
+    Tok_UnAssigned,                    // Used for Single Token Values
 
     { Control Characters }
     Tok_Null,                          //  #0 = ^@
@@ -455,7 +455,7 @@ type
     I have expanded the Symbol Map to include the control characters
     This may cause some unexpected issues, but I hope NOT!
   }
-  TDBILexerSymbolArray = array[Tok_Null..Tok_Tilde] of TDBILexerSymbolData;
+  TDBILexerSymbolArray = array[Tok_UnAssigned..Tok_Tilde] of TDBILexerSymbolData;
   TDBILexerSymbolMap = array[Tok_Null..Tok_Tilde] of TDBILexerSymbolArray;
   TDBILexerCharacterMap = array[#0..#255] of TDBILexerSymbolData;
 

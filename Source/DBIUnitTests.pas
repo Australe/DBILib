@@ -1561,6 +1561,10 @@ var
 begin
   OrdinalData := TOrdinalData.GetRecords;
 
+  Assert(not ADataset.FieldByName('_Byte').IsNull);
+  _Integer := ADataset.FieldByName('_Byte').AsInteger;
+  Assert(Byte(_Integer) = OrdinalData[Index]._Byte);
+
   Assert(not ADataset.FieldByName('_Word').IsNull);
   _Integer := ADataset.FieldByName('_Word').AsInteger;
   Assert(Word(_Integer) = OrdinalData[Index]._Word);
@@ -1573,6 +1577,8 @@ begin
   _Integer := ADataset.FieldByName('_Cardinal').AsInteger;
   Assert(Cardinal(_Integer) = OrdinalData[Index]._Cardinal);
 
+  Assert(not ADataset.FieldByName('_ShortInt').IsNull);
+  Assert(ADataset.FieldByName('_ShortInt').AsInteger = OrdinalData[Index]._ShortInt);
 
   Assert(not ADataset.FieldByName('_SmallInt').IsNull);
   Assert(ADataset.FieldByName('_SmallInt').AsInteger = OrdinalData[Index]._SmallInt);
@@ -3510,6 +3516,7 @@ begin
   try
     CDS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
     AssertValues(CDS);
+    CDS.SaveToFile(ChangeFileExt(AFileName, '.xml'));
 
     // Load Memory XBaseDataset from ClientDataset and verify data
     XDS := TDBIXBaseDataset.Create(nil);
@@ -3527,6 +3534,21 @@ begin
   finally
     CDS.Free;
   end;
+
+//{##JVR
+  // Create a new ObjectlistDataset, add data, and verify
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := Self.ClassName;
+
+    ODS.LoadFromFile(ChangeFileExt(AFileName, '.xml'));
+    AssertValues(ODS);
+
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+//}
 {$endif}
 end;
 

@@ -59,9 +59,7 @@ type
 type
   TDBICustomDataPacketLexer = class(TDBICustomAsciiLexer)
   protected
-{$ifdef Onhold}
     procedure LexAmpersand;
-{$endif}
     procedure LexEncodedSymbol;
     procedure LexInitialise; override;
 
@@ -181,6 +179,34 @@ var
   FieldName: String;
   FieldData: String;
 
+  // TClientDataset stores byte and word as signed values - we therefore need to correct
+  function DBIStrToUnsigned(const Str: String; const MaxValue: Word): Integer;
+  begin
+    Result := StrToIntDef(Str, 0);
+    if Result < 0 then begin
+      Result := Result + MaxValue + 1;
+    end;
+  end;
+
+  function DBIStrToDateTime(const Str: String): TDateTime;
+  begin
+
+    if Length(Str) = 20 then begin
+      Result := DBIStrTimeStampToDateTime(PAnsiChar(AnsiString(Str)), True);
+    end
+    else if Length(Str) = 17 then begin
+      Result := DBIStrTimeStampToDateTime(PAnsiChar(AnsiString(Str)), False);
+    end
+    else if Length(Str) = 8 then begin
+      Result := DBIStrDateStampToDateTime(PAnsiChar(AnsiString(Str)));
+    end
+    else begin
+      Result := 0.0;
+
+      DatabaseError('Invalid TDateTime format: ' + Str);
+    end;
+  end;
+
 begin
 {$ifdef DebugInfo}
   inherited CreateRow(RowData);
@@ -202,7 +228,7 @@ begin
             ftBoolean: Field.AsBoolean := CompareText('True', FieldData) = 0;
             ftCurrency: Field.AsFloat := StrToFloat(String(FieldData));
             ftDate: Field.AsDateTime := DBIStrDateStampToDateTime(PAnsiChar(AnsiString(FieldData)));
-            ftDateTime: Field.AsDateTime := DBIStrTimeStampToDateTime(PAnsiChar(AnsiString(FieldData)));
+            ftDateTime: Field.AsDateTime := DBIStrToDateTime(FieldData);
             ftFloat: Field.AsFloat := StrToFloat(String(FieldData));
             ftMemo: Field.AsString := FieldData;
             ftString: Field.AsString := FieldData;
@@ -210,9 +236,9 @@ begin
             ftInteger: Field.AsInteger := StrToIntDef(FieldData, 0);
             ftLargeint: TLargeIntField(Field).AsLargeint := StrToInt64(FieldData);
             ftSmallint: Field.AsInteger := StrToIntDef(FieldData, 0);
-            ftWord: Field.AsInteger := StrToIntDef(FieldData, 0);
+            ftWord: Field.AsInteger := DBIStrToUnsigned(FieldData, $FFFF);
 {$ifdef Delphi2009}
-            ftByte: Field.AsInteger := StrToIntDef(FieldData, 0);
+            ftByte: Field.AsInteger := DBIStrToUnsigned(FieldData, $FF);
             ftShortInt: Field.AsInteger := StrToIntDef(FieldData, 0);
             ftLongWord: Field.AsInteger := StrToIntDef(FieldData, 0);
 {$endif}
@@ -334,12 +360,6 @@ end;
 
 function TDBICustomDataPacketReader.GetData: Boolean;
 begin
-{##JVR
-  // BootStrap the lexer;
-  Input.Reset;
-  Input.NextToken;
-//}
-
   Result := True;
   while not Input.Eof do begin
     if Result then begin
@@ -626,28 +646,38 @@ end;
 
 
 
-{ TDBICustomDatasetLexer }
-{$ifdef Onhold}
+{ TDBICustomDataPacketLexer }
+
 procedure TDBICustomDataPacketLexer.LexAmpersand;
 var
   PSymbolData: PLexerSymbolData;
 
 begin
-  // Swallow Ampersand and check next character
-  if GetChar and (LexerChar in ['A', 'a']) then begin
+  // Swallow Leadin Ampersand and check next character
+  if (LexerChar in ['A', 'a']) then begin
     PSymbolData := @(LexerCharMap[Chr_Ampersand]);
     Token.TokenType := PSymbolData^.TokenType;
 
     SetStatus(PSymbolData^.TokenStatus);
+    GetChar;
 
-    Assert(GetChar and (LexerChar in ['M', 'm']));
-    Assert(GetChar and (LexerChar in ['P', 'p']));
+    // &amp;
+    if (LexerChar in ['M', 'm']) then begin
+      Assert(GetChar and (LexerChar in ['P', 'p']));
+      Token.AsString := Chr_Ampersand;
+    end
+
+    // &apos;
+    else if (LexerChar in ['P', 'p']) then begin
+      Assert(GetChar and (LexerChar in ['O', 'o']));
+      Assert(GetChar and (LexerChar in ['S', 's']));
+      Token.AsString := Chr_Apostrophe;
+    end;
+
     Assert(GetChar and (LexerChar = ';'));
-
     // Swallow terminating SemiColon
     GetChar;
 
-    Token.AsString := Chr_Ampersand;
   end
   else begin
     PutBack(Chr_Ampersand);
@@ -655,7 +685,7 @@ begin
     inherited LexSymbol;
   end;
 end;
-{$endif}
+
 
 procedure TDBICustomDataPacketLexer.LexEncodedSymbol;
 var
@@ -720,9 +750,8 @@ begin
   MapDualSymbol(LexNone, Chr_Smaller_Slash, Tok_Smaller_Slash, tkSymbol, [tsXmlElement]);
   MapDualSymbol(LexNone, Chr_Slash_Greater, Tok_Slash_Greater, tkSymbol, [tsXmlElement, tsMask]);
 
-{$ifdef Onhold}
+  // Always Map the Single symbol before the Dual symbol with the same first char
   MapSymbol(LexAmpersand, Chr_Ampersand, Tok_Default, tkSymbol);
-{$endif}
   MapDualSymbol(LexEncodedSymbol, Chr_Ampersand_Hash, Tok_Macro, tkSymbol);
 end;
 

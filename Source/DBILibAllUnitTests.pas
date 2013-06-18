@@ -34,6 +34,7 @@ uses
 {$ifdef __omTesting}
   DBICDSUnitTests,
 {$endif}
+  DBIAUXUnitTests,
   DBIODSUnitTests,
   DBIXDSUnitTests;
 
