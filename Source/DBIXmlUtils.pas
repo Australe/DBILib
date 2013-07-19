@@ -31,38 +31,7 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  Classes, SysUtils, DB, DBIStrings, DBIDataset;
-
-const
-  // FieldTypes
-  cdsFieldAnsiString =       'string';
-  cdsFieldWideString =       'string.uni';
-  cdsFieldBoolean =          'boolean';
-  cdsFieldShortInt =         'i1';
-  cdsFieldSmallInt =         'i2';
-  cdsFieldInteger =          'i4';
-  cdsFieldLargeInt =         'i8';
-  cdsFieldByte =             'ui1';
-  cdsFieldWord =             'ui2';
-  cdsFieldLongWord =         'ui4';
-  cdsFieldAutoInc =          'i4" readonly="true" SUBTYPE="Autoinc';
-  cdsFieldSingle =           'r4';
-  cdsFieldFloat =            'r8';
-  cdsFieldExtended =         'r10';
-  cdsFieldCurrency =         'r8" SUBTYPE="Money';
-  cdsFieldBCD =              'fixed';
-  cdsFieldDate =             'date';
-  cdsFieldTime =             'time';
-  cdsFieldDateTime =         'datetime';
-  cdsFieldBytes =            'bin.hex';
-  cdsFieldVarBytes =         'bin.hex" SUBTYPE="Binary';
-  cdsFieldMemo =             'bin.hex" SUBTYPE="Text';
-  cdsFieldGraphic =          'bin.hex" SUBTYPE="Graphics';
-  cdsFieldFmtMemo =          'bin.hex" SUBTYPE="Formatted';
-  cdsFieldOle =              'bin.hex" SUBTYPE="Ole';
-  cdsFieldReadOnly =         '" readonly="true';
-  cdsFieldRequired =         '" required="true';
-  cdsFieldSubTypeWideText =  '" SUBTYPE="WideText';
+  Classes, SysUtils, DB, DBIDataset;
 
 procedure LoadFromXmlFile(const AFileName: TFileName; ADataset: TDBIDataset);
 procedure LoadFromXmlStream(Stream: TStream; ADataset: TDBIDataset);
@@ -74,24 +43,7 @@ procedure SaveToXmlStream(Stream: TStream; DataSet: TDataSet);
 implementation
 
 uses
-  DBIConst, DBIIntfConsts, DBIFileStreams, DBIXmlDataConnections;
-
-const
-  // Date Conversion format
-  cdsDateFormat = 'YYYYMMDD';
-  cdsDateTimeFormat = 'YYYYMMDD HH:NN:SSZZZ';
-
-  // Tags
-  cdsVersion =               '<?xml version="1.0" standalone="yes"?>  ';
-  cdsDataPacketHeader =      '<DATAPACKET Version="2.0">';
-  cdsMetaDataHeader =        '<METADATA>';
-  cdsFieldsHeader =          '<FIELDS>';
-  cdsFieldsFooter =          '</FIELDS>';
-  cdsMetaDataFooter =        '</METADATA>';
-  cdsParams =                '<PARAMS/>';
-  cdsRowDataHeader =         '<ROWDATA>';
-  cdsRowDataFooter =         '</ROWDATA>';
-  cdsDataPacketFooter =      '</DATAPACKET>';
+  DBIConst, DBIFileStreams, DBIXmlDataConnections, DBIDataPacketWriters;
 
 
 // _____________________________________________________________________________
@@ -113,51 +65,6 @@ begin
   raise EDBIException.CreateFmt(ErrMsg, Args);
 {$ENDIF DebugExceptions}
 end;  { Error }
-
-
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 28/02/2001 13:16:54 - Converts a fieldname with illegal fieldname chars
-                              to a valid fieldname.<P>
-}
-function EncodeFieldName(FieldName: String): String;
-var
-  Index: Integer;
-
-begin
-  for Index := Length(FieldName) downto 1 do begin
-    if not (UpCase(TDBIString(FieldName)[Index]) in ['A'..'Z','1'..'9']) then begin
-      FieldName[Index] := '_';
-    end;
-  end;
-
-  Result := FieldName;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 28/02/2001 13:14:59 - Converts field contents to single line of XML.<P>
-}
-function EncodeFieldData(FieldData: String): String;
-var
-  Index: Integer;
-
-begin
-  for Index := Length(FieldData) downto 1 do begin
-    if (Ord(FieldData[Index]) in [1..31, 34, 38..39]) then begin
-      Insert('&#' + IntToStr(Ord(FieldData[Index])) + ';', FieldData, Index+1);
-      Delete(FieldData, Index ,1)
-    end
-    else if (FieldData[Index] = #0) then begin
-      Delete(FieldData, Index, 1);
-    end;
-  end;
-
-  Result := FieldData
-end;
 
 
 // _____________________________________________________________________________
@@ -237,7 +144,7 @@ begin
   except
     Error(nil, Caller, '245', 'Failed to save dataset as Xml', []);
   end;
-end;  { SaveAsXmlFile }
+end;  { SaveToXmlFile }
 
 
 // _____________________________________________________________________________
@@ -250,185 +157,16 @@ end;  { SaveAsXmlFile }
 }
 procedure SaveToXmlStream(Stream: TStream; DataSet: TDataSet);
 var
-  Index: Integer;
-  FieldData: String;
-  FieldText: String;
-  DisplayText: String;
-  HasData: Boolean;
-
-  procedure Write(const Data: String);
-  begin
-    Stream.Write(TDBIStringBuffer(TDBIString(Data))^, Length(Data));
-  end;
-
-  procedure WriteFmt(const Data: String; Args: array of const);
-  begin
-    Write(Format(Data, Args));
-  end;
+  Writer: TDBIXmlDataPacketWriter;
 
 begin
-  Write(cdsVersion);
-  Write(cdsDataPacketHeader);
-
-  with DataSet do begin
-    if not Active then begin
-      Open;
-    end
-    else begin
-      First;
-    end;
-
-    Dataset.DisableControls;
-    try
-      // Write cds Metadata to stream
-      Write(cdsMetaDataHeader);
-      Write(cdsFieldsHeader);
-
-      // Get info without opening the database
-      if not Active then begin
-        FieldDefs.Update;
-      end;
-
-      for Index := 0 to FieldDefs.Count-1 do begin
-//##WIP if (DB.faReadOnly in FieldDefs[Index].Attributes) then Continue;
-
-        Write('<FIELD ');
-        if EncodeFieldName(FieldDefs[Index].Name) <> FieldDefs[Index].Name then begin
-          WriteFmt('fieldname="%s"', [FieldDefs[Index].Name]);
-        end;
-
-        WriteFmt(
-          'attrname="%s" fieldtype="',
-          [EncodeFieldName(FieldDefs[Index].Name)]
-          );
-
-        case FieldDefs[Index].DataType of
-          ftString,
-          ftFixedChar:   Write(cdsFieldAnsiString);
-          ftWideString:  Write(cdsFieldWideString);
-          ftBoolean:     Write(cdsFieldBoolean);
-{$ifdef DELPHI2009}
-          ftShortInt:    Write(cdsFieldShortInt);
-{$endif}
-          ftSmallInt:    Write(cdsFieldSmallInt);
-          ftInteger:     Write(cdsFieldInteger);
-          ftLargeInt:    Write(cdsFieldLargeInt);
-          ftAutoInc:     Write(cdsFieldAutoInc);
-          ftWord:        Write(cdsFieldWord);
-{$ifdef DELPHI2009}
-          ftByte:        Write(cdsFieldByte);
-          ftLongWord:    Write(cdsFieldLongWord);
-
-          // There is a bug in TClientDataset for TExtendedField,
-          // so this field type has been mapped to double instead
-          ftExtended:    Write(cdsFieldFloat);
-          //##JVR ftExtended:    Write(cdsFieldExtended);
-
-          // Guess what now they have broken TSingleField as well,
-          // so this field type has been mapped to double instead
-          ftSingle:      Write(cdsFieldFloat);
-          //##JVR ftSingle:      Write(cdsFieldSingle);
-
-{$endif}
-          ftFloat:       Write(cdsFieldFloat);
-          ftCurrency:    Write(cdsFieldCurrency);
-          ftBCD:         Write(cdsFieldBCD);
-          ftDate:        Write(cdsFieldDate);
-          ftTime:        Write(cdsFieldTime);
-          ftDateTime:    Write(cdsFieldDateTime);
-          ftBytes:       Write(cdsFieldBytes);
-          ftVarBytes,
-          ftBlob:        Write(cdsFieldVarBytes);
-          ftMemo:        Write(cdsFieldMemo);
-          ftGraphic,
-          ftTypedBinary: Write(cdsFieldGraphic);
-          ftFmtMemo:     Write(cdsFieldFmtMemo);
-          ftParadoxOle,
-          ftDBaseOle:    Write(cdsFieldOle);
-        end;  { case }
-
-        if (DB.faReadOnly in FieldDefs[Index].Attributes) then begin
-          Write(cdsFieldReadOnly);
-        end;
-
-        if FieldDefs[Index].Required then begin
-          Write(cdsFieldRequired);
-        end;
-
-{$ifndef DELPHI2006}
-        case FieldDefs[Index].DataType of
-          ftWideString: Write(cdsFieldSubTypeWideText);
-        end;
-{$endif}
-
-        if FieldDefs[Index].Size > 0 then begin
-          case FieldDefs[Index].DataType of
-            ftWideString:  WriteFmt('" WIDTH="%d', [2 * FieldDefs[Index].Size]);
-          else
-            WriteFmt('" WIDTH="%d', [FieldDefs[Index].Size]);
-          end;
-        end;
-
-        Write('"/>');
-      end;  { for }
-
-      Write(cdsFieldsFooter);
-      Write(cdsParams);
-      Write(cdsMetaDataFooter);
-
-
-      // Write cds Data to stream
-      Write(cdsRowDataHeader);
-
-      while not Eof do begin
-        Write('<ROW ');
-
-        for Index := 0 to Fields.Count-1 do begin
-          // if the field is readonly then skip
-          if (db.faReadOnly in FieldDefs[Index].Attributes) then Continue;
-
-          case Fields[Index].DataType of
-            ftDate: begin
-              FieldData := FormatDateTime(cdsDateFormat, Fields[Index].AsDateTime);
-            end;
-
-            ftDateTime: begin
-              FieldData := FormatDateTime(cdsDateTimeFormat, Fields[Index].AsDateTime);
-            end;
-
-          // All other fieldtypes
-          else
-            FieldData := Fields[Index].AsString;
-          end;
-
-
-          // Displaytext in Currency fields are preceded by the currency symbol
-          DisplayText := Fields[Index].DisplayText;
-
-          if (Fields[Index].DataType = ftCurrency) then begin
-            FieldText := CurrToStr(Fields[Index].AsCurrency);
-          end
-          else begin
-            FieldText := FieldData;
-          end;
-
-          HasData := (FieldData <> '') and ((FieldText = FieldData) or (DisplayText = '(MEMO)'));
-          if HasData then begin
-            Write(EncodeFieldName(Fields[Index].FieldName) + '="');
-            Write(EncodeFieldData(FieldData) + '" ');
-          end;
-        end;  { for }
-
-        Write('/>');
-        Next;
-      end;  { while }
-
-      Write(cdsRowDataFooter);
-      Write(cdsDataPacketFooter);
-    finally
-      Dataset.EnableControls;
-    end;  { try..finally }
-  end;  { with }
+  Writer := TDBIXmlDataPacketWriter.Create;
+  try
+    Writer.Dataset := Dataset;
+    Writer.SaveToStream(Stream);
+  finally
+    Writer.Free;
+  end;
 end;  { SaveToXmlStream }
 
 

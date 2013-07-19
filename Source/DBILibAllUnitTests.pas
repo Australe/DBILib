@@ -8,6 +8,7 @@ uses
   DBIConst,
   DBICustomListDataConnections,
   DBICustomStreamDataConnections,
+  DBIDataPacketWriters,
   DBIDataset,
   DBIFileStreams,
   DBIFilters,

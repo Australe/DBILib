@@ -130,6 +130,7 @@ procedure DBIDebug(
   );
 
 procedure DBIGetPropertyList(ClassInfo: PTypeInfo; List: TList);
+function DBIFileFind(const PathName, FileMask: TFileName; Results: TStrings): Boolean;
 function DBIForceDirectories(Dir: string): Boolean;
 function DBIGetUserName: WideString;
 function DBILocalHostName: String;
@@ -566,6 +567,79 @@ begin
 end;
 
 
+function DBIFileFind(const PathName, FileMask: TFileName; Results: TStrings): Boolean;
+var
+  PathInfo, FileInfo: TSearchRec;
+  FolderName: String;
+
+begin
+  if FindFirst(PathName + '*.*', faDirectory, PathInfo) <> 0 then begin
+    Result := False;
+    Exit;
+  end;
+
+  repeat
+    if (PathInfo.Name <> '.') and (PathInfo.Name <> '..') then begin
+      if PathInfo.Attr = faDirectory then begin
+        FolderName := PathName + PathInfo.Name + '\';
+        DBIFileFind(FolderName, FileMask, Results);
+
+        if FindFirst(FolderName + FileMask, faAnyFile, FileInfo) = 0 then begin
+          repeat
+            if FileInfo.Attr <> faDirectory then begin
+              Results.Add(FolderName + FileInfo.Name);
+            end;
+          until FindNext(FileInfo) <> 0;
+
+          FindClose(FileInfo);
+        end;
+      end;
+    end;
+  until FindNext(PathInfo) <> 0;
+
+  FindClose(PathInfo);
+  Result := Assigned(Results) and (Results.Count > 0);
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 21/02/2013 14:03:23 - Moved from DBIConst<P>
+}
+function DBIForceDirectories(Dir: string): Boolean;
+{$ifdef DELPHI6}
+begin
+  Result := ForceDirectories(Dir);
+end;
+{$else}
+var
+  E: EInOutError;
+
+  function DBIDirectoryExists(const Directory: String): Boolean;
+  var
+    Code: longWord;
+  begin
+    Code := GetFileAttributes(PChar(Directory));
+    Result := (longInt(Code) <> -1) and (FILE_ATTRIBUTE_DIRECTORY and Code <> 0);
+  end;
+
+begin
+  Result := True;
+  if (Dir = '') then begin
+    E := EInOutError.Create(SCannotCreateDir);
+    E.ErrorCode := 3;
+    raise E;
+  end;
+  Dir := ExcludeTrailingBackSlash(Dir);
+
+  if (Length(Dir) < 3) or DBIDirectoryExists(Dir)
+    or (ExtractFilePath(Dir) = Dir) then Exit; // avoid 'xyz:\' problem.
+
+  Result := DBIForceDirectories(ExtractFilePath(Dir)) and CreateDir(Dir);
+end;
+{$endif}
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 08/05/2002 13:16:58.<P>
@@ -618,44 +692,6 @@ begin
 {$endif}
   Result := WideString(Buffer);
 end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 21/02/2013 14:03:23 - Moved from DBIConst<P>
-}
-function DBIForceDirectories(Dir: string): Boolean;
-{$ifdef DELPHI6}
-begin
-  Result := ForceDirectories(Dir);
-end;
-{$else}
-var
-  E: EInOutError;
-
-  function DBIDirectoryExists(const Directory: String): Boolean;
-  var
-    Code: longWord;
-  begin
-    Code := GetFileAttributes(PChar(Directory));
-    Result := (longInt(Code) <> -1) and (FILE_ATTRIBUTE_DIRECTORY and Code <> 0);
-  end;
-
-begin
-  Result := True;
-  if (Dir = '') then begin
-    E := EInOutError.Create(SCannotCreateDir);
-    E.ErrorCode := 3;
-    raise E;
-  end;
-  Dir := ExcludeTrailingBackSlash(Dir);
-
-  if (Length(Dir) < 3) or DBIDirectoryExists(Dir)
-    or (ExtractFilePath(Dir) = Dir) then Exit; // avoid 'xyz:\' problem.
-
-  Result := DBIForceDirectories(ExtractFilePath(Dir)) and CreateDir(Dir);
-end;
-{$endif}
 
 
 // _____________________________________________________________________________

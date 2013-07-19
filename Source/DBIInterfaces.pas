@@ -4481,15 +4481,14 @@ begin
   Size := FFieldProps[iFieldNo-1].iFldLen;
   PData := pFldBuf;
 
+  // Clear the field in the record buffer to all #0's - We don't want corrupt field data!
+  FillChar(TDBIRecordBuffer(pRecBuf)[Offset], Size, 0);
+
   // If the field buffer is nil then the field is blank.
-  // Therefore initialise this field in the record buffer to all #0's
-  if (pFldBuf = nil) then begin
-    FillChar(TDBIRecordBuffer(pRecBuf)[Offset], Size, 0);
-    IsBlank := True;
-  end
+  IsBlank := (pFldBuf = nil);
 
   // Otherwise transfer the data from the fieldbuffer to the record buffer
-  else begin
+  if not IsBlank then begin
     case FFieldProps[iFieldNo-1].iFldType of
       fldWIDESTRING, fldUNICODE: begin
         Size := PWord(pFldBuf)^;
@@ -4506,8 +4505,6 @@ begin
 
     // Update pRecBuf from the DataConnection Edit-source (Validation object?)
     DataConnection.SyncRecordBuffer(pRecBuf^, True);
-
-    IsBlank := False;
   end;
 
   { DONE 5 -oJvr -cTDBICursor.PutField() : NullFlags }

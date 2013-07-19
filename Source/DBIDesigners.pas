@@ -17,18 +17,6 @@ type
 {$endif}
 
 
-{$ifdef UseCustomMemo}
-type
-  TMemo = class(StdCtrls.TMemo)
-  private
-    FStartChar, FEndChar: Integer;
-    procedure WMPaint(var Msg: TWMPaint); message WM_PAINT;
-  public
-    procedure Underline(StartLine, StartChar, EndLine, EndChar: Integer);
-  end;
-{$endif}
-
-
 type
   TFormODSDesigner = class(TForm)
     PageControl: TPageControl;
@@ -122,7 +110,9 @@ type
   protected
     function GetCount: Integer;
     function GetFieldName(const Index: Integer): String;
+    function GetFieldSize(const Index: Integer): Word;
     function GetFieldType(const Index: Integer): TFieldType;
+    function GetFieldTypeName(const Index: Integer): String;
     function GetTypeName(const Index: Integer): String;
 
   public
@@ -133,7 +123,9 @@ type
     property CustomClass: Boolean read FCustomClass write FCustomClass;
     property Dataset: TDataset read FDataset write FDataset;
     property FieldNames[const Index: Integer]: String read GetFieldName;
+    property FieldSizes[const Index: Integer]: Word read GetFieldSize;
     property FieldTypes[const Index: Integer]: TFieldType read GetFieldType;
+    property FieldTypeNames[const Index: Integer]: String read GetFieldTypeName;
     property Name: String read FName write FName;
     property TypeNames[const Index: Integer]: String read GetTypeName;
 
@@ -197,6 +189,17 @@ begin
 end;
 
 
+function TDBIBusinessObjectPublisher.GetFieldSize(const Index: Integer): Word;
+begin
+  if (Dataset.FieldCount > 0) then begin
+    Result := Dataset.Fields[Index].Size;
+  end
+  else begin
+    Result := Dataset.FieldDefs[Index].Size;
+  end;
+end;
+
+
 function TDBIBusinessObjectPublisher.GetFieldType(const Index: Integer): TFieldType;
 begin
   if (Dataset.FieldCount > 0) then begin
@@ -205,6 +208,12 @@ begin
   else begin
     Result := Dataset.FieldDefs[Index].DataType;
   end;
+end;
+
+
+function TDBIBusinessObjectPublisher.GetFieldTypeName(const Index: Integer): String;
+begin
+  Result := TypInfo.GetEnumName(TypeInfo(TFieldType), Ord(GetFieldType(Index)));
 end;
 
 
@@ -218,6 +227,7 @@ procedure TDBIBusinessObjectPublisher.Publish(Output: TStrings);
 const
   Prefix: array[Boolean] of String = ('Tom', 'TomCustom');
   PropertyScope: array[Boolean] of String = ('published', 'protected');
+  UseFieldDefs = True;
 
 var
   Index: Integer;
@@ -279,6 +289,12 @@ begin
   end;
   WriteFmt('', []);
 
+  if UseFieldDefs then begin
+    WriteFmt('  public', []);
+    WriteFmt('    class procedure BuildFieldDefs(ADataset: TDataset);', []);
+    WriteFmt('', []);
+  end;
+
   WriteFmt('  end;', []);
   WriteFmt('', []);
 
@@ -300,6 +316,30 @@ begin
   WriteFmt('implementation', []);
   WriteFmt('', []);
 
+  // Publish Build FieldDefs
+  if UseFieldDefs then begin
+    WriteFmt('class procedure %s%s.BuildFieldDefs(ADataset: TDataset);', [Prefix[UseCustom], Name]);
+    WriteFmt('var', []);
+    WriteFmt('  FieldDef: TFieldDef;', []);
+    WriteFmt('', []);
+    WriteFmt('begin', []);
+
+    for Index := 0 to Count-1 do begin
+      WriteFmt('  FieldDef := ADataset.FieldDefs.AddFieldDef;', []);
+      WriteFmt('  FieldDef.Name := ''%s'';', [FieldNames[Index]]);
+      WriteFmt('  FieldDef.DataType := %s;', [FieldTypeNames[Index]]);
+
+      if (FieldSizes[Index] > 0) then begin
+        WriteFmt('  FieldDef.Size := %d;', [FieldSizes[Index]]);
+      end;
+      WriteFmt('', []);
+   end;
+
+    WriteFmt('end;', []);
+    WriteFmt('', []);
+  end;
+
+  // Publish Accessors
   if UseAccessors then begin
     for Index := 0 to Count-1 do begin
       WriteFmt(
@@ -322,6 +362,9 @@ begin
     end;
   end;
 
+  WriteFmt('initialization', []);
+  WriteFmt('  Classes.RegeisterClass(%s%s)', [Prefix[UseCustom], Name]);
+  WriteFmt('', []);
   WriteFmt('end.', []);
 end;
 
@@ -561,160 +604,8 @@ begin
   for Index := 0 to EditorControls.Count-1 do begin
     Item := EditorControls.Items[Index];
     Item.Visible := Value;
-
-//##JVR    Item.Visible := Item.Visible and not (Item is TPanel);
   end;
 end;
-
-
-
-
-
-{ TMemo }
-
-{$ifdef UseCustomMemo}
-procedure TMemo.Underline(StartLine, StartChar, EndLine, EndChar: Integer);
-begin
-  FStartChar := SendMessage(Handle, EM_LINEINDEX, StartLine, 0) + StartChar;
-  FEndChar := SendMessage(Handle, EM_LINEINDEX, EndLine, 0) + EndChar;
-  Invalidate;
-end;
-
-procedure TMemo.WMPaint(var Msg: TWMPaint);
-
-  function GetLine(CharPos: Integer): Integer;
-  begin
-    Result := SendMessage(Handle, EM_LINEFROMCHAR, CharPos, 0);
-  end;
-
-  procedure DrawLine(First, Last: Integer);
-  var
-    LineHeight: Integer;
-    Pt1, Pt2: TSmallPoint;
-    DC: HDC;
-    Rect: TRect;
-    ClipRgn: HRGN;
-  begin
-    // font height approximation (compensate 1px for internal leading)
-    LineHeight := Abs(Font.Height) - Abs(Font.Height) div Font.Height;
-
-    // get logical top-left coordinates for line bound characters
-    Integer(Pt1) := SendMessage(Handle, EM_POSFROMCHAR, First, 0);
-    Integer(Pt2) := SendMessage(Handle, EM_POSFROMCHAR, Last, 0);
-
-    DC := GetDC(Handle);
-
-    // clip to not to draw to non-text area (internal margins)
-    SendMessage(Handle, EM_GETRECT, 0, Integer(@Rect));
-    ClipRgn := CreateRectRgn(Rect.Left, Rect.Top, Rect.Right, Rect.Bottom);
-    SelectClipRgn(DC, ClipRgn);
-    DeleteObject(ClipRgn); // done with region
-
-    // set pen color to red and draw line
-    SelectObject(DC, GetStockObject(DC_PEN));
-    SetDCPenColor(DC, RGB(255, 0 ,0));
-    MoveToEx(DC, Pt1.x, Pt1.y + LineHeight, nil);
-    LineTo(DC, Pt2.x, Pt2.y + LineHeight);
-
-    ReleaseDC(Handle, DC); // done with dc
-  end;
-
-var
-  StartChar, CharPos, LinePos: Integer;
-
-begin
-  inherited;
-
-  if FEndChar > FStartChar then begin
-    // Find out where to draw.
-    // Can probably optimized a bit by using EM_LINELENGTH
-    StartChar := FStartChar;
-    CharPos := StartChar;
-    LinePos := GetLine(CharPos);
-    while True do begin
-      Inc(CharPos);
-      if GetLine(CharPos) > LinePos then begin
-        DrawLine(StartChar, CharPos - 1);
-        StartChar := CharPos;
-        Dec(CharPos);
-        Inc(LinePos);
-        Continue;
-      end else
-        if CharPos >= FEndChar then begin
-          DrawLine(StartChar, FEndChar);
-          Break;
-        end;
-    end;
-  end;
-end;
-{$endif}
-
-(*##JVR
-procedure TMemo.WMPaint(var Message: TWMPaint);
-var
-  Buffer: array[0..4096] of Char;
-  PS: TPaintStruct;
-  DC: HDC;
-  i: Integer;
-  X, Y, Z: Integer;
-  OldColor: TColor;
-
-  LineNo: Integer;
-
-begin
-LineNo := 230;
-try
-if Lines.Count > 0 then begin
-LineNo := 231;
-  DC := Message.DC;
-LineNo := 235;
-  if DC = 0 then
-    DC := BeginPaint(Handle, PS);
-LineNo := 238;
-  try
-LineNo := 240;
-    X := 1;
-LineNo := 242;
-    Y := 1;
-LineNo := 244;
-    SetBkColor(DC, Color);
-LineNo := 246;
-    SetBkMode(DC, Transparent);
-LineNo := 248;
-    OldColor := Font.Color;
-LineNo := 250;
-    for i:=0 to Pred(Lines.Count) do begin
-LineNo := 253;
-      { this is your place to set/reset the font... }
-      if odd(i) then
-        SetTextColor(DC, clRed)
-      else
-        SetTextColor(DC, OldColor);
-LineNo := 259;
-      Z := Length(Lines[i]);
-LineNo := 261;
-      StrPCopy(Buffer, Lines[i]);
-LineNo := 2663;
-      Buffer[Z] := #0;  { not really needed }
-LineNo := 265;
-      TextOut(DC, X, Y, Buffer, Z);
-LineNo := 267;
-      Inc(Y, abs(Font.Height));
-    end;
-  finally
-LineNo := 270;
-    if Message.DC = 0 then begin
-LineNo := 273;
-      EndPaint(Handle, PS);
-    end;
-  end;
-end;
-except
-  on E: Exception do
-    ShowMessageFmt('%d, %s', [LineNo, E.Message]);
-end;
-end;
-//*)
 
 
 end.

@@ -144,7 +144,7 @@ type
 implementation
 
 uses
-  TypInfo, Dialogs, DBIIntfConsts, DBIUtils, DBIXmlUtils;
+  TypInfo, Dialogs, DBIIntfConsts, DBIUtils, DBIDataPacketWriters;
   
 
 { TDBIXmlDataPacketReader }

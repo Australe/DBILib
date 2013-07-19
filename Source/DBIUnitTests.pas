@@ -143,6 +143,7 @@ type
     class function GetDateTime(Index: Integer): TDateTime;
     class function GetDateTimeFormat: String;
     class procedure OccupyValues(ADataset: TDataset); virtual;
+    class function PreFillValues(ADataset: TDataset; Index: Integer): Boolean; virtual;
     class procedure RefillValues(ADataset: TDataset); virtual;
 //##JVR    class procedure UpdateValues(ADataset: TDataset); virtual; abstract;
     class procedure VerifyFields(ADataset: TDataset; PFieldData: PFieldRecords; const Count: Word); virtual;
@@ -530,10 +531,11 @@ type
     function GetUserName: WideString;
 
   public
+    class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
     class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
-    class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
+    class function PreFillValues(ADataset: TDataset; Index: Integer): Boolean; override;
 
     class function GetFields: TStringFields;
 
@@ -1249,18 +1251,6 @@ begin
 end;
 
 
-class procedure TStringData.CheckValues(ADataset: TDataset; Index: Integer);
-var
-  StringData: TStringRecords;
-begin
-  StringData := TStringData.GetRecords;
-  Assert(ADataset.FieldByName('ID').AsInteger = StringData[Index].ID);
-  Assert(ADataset.FieldByName('Environment').AsString = StringData[Index].Environment);
-  Equalz(ADataset.FieldByName('Fullname').AsString , StringData[Index].Fullname);
-  Assert(ADataset.FieldByName('Value').AsString = StringData[Index].Value);
-end;
-
-
 class procedure TStringData.BuildDataset(ADataset: TDataset);
 begin
   if (ADataset is TDBIDataset) then begin
@@ -1274,6 +1264,18 @@ begin
 end;
 
 
+class procedure TStringData.CheckValues(ADataset: TDataset; Index: Integer);
+var
+  StringData: TStringRecords;
+begin
+  StringData := TStringData.GetRecords;
+  Assert(ADataset.FieldByName('ID').AsInteger = StringData[Index].ID);
+  Assert(ADataset.FieldByName('Environment').AsString = StringData[Index].Environment);
+  Equalz(ADataset.FieldByName('Fullname').AsString , StringData[Index].Fullname);
+  Assert(ADataset.FieldByName('Value').AsString = StringData[Index].Value);
+end;
+
+
 class procedure TStringData.CreateFields(ADataset: TDataset);
 var
   StringFields: TStringFields;
@@ -1281,6 +1283,7 @@ begin
   StringFields := TStringData.GetFields;
   BuildFields(ADataset, @StringFields, Length(StringFields));
 end;
+
 
 class procedure TStringData.CreateFieldDefs(ADataset: TDataset);
 var
@@ -1376,6 +1379,39 @@ end;
 class function TStringData.GetRecordCount: Integer;
 begin
   Result := Length(TStringData.GetRecords);
+end;
+
+
+class function TStringData.PreFillValues(ADataset: TDataset; Index: Integer): Boolean;
+var
+  Offset: Integer;
+  Data: AnsiString;
+  Field: TField;
+  Size: Byte;
+  StringData: TStringRecords;
+
+begin
+  StringData := TStringData.GetRecords;
+  Size := 126-33;                      // [!] .. [~]
+  SetLength(Data, Size);
+  for Offset := 1 to Size do begin
+    Data[Offset] := AnsiChar(Offset + 32);
+  end;
+
+  Field := ADataset.FieldByName('ID');
+  Field.AsInteger := StringData[Index].ID;
+
+  Field := ADataset.FieldByName('Environment');
+  Field.AsString := Copy(String(Data), 1, Field.Size);
+
+  Field :=  ADataset.FieldByName('Fullname');
+  Field.AsString := Copy(String(Data), 1, Field.Size);
+
+  Field := ADataset.FieldByName('Value');
+  Field.AsString :=  Copy(String(Data), 1, Field.Size);
+
+  // This class implements this method, so return True
+  Result := True;
 end;
 
 
@@ -3320,11 +3356,24 @@ var
 begin
   for Index := 0 to GetRecordCount-1 do begin
     ADataset.Append;
+
+    if PreFillValues(Adataset, index) then begin
+      ADataset.Post;
+      Adataset.Edit;
+    end;
+
     ApplyValues(ADataset, Index);
     ADataset.Post;
 
     CheckValues(ADataset, Index);
   end;
+end;
+
+
+class function TDBIUnitTest.PreFillValues(ADataset: TDataset; Index: Integer): Boolean;
+begin
+  Result := False;
+  // Base class does nothing
 end;
 
 
@@ -3340,7 +3389,7 @@ begin
     ADataset.Edit;
     ApplyValues(ADataset, Index);
     ADataset.Post;
-    
+
     Inc(Index);
     ADataset.Next;
   end;

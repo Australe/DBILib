@@ -277,6 +277,7 @@ type
   function DBICharNext(var P: PDBIChar): PDBIChar;
   function DBICompareStr(const S1, S2: TDBIString): Integer; assembler;
   function DBICompareText(const S1, S2: TDBIString): Integer; assembler;
+  function DBILowerCase(const S: AnsiString): AnsiString;
   function DBIStrLen(const Str: PDBIDataElement): Cardinal; assembler;
   function DBITrimRight(const S: TDBIString): TDBIString;
 
@@ -798,6 +799,28 @@ asm
         POP    ESI
         POP    EBP
         POP    EBX
+end;
+
+
+function DBILowerCase(const S: AnsiString): AnsiString;
+var
+  Ch: AnsiChar;
+  L: Integer;
+  Source, Dest: PAnsiChar;
+begin
+  L := Length(S);
+  SetLength(Result, L);
+  Source := Pointer(S);
+  Dest := Pointer(Result);
+  while L <> 0 do
+  begin
+    Ch := Source^;
+    if (Ch >= 'A') and (Ch <= 'Z') then Inc(Ch, 32);
+    Dest^ := Ch;
+    Inc(Source);
+    Inc(Dest);
+    Dec(L);
+  end;
 end;
 
 
