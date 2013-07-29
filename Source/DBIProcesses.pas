@@ -49,19 +49,17 @@ type
 
 
 type
-  TDBIProcessInfoOption = (piCtrlCAbort, piVerbose);
+  TDBIProcessInfoOption = (piCtrlCAbort, piDetachedProcess, piVerbose);
   TDBIProcessInfoOptions = set of TDBIProcessInfoOption;
 
 type
-  TDBIOutputList = class(TStringList);
-
   TDBICustomProcess = class(TComponent)
   private
     FAborted: Boolean;
     FExitCode: Integer;
     FEnvironmentPath: String;
     FOptions: TDBIProcessInfoOptions;
-    FOutput: TDBIOutputList;
+    FOutput: TStrings;
     FProcessInfo: TProcessInformation;
     FProcessAttributes: TSecurityAttributes;
     FStartupInfo: TStartupInfo;
@@ -82,27 +80,30 @@ type
   protected
     function GetCommandLine: String; virtual;
     function GetEnvironmentVariable(const Name: String): String;
+    function GetOutput: TStrings; virtual;
     function GetParameters: String; virtual;
     function GetSourceName: String; virtual;
     function GetTargetName: String; virtual;
-    function GetOutput: TDBIOutputList; virtual;
+
+    procedure OutputRelease; virtual;
 
     procedure ProcessAbort;
     procedure ProcessCloseHandles;
     function ProcessCreate: Boolean;
     function ProcessIdle: Boolean; virtual;
-    function ProcessOutput(hRead: THandle; var TextBuffer: AnsiString): Boolean;
+    function ProcessOutput(hRead: THandle; var TextBuffer: AnsiString; const Eof: Boolean): Boolean;
     procedure ProcessOutputLine(const Value: AnsiString); virtual;
     function ProcessStartupInfo: Boolean;
 
     procedure SetEnvironmentPath(const Value: String);
+    procedure SetOutput(Value: TStrings);
     procedure SetParameters(const Value: String); virtual;
     procedure SetSourceName(const Value: String); virtual;
     procedure SetTargetName(const Value: String); virtual;
 
     property Aborted: Boolean read FAborted write FAborted;
     property EnvironmentPath: String read FEnvironmentPath write SetEnvironmentPath;
-    property Output: TDBIOutputList read GetOutput;
+    property Output: TStrings read GetOutput write SetOutput;
     property ExitCode: Integer read FExitCode;
     property Options: TDBIProcessInfoOptions read FOptions write FOptions;
 
@@ -196,10 +197,11 @@ end;
 
 
 
-
-
-
 { TDBICustomProcess }
+
+type
+  TDBIOutputList = class(TStringList);
+
 
 constructor TDBICustomProcess.Create(AOwner: TComponent);
 begin
@@ -224,28 +226,33 @@ end;
 
 destructor TDBICustomProcess.Destroy;
 begin
-  FOutput.Free;
-  FOutput := nil;
-  
+  OutputRelease;
+
   inherited Destroy;
 end;
 
 
 function TDBICustomProcess.Execute: Boolean;
 var
-  LineBuffer: AnsiString;
+  OutputBuffer: AnsiString;
   OrgEnvPath: String;
 
   function Processing: Boolean;
   begin
-    Result := WaitForSingleObject(FProcessInfo.hProcess, 80) = WAIT_TIMEOUT;
+    Result := not (piDetachedProcess in Options);
+    if Result then begin
+      Result := WaitForSingleObject(FProcessInfo.hProcess, 80) = WAIT_TIMEOUT;
+    end
+    else begin
+      WaitForInputIdle(FProcessInfo.hProcess, Infinite);
+    end;
   end;
 
 begin
   FAborted := False;
   FExitCode := -2;
   FTickOffset := GetTickCount;
-  Output.Clear;
+  OutputBuffer := '';
 
   Result := ProcessStartupInfo;
   if not Result then begin
@@ -266,10 +273,12 @@ begin
 
         try
           while Processing and not Aborted do begin
-            ProcessOutput(hRead, LineBuffer);
+            ProcessOutput(hRead, OutputBuffer, False);
             ProcessIdle;
           end;
-          ProcessOutput(hRead, LineBuffer);
+
+          // Process remaining characters in buffer
+          ProcessOutput(hRead, OutputBuffer, True);
 
           if Aborted then begin
             ProcessAbort;
@@ -283,6 +292,7 @@ begin
         end;
       end
       else begin
+        Win32Check(False);
         FExitCode := -1;
       end;
 
@@ -305,19 +315,19 @@ begin
 end;
 
 
-function TDBICustomProcess.GetOutput: TDBIOutputList;
+function TDBICustomProcess.GetEnvironmentVariable(const Name: String): String;
+begin
+  SetLength(Result, 8 * 1024);
+  SetLength(Result, Windows.GetEnvironmentVariable(PChar(Name), PChar(Result), Length(Result)));
+end;
+
+
+function TDBICustomProcess.GetOutput: TStrings;
 begin
   if not Assigned(FOutput) then begin
     FOutput := TDBIOutputList.Create;
   end;
   Result := FOutput;
-end;
-
-
-function TDBICustomProcess.GetEnvironmentVariable(const Name: String): String;
-begin
-  SetLength(Result, 8 * 1024);
-  SetLength(Result, Windows.GetEnvironmentVariable(PChar(Name), PChar(Result), Length(Result)));
 end;
 
 
@@ -348,6 +358,15 @@ begin
     _ProcessInstance := Self.Create(nil);
   end;
   Result := _ProcessInstance;
+end;
+
+
+procedure TDBICustomProcess.OutputRelease;
+begin
+  if Assigned(FOutput) and (FOutput is TDBIOutputList) then begin
+    FOutput.Free;
+  end;
+  FOutput := nil;
 end;
 
 
@@ -412,7 +431,7 @@ begin
 end;
 
 
-function TDBICustomProcess.ProcessOutput(hRead: THandle; var TextBuffer: AnsiString): Boolean;
+function TDBICustomProcess.ProcessOutput(hRead: THandle; var TextBuffer: AnsiString; const Eof: Boolean): Boolean;
 var
   OutputBuffer: AnsiString;
   LineBuffer: AnsiString;
@@ -437,21 +456,28 @@ begin
 
   // Split lines on Line-Break boundries
   PTextBuffer := PAnsiChar(TextBuffer);
+  PStart := PTextBuffer;
+
   if (PTextBuffer <> nil) then begin
     while (PTextBuffer^ <> #0) do begin
       PStart := PTextBuffer;
-      while not (PTextBuffer^ in [#0, #10, #13]) do Inc(PTextBuffer);
-      SetString(LineBuffer, PStart, PTextBuffer - PStart);
+      while not (PTextBuffer^ in [#0, #10, #13]) do begin
+        Inc(PTextBuffer);
+      end;
 
-      ProcessOutputLine(LineBuffer);
+      // if we are at a Line-Break then process line
+      if (PTextBuffer^ <> #0) or Eof then begin
+        SetString(LineBuffer, PStart, PTextBuffer - PStart);
+        ProcessOutputLine(LineBuffer);
 
-      if PTextBuffer^ = #13 then Inc(PTextBuffer);
-      if PTextBuffer^ = #10 then Inc(PTextBuffer);
+        if PTextBuffer^ = #13 then Inc(PTextBuffer);
+        if PTextBuffer^ = #10 then Inc(PTextBuffer);
+      end;
     end;
   end;
 
-  // Ok done, now clear the processed TextBuffer
-  TextBuffer := '';
+  // Now assign the remaining chars to the TextBuffer
+  SetString(TextBuffer, PStart, PTextBuffer - PStart);
 end;
 
 
@@ -494,6 +520,14 @@ begin
     SetEnvironmentVariable('PATH', Pointer(FEnvironmentPath));
   end;
 //}
+end;
+
+
+procedure TDBICustomProcess.SetOutput(Value: TStrings);
+begin
+  OutputRelease;
+
+  FOutput := Value;
 end;
 
 
