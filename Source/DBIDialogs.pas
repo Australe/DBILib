@@ -83,7 +83,7 @@ type
 
 implementation
 
-{$R *.DFM}
+{. $R *.DFM}
 
 
 { TDBIDialogSelect }

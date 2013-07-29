@@ -444,15 +444,19 @@ begin
 
   Result := PeekNamedPipe(hRead, nil, 0, nil, @BytesInPipe, nil);
   Result := Result and (BytesInPipe <> 0);
+
+  // Read Pipe into Buffer
+  if Result then begin
+    SetLength(OutputBuffer, BytesInPipe);
+    ReadFile(hRead, OutputBuffer[1], BytesInPipe, Size, nil);
+    SetLength(OutputBuffer, Size);
+    TextBuffer := TextBuffer + OutputBuffer;
+  end;
+
+  Result := Length(TextBuffer) > 0;
   if not Result then begin
     Exit;
   end;
-
-  // Read Pipe into Buffer
-  SetLength(OutputBuffer, BytesInPipe);
-  ReadFile(hRead, OutputBuffer[1], BytesInPipe, Size, nil);
-  SetLength(OutputBuffer, Size);
-  TextBuffer := TextBuffer + OutputBuffer;
 
   // Split lines on Line-Break boundries
   PTextBuffer := PAnsiChar(TextBuffer);
