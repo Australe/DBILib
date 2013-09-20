@@ -989,7 +989,7 @@ type
     property StoreDefs: Boolean read FStoreDefs write FStoreDefs default False;
 
   end;  { TDBIDataSet }
-
+  TDBIDatasetClass = class of TDBIDataset;
 
 
 
@@ -3154,22 +3154,31 @@ end;
   Jvr - 27/06/2005 15:44:58 - Made code generic for different file formats.<br>
 }
 procedure TDBIDataset.SaveToFile(AFileName: String; Format: TDBIDataFormat);
+var
+  DBCursor: TDBIDataset;
+
 begin
   // Prevent writing a zero-byte file
   if Active or (Assigned(FDSBase) and (DatasetField = nil)) then begin
     if (AFileName = '') then AFileName := GetFileName;
     if (AFileName = '') then DatabaseError(SInvalidFilename, Self);
 
-    Format := SelectFormat(AFileName, Format);
+    DBCursor := TDBIDatasetClass(ClassType).Create(nil);
+    try
+      DBCursor.CloneCursor(Self, True);
 
-    if (Format = dfCDS) then begin
-      DBIXmlUtils.SaveToXmlFile(AFileName, Self);
-    end
-    else if (Format = dfPSV) then begin
-      DBIUtils.SavetoPsvFile(AFileName, Self);
-    end
-    else begin
-      DataConnection.SaveToFile(AFileName, Format);
+      Format := SelectFormat(AFileName, Format);
+      if (Format = dfCDS) then begin
+        DBIXmlUtils.SaveToXmlFile(AFileName, DBCursor);
+      end
+      else if (Format = dfPSV) then begin
+        DBIUtils.SavetoPsvFile(AFileName, DBCursor);
+      end
+      else begin
+        DataConnection.SaveToFile(AFileName, Format);
+      end;
+    finally
+      DBCursor.Free;
     end;
   end;
 end;
