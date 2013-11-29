@@ -75,6 +75,11 @@
         <DCCReference Include="DBIXbaseConsts.pas"/>
         <DCCReference Include="DBIXbaseDataConnections.pas"/>
         <DCCReference Include="DBIXbaseDatasets.pas"/>
+        <DCCReference Include="DBIXmlDataConnections.pas"/>
+        <DCCReference Include="DBIDataPacketWriters.pas"/>
+        <DCCReference Include="DBITokenizerConsts.pas"/>
+        <DCCReference Include="DBITokenizers.pas"/>
+        <DCCReference Include="DBIStreamAdapters.pas"/>
         <DCCReference Include="DBIXmlUtils.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

@@ -53,6 +53,12 @@ contains
   DBIXbaseConsts in 'DBIXbaseConsts.pas',
   DBIXbaseDataConnections in 'DBIXbaseDataConnections.pas',
   DBIXbaseDatasets in 'DBIXbaseDatasets.pas',
+  DBIXmlDataConnections in 'DBIXmlDataConnections.pas',
+  DBIDataPacketWriters in 'DBIDataPacketWriters.pas',
+  DBITokenizerConsts in 'DBITokenizerConsts.pas',
+  DBITokenizers in 'DBITokenizers.pas',
+  DBIStreamAdapters in 'DBIStreamAdapters.pas',
   DBIXmlUtils in 'DBIXmlUtils.pas';
 
 end.
+
