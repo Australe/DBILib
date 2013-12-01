@@ -4165,7 +4165,9 @@ begin
       (PChar(Dest) + (ByteLen div 2))^ := #$00;
     end;
   end else
+{$WARN SYMBOL_DEPRECATED OFF}
     inherited;
+{$WARN SYMBOL_DEPRECATED DEFAULT}
 end;
 {$endif DelphiXE3}
 
