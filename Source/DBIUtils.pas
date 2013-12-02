@@ -101,22 +101,41 @@ type
 
 
 type
-  TDBIOpenEditor = function (const AFileName: TFileName): Boolean of object;
+  TDBICommandCallBack = procedure (const Parameters: String) of object;
 
-  TDBIApplication = class(TPersistent)
+  TDBIApplication = class(TComponent)
+  private
+    FOnCommand: TDBICommandCallBack;
+
   protected
-    class function FindFormByClassName(Handle: HWnd; const AClassName: String): Boolean;
-    class function MainFormClassName: String;
-    class function UniqueID: LongInt;
+    procedure DoCommand(const Parameters: String);
+
+    function HookMessage(var Message: TMessage): Boolean;
+
+    class procedure HookApplication;
+    class function FindApplication(Handle: THandle): Boolean;
+    class function CallCommand(var Message: TMessage; CallBack: TDBICommandCallBack): Boolean; overload;
+    class function CallCommand: Boolean; overload;
 
   public
-    class function Activate(var Message: TMessage): Boolean;
-    class function FindApplication(var Message: TMessage): Boolean;
-    class function OpenEditor(var Message: TMessage; DoOpenEditor: TDBIOpenEditor): Boolean; overload;
-    class function OpenEditor: Boolean; overload;
-    class function RestoreApplication(var Message: TMessage): Boolean; overload;
-    class function SetupApplication(MainFormClass: TClass): Boolean; overload;
+    class function ApplicationExists: Boolean;
+    class function Instance: TDBIApplication;
+
+    property OnCommand: TDBICommandCallBack read FOnCommand write FOnCommand;
   end;
+
+
+type
+  ILocalInstance = interface(IUnknown)
+    function Add(Instance: TObject): TObject;
+  end;
+
+  TInstanceRecord = record
+    Guard: ILocalInstance;
+    Obj: TObject;
+  end;
+
+function Local(Instance: TObject): TInstanceRecord;
 
 
 // General Helper routines
@@ -135,6 +154,7 @@ function DBIForceDirectories(Dir: string): Boolean;
 function DBIGetUserName: WideString;
 function DBILocalHostName: String;
 function DBIModuleName: String;
+function DBIModuleDateTime(AModuleName: String = ''): TDateTime;
 function DBIStrDateStampToDateTime(PDateStamp: PAnsiChar): TDateTime;
 function DBIStrTimeStampToDateTime(PTimeStamp: PAnsiChar; const MilliSeconds: Boolean = True): TDateTime;
 function DBITempFolder: String;
@@ -168,84 +188,119 @@ var                           { Taken from Delphi System.pas }
 implementation
 
 uses
-  WinSock, Controls, Forms, DBIFileStreams, DBIXbaseConsts;
+  WinSock, Controls, Forms, Dialogs, Contnrs, DBIFileStreams, DBIXbaseConsts;
+
+
+{ ILocalInstance }
+
+type
+  TLocalInstance = class(TInterfacedObject, ILocalInstance)
+  private
+    FList: TObjectList;
+
+  public
+    constructor Create;
+    destructor Destroy; override;
+    function Add(Instance: TObject): TObject;
+  end;
+
+
+function TLocalInstance.Add(Instance: TObject): TObject;
+begin
+  FList.Add(Instance);
+
+  Result := Instance;
+end;
+
+constructor TLocalInstance.Create;
+begin
+  FList := TObjectList.Create;
+end;
+
+destructor TLocalInstance.Destroy;
+begin
+  FList.Free;
+  FList := nil;
+
+  inherited Destroy;
+end;
+
+function Local(Instance: TObject): TInstanceRecord;
+begin
+  if not Assigned(Result.Guard) then begin
+    Result.Guard := TLocalInstance.Create;
+  end;
+  Result.Obj := Result.Guard.Add(Instance);
+end;
+
+
+
 
 
 { TDBIApplication }
 
 const
-  WM_OPENEDITOR = WM_USER + 1;
-  WM_NOTEXISTS = WM_USER + 2;
-  WM_RESTOREAPP = WM_USER + 3;
+  WM_Call_Command = WM_USER + 1;
 
 var
-  WM_FINDINSTANCE: Cardinal;
-  _MainFormClass: TClass;
-  _PreviousWnd: HWnd = 0;
+  _ApplicationHandle: THandle = 0;
 
-  
-class function TDBIApplication.Activate(var Message: TMessage): Boolean;
+function EnumWindowsCallback(Handle: THandle; Param: LParam): Boolean; Stdcall;
 begin
-  Result := Message.Msg = CM_ACTIVATE;
-  if Result then begin
-    OpenEditor;
+  Result := (Handle <> Application.Handle) and not TDBIApplication.FindApplication(Handle);
+  if not Result then begin
+    _ApplicationHandle := Handle;
   end;
 end;
 
 
-class function TDBIApplication.FindApplication(var Message: TMessage): Boolean;
+class function TDBIApplication.ApplicationExists: Boolean;
 begin
-  Result := Message.Msg = WM_FINDINSTANCE;
+  Result :=
+    (CreateSemaphore(nil, 0, 1, PChar(Application.ExeName)) = 0) or
+    (GetLastError = Error_Already_Exists);
+
   if Result then begin
-    Message.Result := UniqueID;
-  end
+    SetWindowText(Application.Handle, PChar(Application.Title));
+
+    _ApplicationHandle := 0;
+
+    EnumWindows(@EnumWindowsCallback, 0);
+    Result := (_ApplicationHandle <> 0) and (_ApplicationHandle <> Application.Handle);
+
+    if Result then begin
+      PostMessage(_ApplicationHandle, WM_SYSCOMMAND, SC_RESTORE, 0);
+      SetForegroundWindow(_ApplicationHandle);
+
+      CallCommand;
+    end
+    else begin
+      HookApplication;
+    end;
+  end;
 end;
 
 
-class function TDBIApplication.FindFormByClassName(Handle: HWnd; const AClassName: String): Boolean;
-var
-  ClassName: array[0..31] of Char;
-
-begin
-  GetClassName(Handle, ClassName, SizeOf(ClassName));
-  Result := StrIComp(ClassName, PChar(AClassName)) = 0;
-  Result := Result and (SendMessage(Handle, WM_FindINSTANCE, 0, 0) = UniqueID);
-end;
-
-
-class function TDBIApplication.MainFormClassName: String;
-begin
-  Assert(Assigned(_MainFormClass));
-  
-  Result := _MainFormClass.ClassName;
-end;
-
-
-class function TDBIApplication.OpenEditor: Boolean;
+class function TDBIApplication.CallCommand: Boolean;
 var
   Atom: TAtom;
 
 begin
-  Result := _PreviousWnd <> 0;
-  if not Result then begin
-    _PreviousWnd := Application.MainForm.Handle;
-  end;
-
-  Result := ParamCount > 0;
+  Result := (ParamCount > 0) and  (_ApplicationHandle <> 0);
   if Result then begin
-    Atom := GlobalAddAtom(PChar(ParamStr(1)));
-    SendMessage(_PreviousWnd, WM_OPENEDITOR, Atom, 0);
+    Atom := GlobalAddAtom(PChar(CMDLine));
+    SendMessage(_ApplicationHandle, WM_Call_Command, Atom, 0);
     GlobalDeleteAtom(Atom);
   end;
 end;
 
 
-class function TDBIApplication.OpenEditor(var Message: TMessage; DoOpenEditor: TDBIOpenEditor): Boolean;
+class function TDBIApplication.CallCommand(var Message: TMessage; CallBack: TDBICommandCallBack): Boolean;
 var
   TempFileName: String;
 
 begin
-  Result := Message.Msg = WM_OPENEDITOR;
+  Result := Message.Msg = WM_Call_Command;
   if Result then begin
     SetLength(TempFileName, MAX_PATH);
     GlobalGetAtomName(TMessage(Message).WParam, PChar(TempFileName), MAX_PATH);
@@ -259,56 +314,58 @@ begin
       Application.BringToFront;
     end;
 
-    DoOpenEditor(TempFileName);
+    CallBack(TempFileName);
   end
 end;
 
 
-class function TDBIApplication.RestoreApplication(var Message: TMessage): Boolean;
+procedure TDBIApplication.DoCommand(const Parameters: String);
 begin
-  Result := Message.Msg = WM_RESTOREAPP;
-  if Result then begin
-    PostMessage(Application.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
+  if Assigned(FOnCommand) then begin
+    FOnCommand(Parameters);
+  end
+  else begin
+    ShowMessage(Parameters);
   end;
 end;
 
 
-function EnumWindowsCallback(Handle: HWnd; Param: LParam): Boolean; Stdcall;
+class function TDBIApplication.FindApplication(Handle: THandle): Boolean;
+var
+  WindowName: array[0..127] of Char;
+
 begin
-  Result := not TDBIApplication.FindFormByClassName(Handle, TDBIApplication.MainFormClassName);
-  if not Result then begin
-    _PreviousWnd := Handle;
-  end;
-end;
-
-
-class function TDBIApplication.SetupApplication(MainFormClass: TClass): Boolean;
-const
-  ErrorMessage = 'Application initialization failed to register window message for "%s"';
-  
-begin
-  _MainFormClass := MainFormClass;
-  _PreviousWnd := 0;
-
-  WM_FINDINSTANCE := RegisterWindowMessage(PChar(Application.Title));
-  if (WM_FINDINSTANCE = 0) then begin
-    raise Exception.CreateFmt(ErrorMessage, [Application.Title]);
-  end;
-
-  EnumWindows(@EnumWindowsCallback, 0);
-  Result := _PreviousWnd <> 0;
+  Windows.GetClassName(Handle, WindowName, SizeOf(WindowName));
+  Result := StrIComp(WindowName, PChar(Application.ClassName)) = 0;
 
   if Result then begin
-  	SetForegroundWindow(_PreviousWnd);
-    PostMessage(_PreviousWnd, WM_RESTOREAPP, 0, 0);
-    OpenEditor;
+    Windows.GetWindowText(Handle, WindowName, SizeOf(WindowName));
+    Result := StrIComp(WindowName, PChar(Application.Title)) = 0;
   end;
 end;
 
 
-class function TDBIApplication.UniqueID: LongInt;
+class procedure TDBIApplication.HookApplication;
 begin
-  Result := $75BCD15;
+  Application.HookMainWindow(Instance.HookMessage);
+end;
+
+
+function TDBIApplication.HookMessage(var Message: TMessage): Boolean;
+begin
+  Result := CallCommand(Message, DoCommand);
+end;
+
+
+var
+  _ApplicationInstance: TDBIApplication = nil;
+
+class function TDBIApplication.Instance: TDBIApplication;
+begin
+  if not Assigned(_ApplicationInstance) then begin
+    _ApplicationInstance := Self.Create(Application);
+  end;
+  Result := _ApplicationInstance;
 end;
 
 
@@ -738,6 +795,28 @@ begin
     Result := ChangeFileExt(ExtractFileName(ParamStr(0)), '');
   end;
 end;  { DBIModuleName }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 07/02/2003 12:40:17.<P>
+}
+function DBIModuleDateTime(AModuleName: String = ''): TDateTime;
+var
+  FHandle: Integer;
+
+begin
+  if (AModuleName = '') then begin
+    AModuleName := DBIModuleName;
+  end;
+
+  FHandle := FileOpen(AModuleName, fmOpenRead or fmShareDenyNone);
+  try
+    Result := FileDateToDateTime(FileGetDate(FHandle));
+  finally
+    FileClose(FHandle);
+  end;
+end;  { DBIModuleDateTime }
 
 
 type

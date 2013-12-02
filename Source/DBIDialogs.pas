@@ -33,13 +33,27 @@ uses
   StdCtrls, ExtCtrls, ComCtrls, DB, DBGrids;
 
 type
+  TDBICancelButton = class(TButton)
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+
+type
+  TDBIOKButton = class(TButton)
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+
+type
   TDBIMemo = class(TMemo)
   private
     FStartIndex: Integer;
     FEndIndex: Integer;
     FHighLightColor: TColor;
     FHighLightedText: String;
-    
+
     procedure WMLButtonDown(var Message: TWMLButtonDown); message WM_LBUTTONDOWN;
     procedure WMPaint(var Msg: TWMPaint); message WM_PAINT;
 
@@ -66,21 +80,38 @@ type
   private
     FButtonOK: TButton;
     FButtonCancel: TButton;
-    FPanel: TPanel;
+    FClient: TPanel;
+    FComment: TLabel;
+    FEdit: TEdit;
+    FFooter: TPanel;
+    FImage: TImage;
+    FListBox: TListBox;
+    FShape: TShape;
 
   protected
-    function GetButtonCancel: TButton;
-    function GetButtonOK: TButton;
-    function GetPanel: TPanel;
+    function GetButtonCancel: TButton; virtual;
+    function GetButtonOK: TButton; virtual;
+    function GetClient: TPanel; virtual;
+    function GetComment: TLabel; virtual;
+    function GetEdit: TEdit; virtual;
+    function GetFooter: TPanel; virtual;
+    function GetImage: TImage; virtual;
+    function GetListBox: TListBox; virtual;
+    function GetShape: TShape;
 
     property ButtonOK: TButton read GetButtonOK;
     property ButtonCancel: TButton read GetButtonCancel;
-    property Panel: TPanel read GetPanel;
+    property Client: TPanel read GetClient;
+    property Comment: TLabel read GetComment;
+    property Edit: TEdit read GetEdit;
+    property Footer: TPanel read GetFooter;
+    property Image: TImage read GetImage;
+    property ListBox: TListBox read GetListBox;
+    property Shape: TShape read GetShape;
 
   public
-    class function Build(AOwner: TComponent): TDBICustomDialog; virtual;
+    class function BuildDialog(AOwner: TComponent = nil): TDBICustomDialog; virtual; abstract;
 
-    function Execute: Boolean; virtual;
   end;
 
 
@@ -94,26 +125,20 @@ type
     function GetDBGrid: TDBGrid;
     function GetDataSource: TDataSource;
 
-  public
-    class function Dialog(AOwner: TComponent = nil): TDBICustomDialog;
-
-    property ButtonOK;
-    property ButtonCancel;
-    property DBGrid: TDBGrid read GetDBGrid;
     property DataSource: TDataSource read GetDataSource;
-    property Panel;
+    property DBGrid: TDBGrid read GetDBGrid;
+
+  public
+    class function BuildDialog(AOwner: TComponent = nil): TDBICustomDialog; override;
+    class function Execute(ADataset: TDataset; const ATitle: String = ''): Boolean;
+
  end;
 
 
 type
-  TDBIDialogListbox = class(TForm)
-  private
-    FListBox: TListBox;
-
-  protected
-    class function BuildDialog(const ATitle: String): TDBIDialogListbox; virtual;
-
-    property ListBox: TListBox read FListBox;
+  TDBIDialogListbox = class(TDBICustomDialog)
+  public
+    class function BuildDialog(AOwner: TComponent = nil): TDBICustomDialog; override;
 
   end;
 
@@ -121,32 +146,42 @@ type
 type
   TDBIDialogSelect = class(TDBIDialogListBox)
   public
-    class function Execute(Strings: TStrings; const ATitle: String = 'Select'): String;
+    class function Execute(Strings: TStrings; const ATitle: String = 'Select'): String; overload;
   end;
 
 
 type
-  TDBIDialogProgress = class(TCustomForm)
+  TDBIDialogProgress = class(TDBICustomDialog)
   private
-    FProgress: TProgressBar;
-    FText: String;
+    FBar: TProgressBar;
+    FCount: Integer;
+    FIndex: Integer;
+    FMessage: String;
+    FDelay: Integer;
 
   protected
     function GetCount: Integer;
     function GetProgressBar: TProgressBar;
-    function GetText: String;
+    function GetMessage: String;
+
+    procedure Idle;
 
     procedure SetCount(const Value: Integer);
-    procedure SetText(const Value: String);
+    procedure SetMessage(const Value: String);
 
   public
-    class function Dialog(AOwner: TComponent = nil): TDBIDialogProgress;
+    class function BuildDialog(AOwner: TComponent = nil): TDBICustomDialog; override;
+    class procedure Wait(Delay: Integer = 1000; Message: String = ''; Caption: String = '');
 
+    procedure First;
+    procedure Last;
     procedure Next;
 
+    property Bar: TProgressBar read GetProgressBar;
     property Count: Integer read GetCount write SetCount;
-    property Progress: TProgressBar read GetProgressBar;
-    property Caption: String read GetText write SetText;
+    property Delay: Integer read FDelay write FDelay default 0;
+    property Index: Integer read FIndex;
+    property Message: String read GetMessage write SetMessage;
 
   end;
 
@@ -155,79 +190,133 @@ implementation
 
 {. $R *.DFM}
 
+uses
+  DBIUTils;
+
 
 { TDBIDialogProgress }
 
-class function TDBIDialogProgress.Dialog(AOwner: TComponent = nil): TDBIDialogProgress;
+class function TDBIDialogProgress.BuildDialog(AOwner: TComponent = nil): TDBICustomDialog;
 begin
   Result := Self.CreateNew(AOwner);
-  Result.BorderStyle := bsNone;
+  Result.BorderStyle := bsDialog;
   Result.BorderIcons := [];
-  Result.BorderWidth := 2;
-  Result.Color := clDkGray;
+  Result.Color := clWindow;
   Result.FormStyle := fsStayOnTop;
   Result.Position := poScreenCenter;
-  Result.Progress.Style := pbstMarquee;
-  Result.Height := 45;
-  Result.Width := 400;
+  Result.Height := 130;
+  Result.Width := 450;
+
+  Result.Client.BorderWidth := 20;
+  Result.Image;
+  Result.Shape;
 end;
+
+
+procedure TDBIDialogProgress.First;
+begin
+  FIndex := 0;
+
+  Bar.Min := 0;
+  Bar.Max := 999;
+  Bar.Position := 0;
+
+  Idle;
+end;
+
 
 function TDBIDialogProgress.GetCount: Integer;
 begin
-  Result := Progress.Max+1;
+  Result := FCount;
 end;
+
 
 function TDBIDialogProgress.GetProgressBar: TProgressBar;
-var
-  Panel: TPanel;
-
 begin
-  if not Assigned(FProgress) then begin
-    Panel := TPanel.Create(Self);
-    Panel.Align := alClient;
-    Panel.BorderWidth := 10;
-    Panel.Color := clWindow;
-    Panel.Parent := Self;
-
-    FProgress := TProgressBar.Create(Self);
-    FProgress.Align := alClient;
-    FProgress.Parent := Panel;
+  if not Assigned(FBar) then begin
+    FBar := TProgressBar.Create(Self);
+    FBar.Align := alTop;
+    FBar.Parent := Client;
   end;
-  Result := FProgress;
+  Result := FBar;
 end;
 
-function TDBIDialogProgress.GetText: String;
+
+function TDBIDialogProgress.GetMessage: String;
 begin
-  Result := FText;
+  Result := FMessage;
 end;
 
-procedure TDBIDialogProgress.Next;
+
+procedure TDBIDialogProgress.Idle;
 begin
-  Progress.Position := Progress.Position + 1;
-
-  if (BorderStyle <> bsNone) then begin
-    inherited Caption := Format('%s  #%d of %d', [FText, Progress.Position, Progress.Max]);
-  end;
-end;
-
-procedure TDBIDialogProgress.SetCount(const Value: Integer);
-begin
-  Progress.Position := 0;
-  Progress.Max := Value-1;
-end;
-
-procedure TDBIDialogProgress.SetText(const Value: String);
-begin
-  FText := Value;
-
-  inherited Caption := FText;
-
-  if (BorderStyle = bsNone) then begin
-    BorderStyle := {bsToolWindow; //}bsDialog;
-    Height := Height + 28;
+  if Delay > 0 then begin
+    Sleep(Delay);
   end;
 
   Application.ProcessMessages;
+end;
+
+
+procedure TDBIDialogProgress.Last;
+begin
+  FIndex := FCount-1;
+
+  Bar.Max := 99;
+  Bar.Position := Bar.Max;
+
+  Idle;
+end;
+
+
+procedure TDBIDialogProgress.Next;
+begin
+  Inc(FIndex);
+  Bar.Position := (FIndex * Bar.Max) div FCount;
+
+  if (BorderStyle <> bsNone) then begin
+    Comment.Caption := Format('%s  #%d of %d', [Message, (FIndex * 100) div FCount, 100]);
+  end;
+
+  Idle;
+end;
+
+
+procedure TDBIDialogProgress.SetCount(const Value: Integer);
+begin
+  FCount := Value;
+
+  First;
+end;
+
+
+procedure TDBIDialogProgress.SetMessage(const Value: String);
+begin
+  FMessage := Value;
+end;
+
+
+class procedure TDBIDialogProgress.Wait(Delay: Integer = 1000; Message: String = ''; Caption: String = '');
+var
+  Dialog: TDBIDialogProgress;
+
+begin
+  if (Caption = '') then begin
+    Caption := Application.Title;
+  end;
+
+  Dialog := Local(TDBIDialogProgress.BuildDialog).Obj as TDBIDialogProgress;
+  Dialog.Show;
+  Dialog.Count := Delay div 10;
+  Dialog.Caption := Caption;
+  Dialog.Message := Message;
+  Dialog.Delay := 10;
+
+  Dialog.First;
+  while (Dialog.Index < Dialog.Count) do begin
+    Dialog.Next;
+  end;
+  Dialog.Last;
 end;
 
 
@@ -248,8 +337,9 @@ begin
   Result := '';
 
   if Assigned(Strings) and (Strings.Count > 0) then begin
-    Dialog := BuildDialog(ATitle) as Self;
+    Dialog := BuildDialog as Self;
     try
+      Dialog.Caption := Application.Title + ' - ' + ATitle;
       Dialog.Listbox.Items.Assign(Strings);
       Dialog.ListBox.Enabled := Strings.Count > 1;
       Dialog.ListBox.ItemIndex := ItemIndices[Dialog.ListBox.Enabled];
@@ -276,58 +366,21 @@ end;
 
 { TDBIDialogListbox }
 
-class function TDBIDialogListbox.BuildDialog(const ATitle: String): TDBIDialogListbox;
-  function BuildButton(AParent: TWinControl): TButton;
-  begin
-    Result := TButton.Create(AParent);
-    Result.Parent := AParent;
-    Result.Top := AParent.Constraints.MinHeight;
-    Result.Width := 75;
-    Result.Height := 25;
-    Result.Anchors := [akRight, akBottom];
-  end;
-
-var
-  Bevel: TBevel;
-  ButtonOK: TButton;
-  ButtonCancel: TButton;
-
+class function TDBIDialogListbox.BuildDialog(AOwner: TComponent = nil): TDBICustomDialog;
 begin
-  Result := Self.CreateNew(nil);
+  Result := Self.CreateNew(AOwner);
+  Result.Color := clWindow;
   Result.Width := 800;
   Result.Height := 180;
-  Result.BorderWidth := 10;
-  Result.Caption := ATitle;
   Result.Constraints.MinHeight := Result.Height - 24;
   Result.Constraints.MinWidth := 400;
   Result.Position := poScreenCenter;
 
-  Bevel := TBevel.Create(Result);
-  Bevel.Parent := Result;
-  Bevel.Height := 35;
-  Bevel.Align := alBottom;
-  Bevel.Shape := bsSpacer;
-
-  Result.FListBox := TListBox.Create(Result);
-  Result.FListBox.Parent := Result;
-  Result.FListBox.Align := alClient;
-  Result.FListBox.BorderStyle := bsNone;
-  Result.FListBox.Font.Charset := ANSI_CHARSET;
-  Result.FListBox.Font.Color := clWindowText;
-  Result.FListBox.Font.Height := -13;
-  Result.FListBox.Font.Name := 'Lucida Console';
-
-  ButtonOK := BuildButton(Result);
-  ButtonOK.Left := 535;
-  ButtonOK.Caption := 'OK';
-  ButtonOK.Default := True;
-  ButtonOK.ModalResult := mrOK;
-
-  ButtonCancel := BuildButton(Result);
-  ButtonCancel.Left := 620;
-  ButtonCancel.Cancel := True;
-  ButtonCancel.Caption := 'Cancel';
-  ButtonCancel.ModalResult := mrCancel;
+  Result.Client.BorderWidth := 10;
+  Result.Shape;
+  Result.ButtonOK;
+  Result.ButtonCancel;
+  Result.ListBox;
 end;
 
 
@@ -336,9 +389,30 @@ end;
 
 { TDBIDialogDataset }
 
-class function TDBIDialogDataset.Dialog(AOwner: TComponent = nil): TDBICustomDialog;
+class function TDBIDialogDataset.BuildDialog(AOwner: TComponent = nil): TDBICustomDialog;
 begin
-  Result := Self.Build(AOwner) as Self;
+  Result := Self.CreateNew(AOwner);
+  Result.Position := poScreenCenter;
+  Result.Height := 400;
+  Result.Width := 600;
+
+  Result.Client.BorderWidth := 5;
+  Result.Shape;
+  Result.ButtonOK;
+  Result.ButtonCancel;
+end;
+
+
+class function TDBIDialogDataset.Execute(ADataset: TDataset; const ATitle: String = ''): Boolean;
+var
+  Dialog: TDBIDialogDataset;
+
+begin
+  Dialog := Local(BuildDialog).Obj as Self;
+  Dialog.Caption := Application.Title + ' - ' + ATitle;
+  Dialog.DataSource.Dataset := ADataset;
+
+  Result := Dialog.ShowModal = mrOK;
 end;
 
 
@@ -372,39 +446,13 @@ end;
 
 
 
-{ TDBIDialogDataset }
-
-class function TDBICustomDialog.Build(AOwner: TComponent): TDBICustomDialog;
-begin
-  Result := Self.CreateNew(AOwner);
-  Result.BorderWidth := 5;
-  Result.Position := poScreenCenter;
-  Result.Height := 250;
-  Result.Width := 250;
-  Result.ButtonOK;
-  Result.ButtonCancel;
-end;
-
-
-function TDBICustomDialog.Execute: Boolean;
-begin
-  Result := ShowModal = mrOK;
-
-  Application.ProcessMessages;
-end;
-
+{ TDBICustomDialog }
 
 function TDBICustomDialog.GetButtonCancel: TButton;
 begin
   if not Assigned(FButtonCancel) then begin
-    FButtonCancel := TButton.Create(Self);
-    FButtonCancel.Anchors := [akTop, akRight];
-    FButtonCancel.Cancel := True;
-    FButtonCancel.Caption := 'Cancel';
-    FButtonCancel.ModalResult := mrCancel;
-    FButtonCancel.Left := 105;
-    FButtonCancel.Parent := Panel;
-    FButtonCancel.Top := 5;
+    FButtonCancel := TDBICancelButton.Create(Self);
+    FButtonCancel.Parent := Footer;
   end;
   Result := FButtonCancel;
 end;
@@ -413,30 +461,116 @@ end;
 function TDBICustomDialog.GetButtonOK: TButton;
 begin
   if not Assigned(FButtonOK) then begin
-    FButtonOK := TButton.Create(Self);
-    FButtonOK.Anchors := [akTop, akRight];
-    FButtonOK.Caption := 'OK';
-    FButtonOK.Default := True;
-    FButtonOK.ModalResult := mrOK;
-    FButtonOK.Left := 20;
-    FButtonOK.Parent := Panel;
-    FButtonOK.Top := 5;
+    FButtonOK := TDBIOKButton.Create(Self);
+    FButtonOK.Parent := Footer;
   end;
   Result := FButtonOK;
 end;
 
 
-function TDBICustomDialog.GetPanel: TPanel;
+function TDBICustomDialog.GetClient: TPanel;
 begin
-  if not Assigned(FPanel) then begin
-    FPanel := TPanel.Create(Self);
-    FPanel.Align := alBottom;
-    FPanel.BevelOuter := bvNone;
-    FPanel.Caption := '';
-    FPanel.Height := 31;
-    FPanel.Parent := Self;
+  if not Assigned(FClient) then begin
+    FClient := TPanel.Create(Self);
+    FClient.ParentBackground := False;
+    FClient.Align := alClient;
+    FClient.BevelOuter := bvNone;
+    FClient.Caption := '';
+    FClient.Color := clWindow;
+    FClient.Parent := Self;
   end;
-  Result := FPanel;
+  Result := FClient;
+end;
+
+
+function TDBICustomDialog.GetComment: TLabel;
+begin
+  if not Assigned(FComment) then begin
+    FComment := TLabel.Create(Self);
+    FComment.Parent := Footer;
+    FComment.Font.Color := clHotLight;
+    FComment.Top := 12;
+    FComment.Left := 15;
+  end;
+  Result := FComment;
+end;
+
+
+function TDBICustomDialog.GetEdit: TEdit;
+begin
+  if not Assigned(FEdit) then begin
+    FEdit := TEdit.Create(Self);
+    FEdit.Align := alNone;
+    FEdit.Parent := Footer;
+    FEdit.Font.Charset := ANSI_CHARSET;
+    FEdit.Font.Color := clWindowText;
+    FEdit.Font.Height := -13;
+    FEdit.Font.Name := 'Lucida Console';
+    FEdit.Left := 150;
+    FEdit.Top := 10;
+  end;
+  Result := FEdit;
+end;
+
+
+function TDBICustomDialog.GetListBox: TListBox;
+begin
+  if not Assigned(FListBox) then begin
+    FListBox := TListBox.Create(Self);
+    FListBox.Parent := Client;
+    FListBox.Align := alClient;
+    FListBox.BorderStyle := bsNone;
+    FListBox.Font.Charset := ANSI_CHARSET;
+    FListBox.Font.Color := clWindowText;
+    FListBox.Font.Height := -13;
+    FListBox.Font.Name := 'Lucida Console';
+  end;
+  Result := FListBox;
+end;
+
+
+function TDBICustomDialog.GetFooter: TPanel;
+begin
+  if not Assigned(FFooter) then begin
+    FFooter := TPanel.Create(Self);
+    FFooter.ParentBackground := False;
+    FFooter.Align := alBottom;
+    FFooter.BevelOuter := bvNone;
+    FFooter.Caption := '';
+    FFooter.Color := clBtnFace;
+    FFooter.Height := 41;
+    FFooter.Parent := Self;
+  end;
+  Result := FFooter;
+end;
+
+
+function TDBICustomDialog.GetImage: TImage;
+begin
+  if not Assigned(FImage) then begin
+    FImage := TImage.Create(Self);
+    FImage.Align := alLeft;
+    FImage.Parent := Self;
+    FImage.Center := True;
+    FImage.Picture.Assign(Application.Icon);
+    FImage.Width := FImage.Picture.Width * 2;
+  end;
+  Result := FImage;
+end;
+
+
+function TDBICustomDialog.GetShape: TShape;
+begin
+  if not Assigned(FShape) then begin
+    FShape := TShape.Create(Self);
+    FShape.Align := alTop;
+    FShape.Parent := Footer;
+    FShape.Pen.Color := cl3DLight;
+    FShape.Brush.Color := cl3DLight;
+    FShape.Height := 1;
+    FShape.Top := 0;
+  end;
+  Result := FShape;
 end;
 
 
@@ -623,5 +757,48 @@ begin
 end;
 
 
+
+
+
+{ TDBICancelButton }
+
+constructor TDBICancelButton.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+
+  Anchors := [akTop, akRight];
+  Cancel := True;
+  Caption := 'Cancel';
+  Height := 23;
+  Left := 100;
+  Top := 9;
+  Width := 75;
+  ModalResult := mrCancel;
+end;
+
+
+
+
+
+{ TDBIOKButton }
+
+constructor TDBIOKButton.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+
+  Anchors := [akTop, akRight];
+  Caption := 'OK';
+  Default := True;
+  Height := 23;
+  Left := 15;
+  Top := 9;
+  Width := 75;
+  ModalResult := mrOk;
+end;
+
+
+
+initialization
+  Classes.RegisterClasses([TButton, TEdit, TLabel, TListBox, TPanel, TProgressBar, TImage, TShape]);
 
 end.

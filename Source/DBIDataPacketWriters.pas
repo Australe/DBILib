@@ -101,8 +101,11 @@ const
   cdsFieldGraphic =          'bin.hex" SUBTYPE="Graphics';
   cdsFieldFmtMemo =          'bin.hex" SUBTYPE="Formatted';
   cdsFieldOle =              'bin.hex" SUBTYPE="Ole';
+  cdsFieldHidden =           '" hidden="true';
   cdsFieldReadOnly =         '" readonly="true';
   cdsFieldRequired =         '" required="true';
+  cdsFieldLink =             '" link="true';
+  cdsFieldUnNamed =          '" unnamed="true';
   cdsFieldSubTypeWideText =  '" SUBTYPE="WideText';
 
 
@@ -198,6 +201,7 @@ var
   Index: Integer;
 
 begin
+
   // Write cds Data to stream
   WriteStr(cdsRowDataHeader);
 
@@ -205,12 +209,12 @@ begin
     WriteStr('<ROW ');
 
     for Index := 0 to Dataset.Fields.Count-1 do begin
-{##JVR
-      // if the field is readonly then skip
-      if (db.faReadOnly in Dataset.FieldDefs[Index].Attributes) then begin
+      // if the field is unnamed then I can't save it, so skip it
+      // Yay, now it's a feaure - prevent specific fields from saving
+      if (db.faUnNamed in Dataset.FieldDefs[Index].Attributes) then begin
         Continue;
       end;
-//}
+
       WriteField(Dataset.Fields[Index]);
     end;
 
@@ -358,8 +362,20 @@ begin
       db.ftDBaseOle:    WriteStr(cdsFieldOle);
     end;  { case }
 
-    if (DB.faReadOnly in FieldDefs[Index].Attributes) then begin
+    if (db.faHiddenCol in FieldDefs[Index].Attributes) then begin
+      WriteStr(cdsFieldHidden);
+    end;
+
+    if (db.faReadOnly in FieldDefs[Index].Attributes) then begin
       WriteStr(cdsFieldReadOnly);
+    end;
+
+    if (db.faLink in FieldDefs[Index].Attributes) then begin
+      WriteStr(cdsFieldLink);
+    end;
+
+    if (db.faUnNamed in FieldDefs[Index].Attributes) then begin
+      WriteStr(cdsFieldUnNamed);
     end;
 
     if FieldDefs[Index].Required then begin

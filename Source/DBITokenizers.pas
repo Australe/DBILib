@@ -899,7 +899,7 @@ begin
     PSymbolData := @(FLexerSymbolMap[PSymbol1Data.TokenType, PSymbol2Data^.TokenType]);
 
     // Are these two symbols mapped to a TokenType?
-    if (PSymbolData^.TokenType <> Tok_None) then begin
+    if not  (PSymbolData^.TokenType in [Tok_Unassigned, Tok_None]) then begin //##JVR(PSymbolData^.TokenType <> Tok_None) then begin
       Token.AddChar(LexerChar);
 
       GetChar;
@@ -907,7 +907,8 @@ begin
 
     // Otherwise the token is a single character symbol
     else begin
-      PSymbolData := PSymbol1Data;
+//##JVR      PSymbolData := PSymbol1Data;
+      PSymbolData := @(FLexerSymbolMap[PSymbol1Data.TokenType, Tok_Unassigned]);
     end;
   end;
 

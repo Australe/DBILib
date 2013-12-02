@@ -39,10 +39,14 @@ type
     xmlAttribute_AttrName,
     xmlAttribute_Change_Log,
     xmlAttribute_FieldType,
+    xmlAttribute_Hidden,
+    xmlAttribute_Link,
+    xmlAttribute_ReadOnly,
     xmlAttribute_Required,
     xmlAttribute_Width,
     xmlAttribute_RowState,
-    xmlAttribute_SubType
+    xmlAttribute_SubType,
+    xmlAttribute_UnNamed
     );
 
   TDBIXmlElement = (
@@ -78,7 +82,8 @@ type
       const FieldName: String;
       const DataType: TFieldType;
       const FieldSize: Word;
-      const Required: String
+      const Required: String;
+      const Attributes: TFieldAttributes
       ): Boolean; virtual;
       
     function CreateRow(RowData: TStrings): Boolean; virtual;
@@ -127,7 +132,8 @@ type
       const FieldName: String;
       const DataType: TFieldType;
       const FieldSize: Word;
-      const Required: String
+      const Required: String;
+      const Attributes: TFieldAttributes
       ): Boolean; override;
 
     function CreateRow(RowData: TStrings): Boolean; override;
@@ -153,20 +159,22 @@ function TDBIXmlDataPacketReader.CreateColumn(
   const FieldName: String;
   const DataType: TFieldType;
   const FieldSize: Word;
-  const Required: String
+  const Required: String;
+  const Attributes: TFieldAttributes
   ): Boolean;
 var
   FieldDef: TFieldDef;
 
 begin
 {$ifdef DebugInfo}
-  inherited CreateColumn(FieldName, DataType, FieldSize, Required);
+  inherited CreateColumn(FieldName, DataType, FieldSize, Required, Attributes);
 {$endif}
   FieldDef := FieldDefs.AddFieldDef;
   FieldDef.Name := FieldName;
   FieldDef.DataType := DataType;
   FieldDef.Size := FieldSize;
   FieldDef.Required := False;
+  FieldDef.Attributes := Attributes;
 
   Result := FieldDefs.Count > 0;
 end;
@@ -272,7 +280,8 @@ function TDBICustomDataPacketReader.CreateColumn(
   const FieldName: String;
   const DataType: TFieldType;
   const FieldSize: Word;
-  const Required: String
+  const Required: String;
+  const Attributes: TFieldAttributes
   ): Boolean;
 const
   FieldInfo = 'FieldName = %s, FieldType = %d, FieldSize = %d, Required = %s';
@@ -557,28 +566,34 @@ var
   DataType: TFieldType;
   FieldSize: Word;
   Required: String;
+  Attributes: TFieldAttributes;
 
 begin
   Result := Context = xmlElement_Field;
   if Result then begin
+    Attributes := [];
+    DataType := ftUnknown;
     FieldName := '';
     FieldSize := 0;
-    DataType := ftUnknown;
-
+    Required := '';
     while Result and not Input.Eof do begin
       case Attribute of
         xmlAttribute_AttrName: FieldName := String(GetAttributeValue);
         xmlAttribute_FieldType: DataType := GetDataType;
+        xmlAttribute_Hidden: Include(Attributes, faHiddenCol);
+        xmlAttribute_Link: Include(Attributes, faLink);
+        xmlAttribute_ReadOnly: Include(Attributes, faReadOnly);
         xmlAttribute_Required: Required := String(GetAttributeValue);
         xmlAttribute_Width: FieldSize := GetFieldSize;
         xmlAttribute_SubType: DataType := GetFieldSubType(DataType);
+        xmlAttribute_UnNamed: Include(Attributes, faUnNamed);
       end;
 
       Input.NextToken;
       Result := (tsXmlElement in Input.Token.TokenStatus);
     end;
-    
-    Result := CreateColumn(FieldName, DataType, FieldSize, Required);
+
+    Result := CreateColumn(FieldName, DataType, FieldSize, Required, Attributes);
   end;
 end;
 
