@@ -231,7 +231,7 @@ begin
         if (FieldData = '') then begin
           Field.Clear;
         end
-        else begin
+        else if not Field.ReadOnly then begin
           case Field.DataType of
             ftBoolean: Field.AsBoolean := CompareText('True', FieldData) = 0;
             ftCurrency: Field.AsFloat := StrToFloat(String(FieldData));
