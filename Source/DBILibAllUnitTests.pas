@@ -8,6 +8,7 @@ uses
   DBIConst,
   DBICustomListDataConnections,
   DBICustomStreamDataConnections,
+  DBIDataPacketReaders,
   DBIDataPacketWriters,
   DBIDataset,
   DBIFileStreams,
@@ -27,7 +28,6 @@ uses
   DBIXBaseConsts,
   DBIXBaseDataConnections,
   DBIXbaseDatasets,
-  DBIXmlDataConnections,
   DBIXmlUtils,
 
   // Tests

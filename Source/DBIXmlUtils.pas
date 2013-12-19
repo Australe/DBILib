@@ -39,11 +39,17 @@ procedure LoadFromXmlStream(Stream: TStream; ADataset: TDBIDataset);
 procedure SaveToXmlFile(const AFileName: TFilename; ADataSet: TDataSet);
 procedure SaveToXmlStream(Stream: TStream; DataSet: TDataSet);
 
+procedure LoadFromCSVFile(const AFileName: TFileName; ADataset: TDBIDataset);
+procedure LoadFromCSVStream(Stream: TStream; ADataset: TDBIDataset);
+
+procedure SaveToCSVFile(const AFileName: TFilename; ADataSet: TDataSet);
+procedure SaveToCSVStream(Stream: TStream; DataSet: TDataSet);
+
 
 implementation
 
 uses
-  DBIConst, DBIFileStreams, DBIXmlDataConnections, DBIDataPacketWriters;
+  DBIConst, DBIFileStreams, DBIDataPacketReaders, DBIDataPacketWriters;
 
 
 // _____________________________________________________________________________
@@ -168,6 +174,116 @@ begin
     Writer.Free;
   end;
 end;  { SaveToXmlStream }
+
+
+
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 02/06/2013 10:58:11 - Initial code.<br>
+}
+procedure LoadFromCSVFile(const AFileName: TFileName; ADataSet: TDBIDataset);
+var
+  Connection: TDBICSVDataPacketReader;
+
+begin
+  Assert(ADataset.Active, 'Create and open the dataset before atempting to import a CSV file');
+
+  Connection := TDBICSVDataPacketReader.Create;
+  try
+//##JVR    ADataSet.Close;
+
+    Connection.Input.LoadFromFile(AFileName);
+    Connection.Dataset := ADataSet;
+    Connection.GetMetaData;
+
+//##JVR    ADataSet.CreateDataset;
+    Connection.GetData;
+
+    ADataSet.First;
+  finally
+    Connection.Free;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 14/06/2013 13:09:43 - Initial code.<br>
+}
+procedure LoadFromCSVStream(Stream: TStream; ADataSet: TDBIDataset);
+var
+  Connection: TDBICSVDataPacketReader;
+
+begin
+  Assert(ADataset.Active, 'Create and open the dataset before atempting to import a CSV stream');
+
+  Connection := TDBICSVDataPacketReader.Create;
+  try
+//##JVR    ADataSet.Close;
+
+    Connection.Input.LoadFromStream(Stream);
+    Connection.Dataset := ADataSet;
+    Connection.GetMetaData;
+
+//##JVR    ADataSet.CreateDataset;
+    Connection.GetData;
+
+    ADataSet.First;
+  finally
+    Connection.Free;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 27/02/2001 18:12:53.<P>
+}
+procedure SaveToCSVFile(const AFileName: TFileName; ADataSet: TDataSet);
+const
+  Caller = 'SaveToCSVFile';
+
+var
+  LocalStream: TStream;
+
+begin
+  try
+    LocalStream := TDBIFileStream.Create(
+      AFileName, fmCreate, DBIPageBufferSize, [{No Options}]);
+    try
+      SaveToCSVStream(LocalStream, ADataSet);
+    finally
+      LocalStream.Free;
+    end;
+  except
+    Error(nil, Caller, '245', 'Failed to save dataset as CSV', []);
+  end;
+end;  { SaveToCSVFile }
+
+
+// _____________________________________________________________________________
+{**
+  Convert a dataset to a CDS style CSV stream.
+
+  Jvr - 28/02/2001 12:33:01 - Specified a fixed date format for streaming.<BR>
+  Jvr - 15/05/2001 13:04:12 - Fixed the currency symbol problem with
+                              Currency fields.<P>
+}
+procedure SaveToCSVStream(Stream: TStream; DataSet: TDataSet);
+var
+  Writer: TDBICSVDataPacketWriter;
+
+begin
+  Writer := TDBICSVDataPacketWriter.Create;
+  try
+    Writer.Dataset := Dataset;
+    Writer.SaveToStream(Stream);
+  finally
+    Writer.Free;
+  end;
+end;  { SaveToCSVStream }
 
 
 end.

@@ -2460,7 +2460,7 @@ const
                 'Delphi feature: The open Tools API.';
       Details:  'LEARN TO BUILD DELPHI 3 Wizards.'#13 +
                 'A collection of classes for interfacing with Delphi''s IDE, ' +
-                'the Open Tools API allows developers to program in ' +
+                'the "Open Tools API" allows developers to program in ' +
                 'a familiar language, namely Object Pascal. The Open Tools API ' +
                 'enables Delphi developers to create wizards to automate the ' +
                 'creation of new forms and projects, create new items in ' +
@@ -3503,6 +3503,7 @@ begin
     AFileName := ChangeFileExt(ChangeFileExt(AFileName, '') + 'b', '.dbf');
     ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
     ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfCDS);
+    ODS.SaveToFile(ChangeFileExt(AFileName, '.csv'), dfCSV);
     ODS.Close;
   finally
     ODS.Free;
@@ -3546,7 +3547,7 @@ begin
   end;
 
 
-  // Load the table into a ObjectListDataset from an Xml file and verify data
+  // Load the table into a ObjectListDataset from an XML file and verify data
   ODS := TDBIObjectListDataset.Create(nil);
   try
     ODS.ClassTypeName := Self.ClassName;
@@ -3558,6 +3559,22 @@ begin
     ODS.Free;
   end;
 
+//(*##JVR
+  // Load the table into a ObjectListDataset from an CSV file and verify data
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := Self.ClassName;
+    CreateFieldDefs(ODS);
+    ODS.CreateDataset;
+
+    ODS.LoadFromFile(ChangeFileExt(AFileName, '.csv'));
+    AssertValues(ODS);
+
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+//*)
 
   // Load the table into a ClientDataset and verify data
 {$ifndef fpc}

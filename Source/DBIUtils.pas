@@ -336,7 +336,7 @@ var
 
 begin
   Windows.GetClassName(Handle, WindowName, SizeOf(WindowName));
-  Result := StrIComp(WindowName, PChar(Application.ClassName)) = 0;
+  Result := StrIComp(WindowName, PChar(String(Application.ClassName))) = 0;
 
   if Result then begin
     Windows.GetWindowText(Handle, WindowName, SizeOf(WindowName));

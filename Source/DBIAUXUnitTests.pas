@@ -32,7 +32,7 @@ interface
 
 uses
   Classes, SysUtils, DB, DBIStrings, DBIObjectListDatasets, DBIUnitTests,
-  DBITokenizers,  DBIXmlDataConnections,
+  DBITokenizers, DBIDataPacketReaders,
 {$ifndef fpc}
   DBClient, DSIntf,
   {$ifdef omTesting}
@@ -122,7 +122,7 @@ end;
 
 function TDBICustomReader.GetLexerClassType: TDBICustomAsciiLexerClass;
 begin
-  Result := TDBICustomDataPacketLexer;
+  Result := TDBIXMLDataPacketLexer;
 end;
 
 

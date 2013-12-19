@@ -19,7 +19,8 @@
   ______________________________________________________________________________
   REL | DATE/TIME           | WHO | DETAILS
   1.0 | 27/02/2001 17:47:37 | Jvr | Initial Release
-  1.0 | 12/07/2013 08:04:02 | Jvr | Refactored
+  1.1 | 12/07/2013 08:04:02 | Jvr | Refactored
+  1.2 | 17/12/2013 08:04:02 | Jvr | Added CSV support
   ______________________________________________________________________________
 }
 
@@ -55,7 +56,8 @@ type
   end;
 
 
-  TDBIXmlDataPacketWriter = class(TDBICustomDataPacketWriter)
+type
+  TDBIXMLDataPacketWriter = class(TDBICustomDataPacketWriter)
   protected
     function EncodeFieldData(FieldData: String): String;
     function EncodeFieldName(FieldName: String): String;
@@ -70,7 +72,26 @@ type
 
   public
     property Dataset;
-        
+
+  end;
+
+
+type
+  TDBICSVDataPacketWriter = class(TDBICustomDataPacketWriter)
+  protected
+    function EncodeFieldData(FieldData: String): String;
+
+    procedure SetDataset(Value: TDataset); override;
+
+    procedure WriteData; override;
+    procedure WriteField(Field: TField);
+    procedure WriteHeader; override;
+    procedure WriteMetaData; override;
+    procedure WriteFooter; override;
+
+  public
+    property Dataset;
+
   end;
 
 
@@ -115,14 +136,134 @@ uses
   TypInfo, DBIConst, DBIIntfConsts, DBIFileStreams;
 
 
-
-{ TDBIXmlDataPacketWriter }
-
 const
   // Date Conversion format
   cdsDateFormat = 'YYYYMMDD';
   cdsDateTimeFormat = 'YYYYMMDD HH:NN:SSZZZ';
 
+
+{ TDBICSVDataPacketWriter }
+
+function TDBICSVDataPacketWriter.EncodeFieldData(FieldData: String): String;
+const
+  Quotes = #34;
+
+begin
+  // Delimit field and esacpe double quotes
+  Result := Quotes + StringReplace(FieldData, Quotes, Quotes+Quotes, [rfReplaceAll]) + Quotes;
+end;
+
+
+procedure TDBICSVDataPacketWriter.SetDataset(Value: TDataset);
+begin
+  inherited SetDataset(Value);
+
+  if Assigned(Value) then begin
+    WriteDataset;
+  end
+  else begin
+    Stream.Size := 0;
+  end;
+end;
+
+
+procedure TDBICSVDataPacketWriter.WriteData;
+const
+  FieldSeparator: array[Boolean] of String = (#44, #13);
+
+var
+  Index: Integer;
+
+begin
+
+  // Write CSV Data to stream
+  while not Dataset.Eof do begin
+    for Index := 0 to Dataset.Fields.Count-1 do begin
+      // if the field is unnamed then I can't save it, so skip it
+      // Yay, now it's a feaure - prevent specific fields from saving
+      if (db.faUnNamed in Dataset.FieldDefs[Index].Attributes) then begin
+        Continue;
+      end;
+
+      WriteField(Dataset.Fields[Index]);
+      WriteStr(FieldSeparator[Index = Dataset.FieldCount-1]);
+    end;
+
+    Dataset.Next;
+  end;
+end;
+
+
+procedure TDBICSVDataPacketWriter.WriteField(Field: TField);
+var
+  FieldData: String;
+  FieldText: String;
+  DisplayText: String;
+
+begin
+  case Field.DataType of
+    ftDate: begin
+      FieldData := FormatDateTime(cdsDateFormat, Field.AsDateTime);
+    end;
+
+    ftDateTime: begin
+      FieldData := FormatDateTime(cdsDateTimeFormat, Field.AsDateTime);
+    end;
+
+  // All other fieldtypes
+  else
+    FieldData := Field.AsString;
+  end;
+
+
+  // DisplayText in Currency fields are preceded by the currency symbol
+  DisplayText := Field.DisplayText;
+
+  if (Field.DataType = ftCurrency) then begin
+    FieldText := CurrToStr(Field.AsCurrency);
+  end
+  else begin
+    FieldText := FieldData;
+  end;
+
+  WriteStr(EncodeFieldData(FieldData));
+end;
+
+
+procedure TDBICSVDataPacketWriter.WriteFooter;
+begin
+  //##NOP
+end;
+
+
+procedure TDBICSVDataPacketWriter.WriteHeader;
+begin
+  //##NOP
+end;
+
+
+procedure TDBICSVDataPacketWriter.WriteMetaData;
+const
+  FieldDelimiter = #34;
+  FieldSeparator: array[Boolean] of String = (#44, #13);
+
+var
+  FieldIndex: Integer;
+
+begin
+  for FieldIndex := 0 to Dataset.FieldDefs.Count-1 do begin
+    WriteStr(FieldDelimiter + Dataset.FieldDefs[FieldIndex].Name + FieldDelimiter);
+    WriteStr(FieldSeparator[FieldIndex = Dataset.FieldDefs.Count-1]);
+  end;
+end;
+
+
+
+
+
+{ TDBIXmlDataPacketWriter }
+
+const
   // Tags
   cdsVersion =               '<?xml version="1.0" standalone="yes"?>  ';
   cdsDataPacketHeader =      '<DATAPACKET Version="2.0">';
@@ -141,7 +282,7 @@ const
   Jvr - 28/02/2001 13:16:54 - Converts a fieldname with illegal fieldname chars
                               to a valid fieldname.<P>
 }
-function TDBIXmlDataPacketWriter.EncodeFieldName(FieldName: String): String;
+function TDBIXMLDataPacketWriter.EncodeFieldName(FieldName: String): String;
 var
   Index: Integer;
 
@@ -160,26 +301,29 @@ end;
 {**
   Jvr - 28/02/2001 13:14:59 - Converts field contents to single line of XML.<P>
 }
-function TDBIXmlDataPacketWriter.EncodeFieldData(FieldData: String): String;
+function TDBIXMLDataPacketWriter.EncodeFieldData(FieldData: String): String;
 var
   Index: Integer;
 
 begin
   for Index := Length(FieldData) downto 1 do begin
-    if (Ord(FieldData[Index]) in [1..31, 34, 38..39]) then begin
+    if (Ord(FieldData[Index]) in [1..31, 38..39]) then begin
       Insert('&#' + IntToStr(Ord(FieldData[Index])) + ';', FieldData, Index+1);
+      Delete(FieldData, Index ,1)
+    end
+    else if (FieldData[Index] = #34) then begin
+      Insert('&quot;', FieldData, Index+1);
       Delete(FieldData, Index ,1)
     end
     else if (FieldData[Index] = #0) then begin
       Delete(FieldData, Index, 1);
     end;
   end;
-
-  Result := FieldData
+  Result := FieldData;
 end;
 
 
-procedure TDBIXmlDataPacketWriter.SetDataset(Value: TDataset);
+procedure TDBIXMLDataPacketWriter.SetDataset(Value: TDataset);
 begin
   inherited SetDataset(Value);
 
@@ -196,7 +340,7 @@ end;
 {**
   Jvr - 09/02/2001 15:46:30.<P>
 }
-procedure TDBIXmlDataPacketWriter.WriteData;
+procedure TDBIXMLDataPacketWriter.WriteData;
 var
   Index: Integer;
 
@@ -226,7 +370,7 @@ begin
 end;
 
 
-procedure TDBIXmlDataPacketWriter.WriteField(Field: TField);
+procedure TDBIXMLDataPacketWriter.WriteField(Field: TField);
 var
   FieldData: String;
   FieldText: String;
@@ -267,13 +411,13 @@ begin
 end;
 
 
-procedure TDBIXmlDataPacketWriter.WriteFooter;
+procedure TDBIXMLDataPacketWriter.WriteFooter;
 begin
   WriteStr(cdsDataPacketFooter);
 end;
 
 
-procedure TDBIXmlDataPacketWriter.WriteHeader;
+procedure TDBIXMLDataPacketWriter.WriteHeader;
 begin
   WriteStr(cdsVersion);
   WriteStr(cdsDataPacketHeader);
@@ -288,7 +432,7 @@ end;
   Jvr - 15/05/2001 13:04:12 - Fixed the currency symbol problem with
                               Currency fields.<P>
 }
-procedure TDBIXmlDataPacketWriter.WriteMetaData;
+procedure TDBIXMLDataPacketWriter.WriteMetaData;
 var
   Index: Integer;
   FieldDefs: TFieldDefs;

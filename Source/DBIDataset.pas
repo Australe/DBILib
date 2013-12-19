@@ -3084,6 +3084,9 @@ begin
   if (Format = dfCDS) then begin
     DBIXmlUtils.LoadFromXmlStream(AStream, Self);
   end
+  else if (Format = dfCSV) then begin
+    DBIXmlUtils.LoadFromCSVStream(AStream, Self);
+  end
   else begin
     Close;
     DataConnection.LoadFromStream(AStream, Format);
@@ -3105,6 +3108,9 @@ procedure TDBIDataset.SaveToStream(AStream: TStream; Format: TDBIDataFormat);
 begin
   if (Format = dfCDS) then begin
     DBIXmlUtils.SaveToXmlStream(AStream, Self);
+  end
+  else if (Format = dfCSV) then begin
+    DBIXmlUtils.SaveToCSVStream(AStream, Self);
   end
   else if (Format = dfPSV) then begin
     DBIUtils.SaveToPsvStream(AStream, Self);
@@ -3134,6 +3140,9 @@ begin
 
   if (Format = dfCDS) then begin
     DBIXmlUtils.LoadFromXmlFile(AFileName, Self);
+  end
+  else if (Format = dfCSV) then begin
+    DBIXmlUtils.LoadFromCSVFile(AFileName, Self);
   end
   else begin
     Close;
@@ -3171,6 +3180,9 @@ begin
       if (Format = dfCDS) then begin
         DBIXmlUtils.SaveToXmlFile(AFileName, DBCursor);
       end
+      else if (Format = dfCSV) then begin
+        DBIXmlUtils.SaveToCSVFile(AFileName, DBCursor);
+      end
       else if (Format = dfPSV) then begin
         DBIUtils.SavetoPsvFile(AFileName, DBCursor);
       end
@@ -3207,8 +3219,12 @@ begin
     Result := dfCDS
   else if (Extension = '.cds') then
     Result := dfCDS
+  else if (Extension = '.csv') then
+    Result := dfCSV
   else if (Extension = '.psv') then
     Result := dfPSV
+  else if (Extension = '.txt') then
+    Result := dfCSV
   else
     Result := dfXbasePlus;
 end;
