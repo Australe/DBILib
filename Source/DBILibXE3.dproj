@@ -75,7 +75,7 @@
         <DCCReference Include="DBIXbaseConsts.pas"/>
         <DCCReference Include="DBIXbaseDataConnections.pas"/>
         <DCCReference Include="DBIXbaseDatasets.pas"/>
-        <DCCReference Include="DBIXmlDataConnections.pas"/>
+        <DCCReference Include="DBIDataPacketReaders.pas"/>
         <DCCReference Include="DBIDataPacketWriters.pas"/>
         <DCCReference Include="DBITokenizerConsts.pas"/>
         <DCCReference Include="DBITokenizers.pas"/>
