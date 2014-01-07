@@ -36,7 +36,7 @@ interface
 {$endif}
 
 uses
-  Windows, Messages, Classes, SysUtils, TypInfo, DB, DBIConst, DBIIntfConsts;
+  Windows, Messages, Classes, Forms, SysUtils, TypInfo, DB, DBIConst, DBIIntfConsts;
 
 const
   OpenModes: array[Boolean] of Word = (fmOpenReadWrite, fmOpenRead);
@@ -119,6 +119,7 @@ type
 
   public
     class function ApplicationExists: Boolean;
+    class procedure BringToFront(Form: TCustomForm);
     class function Instance: TDBIApplication;
 
     property OnCommand: TDBICommandCallBack read FOnCommand write FOnCommand;
@@ -188,7 +189,7 @@ var                           { Taken from Delphi System.pas }
 implementation
 
 uses
-  WinSock, Controls, Forms, Dialogs, Contnrs, DBIFileStreams, DBIXbaseConsts;
+  WinSock, Controls, Dialogs, Contnrs, DBIFileStreams, DBIXbaseConsts;
 
 
 { ILocalInstance }
@@ -269,15 +270,19 @@ begin
     Result := (_ApplicationHandle <> 0) and (_ApplicationHandle <> Application.Handle);
 
     if Result then begin
-      PostMessage(_ApplicationHandle, WM_SYSCOMMAND, SC_RESTORE, 0);
-      SetForegroundWindow(_ApplicationHandle);
-
       CallCommand;
     end
     else begin
       HookApplication;
     end;
   end;
+end;
+
+
+class procedure TDBIApplication.BringToFront(Form: TCustomForm);
+begin
+  PostMessage(Form.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
+  SetForegroundWindow(Form.Handle);
 end;
 
 
@@ -305,14 +310,6 @@ begin
     SetLength(TempFileName, MAX_PATH);
     GlobalGetAtomName(TMessage(Message).WParam, PChar(TempFileName), MAX_PATH);
     SetLength(TempFileName, StrLen(PChar(TempFileName)));
-
-    // Set focus to this application
-    if IsIconic(Application.Handle) then begin
-      Application.Restore;
-    end
-    else begin
-      Application.BringToFront;
-    end;
 
     CallBack(TempFileName);
   end

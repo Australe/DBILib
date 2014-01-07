@@ -202,31 +202,35 @@ var
 begin
   Result := '';
 
-  Input.Take(Tok_Quotes);
+  // If the value is "Delimited by Quotes", then we have a value
+  // Otherwise it is assumed that we have NO Value
+  if Input.Token.TokenType = Tok_Quotes then begin
+    Input.Take(Tok_Quotes);
 
-  if Input.Token.TokenType <> Tok_Quotes then begin
-    Data := TStringStream.Create('');
-    try
-      while not Input.Eof do begin
-        Data.WriteString(String(Input.Token.AsString));
+    if Input.Token.TokenType <> Tok_Quotes then begin
+      Data := TStringStream.Create('');
+      try
+        while not Input.Eof do begin
+          Data.WriteString(String(Input.Token.AsString));
 
-        Input.NextToken;
-        if Input.Token.TokenType = Tok_Quotes then begin
           Input.NextToken;
-          if Input.Token.TokenType <> Tok_Quotes then begin
-            PushChar(Chr_Quotes);
-            Break;
+          if Input.Token.TokenType = Tok_Quotes then begin
+            Input.NextToken;
+            if Input.Token.TokenType <> Tok_Quotes then begin
+              PushChar(Chr_Quotes);
+              Break;
+            end;
           end;
         end;
+
+        Result := AnsiString(Data.DataString);
+      finally
+        Data.Free;
       end;
-
-      Result := AnsiString(Data.DataString);
-    finally
-      Data.Free;
     end;
-  end;
 
-  Input.Take(Tok_Quotes);
+    Input.Take(Tok_Quotes);
+  end;
 end;
 
 
