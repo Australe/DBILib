@@ -110,6 +110,8 @@ type
   protected
     procedure DoCommand(const Parameters: String);
 
+    class function ForceForeGroundWindow(Handle: THandle): Boolean;
+
     function HookMessage(var Message: TMessage): Boolean;
 
     class procedure HookApplication;
@@ -119,8 +121,9 @@ type
 
   public
     class function ApplicationExists: Boolean;
-    class procedure BringToFront(Form: TCustomForm);
+    class function ForceToFront(Form: TCustomForm): Boolean;
     class function Instance: TDBIApplication;
+    class procedure UnHookApplication;
 
     property OnCommand: TDBICommandCallBack read FOnCommand write FOnCommand;
   end;
@@ -279,13 +282,6 @@ begin
 end;
 
 
-class procedure TDBIApplication.BringToFront(Form: TCustomForm);
-begin
-  PostMessage(Form.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
-  SetForegroundWindow(Form.Handle);
-end;
-
-
 class function TDBIApplication.CallCommand: Boolean;
 var
   Atom: TAtom;
@@ -342,6 +338,36 @@ begin
 end;
 
 
+class function TDBIApplication.ForceForeGroundWindow(Handle: THandle): Boolean;
+var
+  ForeGround: THandle;
+  ForeGroundThreadID, ThisThreadID: LongWord;
+
+begin
+  Foreground := GetForeGroundWindow;
+
+  Result := ForeGround = Handle;
+  if not Result then begin
+    ForeGroundThreadID := GetWindowThreadProcessId(ForeGround, nil);
+    ThisThreadID := GetWindowThreadProcessId(Handle, nil);
+    if AttachThreadInput(ThisThreadID, ForeGroundThreadID, True) then begin
+      BringWindowToTop(Handle);
+      SetForegroundWindow(Handle);
+      AttachThreadInput(ThisThreadID, ForeGroundThreadID, False);
+      Result := GetForeGroundWindow = Handle;
+    end;
+  end;
+end;
+
+
+class function TDBIApplication.ForceToFront(Form: TCustomForm): Boolean;
+begin
+  PostMessage(Form.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
+
+  Result := ForceForeGroundWindow(Form.Handle);
+end;
+
+
 class procedure TDBIApplication.HookApplication;
 begin
   Application.HookMainWindow(Instance.HookMessage);
@@ -363,6 +389,14 @@ begin
     _ApplicationInstance := Self.Create(Application);
   end;
   Result := _ApplicationInstance;
+end;
+
+
+class procedure TDBIApplication.UnhookApplication;
+begin
+  if (_ApplicationHandle <> 0) then begin
+    Application.UnhookMainWindow(Instance.HookMessage);
+  end;
 end;
 
 
@@ -1147,5 +1181,10 @@ begin
   end;
 end;  { SaveAsPsvFile }
 
+
+initialization
+
+finalization
+  TDBIApplication.UnhookApplication;
 
 end.

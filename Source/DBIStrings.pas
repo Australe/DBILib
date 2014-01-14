@@ -263,10 +263,23 @@ type
   PDBIDataElement = PAnsiChar;
 {$endif}
 
-  function DBIAnsiCompareStr(const S1, S2: TDBIString): Integer;
-  function DBIAnsiCompareText(const S1, S2: TDBIString): Integer;
-  function DBIAnsiPos(const Substr, S: TDBIString): Integer;
-  function DBIAnsiQuotedStr(const S: TDBIString; Quote: TDBIChar): TDBIString;
+type
+  TDBIAnsi = class
+  public
+    class function CompareStr(const S1, S2: AnsiString): Integer;
+    class function CompareText(const S1, S2: AnsiString): Integer;
+
+    class function Pos(const Substr, S: AnsiString): Integer;
+    class function LowerCase(const S: AnsiString): AnsiString;
+    class function UpperCase(const S: AnsiString): AnsiString;
+
+    class function QuotedStr(const S: AnsiString; Quote: AnsiChar): AnsiString;
+    class function StringReplace(const S, OldPattern, NewPattern: AnsiString; Flags: TReplaceFlags): AnsiString;
+
+    class function TrimRight(const S: AnsiString): AnsiString;
+  end;
+
+
 
   function DBIAnsiGetStrProp(Instance: TObject; const PropName: String): AnsiString;
   procedure DBIAnsiSetStrProp(Instance: TObject; const PropName: String; const AData: AnsiString);
@@ -277,14 +290,12 @@ type
   function DBICharNext(var P: PDBIChar): PDBIChar;
   function DBICompareStr(const S1, S2: TDBIString): Integer; assembler;
   function DBICompareText(const S1, S2: TDBIString): Integer; assembler;
-  function DBILowerCase(const S: AnsiString): AnsiString;
   function DBIStrLen(const Str: PDBIDataElement): Cardinal; assembler;
-  function DBITrimRight(const S: TDBIString): TDBIString;
 
   function DBITextToFloat(Buffer: PDBIDataElement; var Value; ValueType: TFloatValue): Boolean; assembler;
   function DBIFloatToStr(Value: Extended): TDBIString;
 
-  
+
 { TypInfo Helpers }
 
 {$ifndef DELPHI6}
@@ -578,13 +589,13 @@ end;
 
 
 
-{ Ansi String Helpers }
+{ TDBIAnsi }
 
-function DBIAnsiCompareStr(const S1, S2: TDBIString): Integer;
+class function TDBIAnsi.CompareStr(const S1, S2: AnsiString): Integer;
 begin
 {$IFDEF MSWINDOWS}
-  Result := CompareStringA(LOCALE_USER_DEFAULT, 0, PDBIChar(S1), Length(S1),
-    PDBIChar(S2), Length(S2)) - 2;
+  Result := CompareStringA(LOCALE_USER_DEFAULT, 0, PAnsiChar(S1), Length(S1),
+    PAnsiChar(S2), Length(S2)) - 2;
 {$ENDIF}
 {$IFDEF LINUX}
   // glibc 2.1.2 / 2.1.3 implementations of strcoll() and strxfrm()
@@ -596,11 +607,11 @@ begin
 end;
 
 
-function DBIAnsiCompareText(const S1, S2: TDBIString): Integer;
+class function TDBIAnsi.CompareText(const S1, S2: AnsiString): Integer;
 begin
 {$IFDEF MSWINDOWS}
-  Result := CompareStringA(LOCALE_USER_DEFAULT, NORM_IGNORECASE, PDBIChar(S1),
-    Length(S1), PDBIChar(S2), Length(S2)) - 2;
+  Result := CompareStringA(LOCALE_USER_DEFAULT, NORM_IGNORECASE, PAnsiChar(S1),
+    Length(S1), PAnsiChar(S2), Length(S2)) - 2;
 {$ENDIF}
 {$IFDEF LINUX}
   Result := WideCompareText(S1, S2);
@@ -608,24 +619,34 @@ begin
 end;
 
 
-function DBIAnsiPos(const Substr, S: TDBIString): Integer;
+class function TDBIAnsi.Pos(const Substr, S: AnsiString): Integer;
 var
-  P: PDBIChar;
+  P: PAnsiChar;
 begin
   Result := 0;
-  P := AnsiStrPos(PDBIChar(S), PDBIChar(SubStr));
+  P := AnsiStrPos(PAnsiChar(S), PAnsiChar(SubStr));
   if P <> nil then
-    Result := Integer(P - PDBIChar(S)) + 1;
+    Result := Integer(P) - Integer(PAnsiChar(S)) + 1;
 end;
 
 
-function DBIAnsiQuotedStr(const S: TDBIString; Quote: TDBIChar): TDBIString;
+class function TDBIAnsi.LowerCase(const S: AnsiString): AnsiString;
 var
-  P, Src, Dest: PDBIChar;
+  Len: Integer;
+begin
+  Len := Length(S);
+  SetString(Result, PAnsiChar(S), Len);
+  if Len > 0 then CharLowerBuff(Pointer(Result), Len);
+end;
+
+
+class function TDBIAnsi.QuotedStr(const S: AnsiString; Quote: AnsiChar): AnsiString;
+var
+  P, Src, Dest: PAnsiChar;
   AddCount: Integer;
 begin
   AddCount := 0;
-  P := AnsiStrScan(PDBIChar(S), Quote);
+  P := AnsiStrScan(PAnsiChar(S), Quote);
   while P <> nil do
   begin
     Inc(P);
@@ -638,10 +659,10 @@ begin
     Exit;
   end;
   SetLength(Result, Length(S) + AddCount + 2);
-  Dest := PDBIChar(Result);
+  Dest := PAnsiChar(Result);
   Dest^ := Quote;
   Inc(Dest);
-  Src := PDBIChar(S);
+  Src := PAnsiChar(S);
   P := AnsiStrScan(Src, Quote);
   repeat
     Inc(P);
@@ -658,6 +679,68 @@ begin
   Dest^ := Quote;
 end;
 
+
+class function TDBIAnsi.StringReplace(const S, OldPattern, NewPattern: AnsiString; Flags: TReplaceFlags): AnsiString;
+var
+  SearchStr, Patt, NewStr: AnsiString;
+  Offset: Integer;
+begin
+  if rfIgnoreCase in Flags then
+  begin
+    SearchStr := TDBIAnsi.UpperCase(S);
+    Patt := TDBIAnsi.UpperCase(OldPattern);
+  end else
+  begin
+    SearchStr := S;
+    Patt := OldPattern;
+  end;
+  NewStr := S;
+  Result := '';
+  while SearchStr <> '' do
+  begin
+    Offset := TDBIAnsi.Pos(Patt, SearchStr);
+    if Offset = 0 then
+    begin
+      Result := Result + NewStr;
+      Break;
+    end;
+    Result := Result + Copy(NewStr, 1, Offset - 1) + NewPattern;
+    NewStr := Copy(NewStr, Offset + Length(OldPattern), MaxInt);
+    if not (rfReplaceAll in Flags) then
+    begin
+      Result := Result + NewStr;
+      Break;
+    end;
+    SearchStr := Copy(SearchStr, Offset + Length(Patt), MaxInt);
+  end;
+end;
+
+
+class function TDBIAnsi.TrimRight(const S: AnsiString): AnsiString;
+var
+  I: Integer;
+begin
+  Result := S;
+  I := Length(Result);
+  while (I > 0) and (Result[I] <= ' ') do Dec(I);
+  SetLength(Result, I);
+end;
+
+
+class function TDBIAnsi.UpperCase(const S: AnsiString): AnsiString;
+var
+  Len: Integer;
+begin
+  Len := Length(S);
+  SetString(Result, PAnsiChar(S), Len);
+  if Len > 0 then CharUpperBuff(Pointer(Result), Len);
+end;
+
+
+
+
+
+{ Ansi String Helpers }
 
 function DBICharNext(var P: PDBIChar): PDBIChar;
 begin
@@ -802,28 +885,6 @@ asm
 end;
 
 
-function DBILowerCase(const S: AnsiString): AnsiString;
-var
-  Ch: AnsiChar;
-  L: Integer;
-  Source, Dest: PAnsiChar;
-begin
-  L := Length(S);
-  SetLength(Result, L);
-  Source := Pointer(S);
-  Dest := Pointer(Result);
-  while L <> 0 do
-  begin
-    Ch := Source^;
-    if (Ch >= 'A') and (Ch <= 'Z') then Inc(Ch, 32);
-    Dest^ := Ch;
-    Inc(Source);
-    Inc(Dest);
-    Dec(L);
-  end;
-end;
-
-
 function DBIStrLen(const Str: PDBIDataElement): Cardinal; assembler;
 asm
         MOV     EDX,EDI
@@ -834,17 +895,6 @@ asm
         MOV     EAX,0FFFFFFFEH
         SUB     EAX,ECX
         MOV     EDI,EDX
-end;
-
-
-function DBITrimRight(const S: TDBIString): TDBIString;
-var
-  I: Integer;
-begin
-  Result := S;
-  I := Length(Result);
-  while (I > 0) and (Result[I] <= ' ') do Dec(I);
-  SetLength(Result, I); //##JVR := Copy(S, 1, I);
 end;
 
 
@@ -1228,7 +1278,7 @@ var
   P: Integer;
 begin
   Result := S;
-  P := DBIAnsiPos(NameValueSeparator, Result);
+  P := TDBIAnsi.Pos(NameValueSeparator, Result);
   if P <> 0 then
     SetLength(Result, P-1) else
     SetLength(Result, 0);
@@ -1285,7 +1335,7 @@ begin
       {$ELSE}
         Inc(P);
       {$ENDIF}
-      if (P^ <> #0) then S := DBIAnsiQuotedStr(S, QuoteChar);
+      if (P^ <> #0) then S := TDBIAnsi.QuotedStr(S, QuoteChar);
       Result := Result + S + Delimiter;
     end;
     System.Delete(Result, Length(Result), 1);
@@ -1367,7 +1417,7 @@ begin
   for Result := 0 to GetCount - 1 do
   begin
     S := Get(Result);
-    P := DBIAnsiPos(NameValueSeparator, S);
+    P := TDBIAnsi.Pos(NameValueSeparator, S);
     if (P <> 0) and (CompareStrings(Copy(S, 1, P - 1), Name) = 0) then Exit;
   end;
   Result := -1;
@@ -1714,7 +1764,7 @@ end;
 
 function TDBIStrings.CompareStrings(const S1, S2: TDBIString): Integer;
 begin
-  Result := DBIAnsiCompareText(S1, S2);
+  Result := TDBIAnsi.CompareText(S1, S2);
 end;
 
 function TDBIStrings.GetNameValueSeparator: TDBIChar;
@@ -2021,9 +2071,9 @@ end;
 function TDBIStringList.CompareStrings(const S1, S2: TDBIString): Integer;
 begin
   if CaseSensitive then
-    Result := DBIAnsiCompareStr(S1, S2)
+    Result := TDBIAnsi.CompareStr(S1, S2)
   else
-    Result := DBIAnsiCompareText(S1, S2);
+    Result := TDBIAnsi.CompareText(S1, S2);
 end;
 
 procedure TDBIStringList.SetCaseSensitive(const Value: Boolean);

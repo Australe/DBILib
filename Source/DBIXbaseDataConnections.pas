@@ -2603,7 +2603,7 @@ begin
   Move(RecordBuffer, TDBIRecordBuffer(Result)^, FFields[FieldNo].FieldSize[0]);
 
   // Check to see if the field is blank
-  Result := DBITrimRight(Result);
+  Result := TDBIAnsi.TrimRight(Result);
   HasValidData := Result <> '';
 end;  { GetFieldAsString }
 
