@@ -31,8 +31,6 @@ interface
 
 {$I DBICompilers.inc}
 
-{. $define _USE_BLOB_OBJECT_ True}
-
 uses
   Classes, SysUtils, Windows, Contnrs, TypInfo, DB, DBIConst, DBIInterfaces,
   DBIIntfConsts, DBIStrings;
@@ -68,7 +66,7 @@ type
       const AOwnsData: Boolean
       );
     destructor Destroy; override;
-{//##BLOB}    function Read(var Buffer; Count: Integer): Integer;
+//##BLOB}    function Read(var Buffer; Count: Integer): Integer;
 
     property AsString: TDBIString read GetAsString;
   end;  { TDBIBlob }
@@ -362,7 +360,7 @@ begin
   end;
 end;  { GetAsString }
 
-//(*##BLOB
+(*##BLOB
 // _____________________________________________________________________________
 {**
   Jvr - 03/05/2002 14:21:52.<P>
@@ -1345,14 +1343,8 @@ const
   ErrMsg = 'Invalid Object DataType "%s" for Field: %ss';
 
 var
-  PropKind: TTypeKind;
-  PropObject: TObject;
   DataString: TDBIString;
   DataSize: Integer;
-
-{$ifdef _BLOB_OBJECT_}
-  Position: Integer;
-{$endif}
 
 begin
   Result :=False;
@@ -1360,33 +1352,15 @@ begin
   Assert(Assigned(DataObject));
 
   try
-    PropKind := TDBIPropType.Check(DataObject, FieldName, tkStringTypes + [tkClass]);
+    TDBIPropType.Check(DataObject, FieldName, tkStringTypes + [tkClass]);
 
-    if (PropKind <> tkClass) then begin
-      DataString := TDBIString(GetStrProp(DataObject, FieldName));
-    end
-    else begin
-      PropObject := GetObjectProp(DataObject, FieldName, TStrings);
-      if Assigned(PropObject) then begin
-        DataString := TDBIString((PropObject as TStrings).Text);
-      end
-      else begin
-        Error(nil, Caller, '1420', ErrMsg, [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind)), FieldName]);
-      end;
-    end;
-
+    DataString := DBIAnsiGetStringProp(DataObject, FieldName);
     DataSize := Length(DataString);
     PInteger(FieldBuffer)^ := 0;
 
-    // If there is no data then indicate this in the FieldBuffer & return value
+    // Specify the data size in the FieldBuffer, Result = True if data exists
     if (DataSize > 0) then begin
-//##BLOB
-{$ifndef _USE_BLOB_OBJECT_}
       PInteger(FieldBuffer)^ := IndexOfItem(DataObject) + 1;
-{$else}
-      PInteger(FieldBuffer)^ :=
-        FBlobData.Add(TDBIBlob.Create(PDBIChar(DataString), DataSize, PropKind = tkClass)) + 1;
-{$endif}
     end;
 
     Result := PInteger(FieldBuffer)^ > 0;
@@ -2235,44 +2209,27 @@ const
   Caller = 'GetBlob';
 
 var
-{$ifndef _USE_BLOB_OBJECT_}
   BlobText: AnsiString;
   DataObject: TObject;
-{$else}
-  BlobIndex: Integer;
-{$endif}
 
 begin
   // Get the BlobIndex using the Position which is One Based (0=Blank)
-//##BLOB
-{$ifndef _USE_BLOB_OBJECT_}
   Assert( (Position > 0) and (Position <= LongWord(GetRecordCount(0))) );
-{$else}
-  BlobIndex := Position - 1;
-  Assert((Position > 0) and (BlobIndex < FBlobData.Count));
-{$endif}
 
   try
     // If PData parameter is nil, then only return the Size value
     // indicating the size of the data
-//##BLOB
-{$ifndef _USE_BLOB_OBJECT_}
     DataObject := GetItem(Position-1);
 
     Assert(Assigned(DataObject));
     Assert(Integer(FieldNo) < Length(FieldProps));
 
-    BlobText := DBIAnsiGetStringProperty(DataObject, GetFieldName(FieldNo));
+    BlobText := DBIAnsiGetStringProp(DataObject, GetFieldName(FieldNo));
 
     Size := Length(BlobText);
     if Assigned(PData) and (Size > 0) then begin
       Move(PAnsiChar(BlobText)^, PData^, Size);
     end;
-
-{$else}
-    Size := (FBlobData[BlobIndex] as TDBIBlob).Read(PData^, Size);
-
-{$endif}
 
   except
     on E: Exception do

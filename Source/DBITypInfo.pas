@@ -105,7 +105,7 @@ type
 
   procedure DBIGetPropertyList(ClassInfo: PTypeInfo; List: TList);
 
-  function DBIAnsiGetStringProperty(Instance: TObject; const PropName: String): AnsiString;
+  function DBIAnsiGetStringProp(Instance: TObject; const PropName: String): AnsiString;
   function DBIAnsiGetStrProp(Instance: TObject; const PropName: String): AnsiString;
   procedure DBIAnsiSetStrProp(Instance: TObject; const PropName: String; const AData: AnsiString);
 
@@ -290,7 +290,7 @@ begin
 end;  { DBIGetPropertyList }
 
 
-function DBIAnsiGetStringProperty(Instance: TObject; const PropName: String): AnsiString;
+function DBIAnsiGetStringProp(Instance: TObject; const PropName: String): AnsiString;
 const
   Caller = 'DBIAnsiGetStringProperty';
 
