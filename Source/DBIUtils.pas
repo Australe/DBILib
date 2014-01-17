@@ -36,7 +36,7 @@ interface
 {$endif}
 
 uses
-  Windows, Messages, Classes, Forms, SysUtils, TypInfo, DB, DBIConst, DBIIntfConsts;
+  Windows, Messages, Classes, Forms, SysUtils, DB, DBIConst, DBIIntfConsts;
 
 const
   OpenModes: array[Boolean] of Word = (fmOpenReadWrite, fmOpenRead);
@@ -152,7 +152,6 @@ procedure DBIDebug(
   Args: array of const
   );
 
-procedure DBIGetPropertyList(ClassInfo: PTypeInfo; List: TList);
 function DBIFileFind(const PathName, FileMask: TFileName; Results: TStrings): Boolean;
 function DBIForceDirectories(Dir: string): Boolean;
 function DBIGetUserName: WideString;
@@ -171,8 +170,6 @@ function FileIsReadOnly(const FileName: string): Boolean;
 {$ifdef fpc}
 function GetEnvironmentVariable(lpName: PChar; lpBuffer: PChar; nSize: Cardinal): LongWord;
 {$endif}
-
-function GetFieldTypeName(const DataType: TFieldType): String;
 
 procedure SaveToPsvStream(Stream: TStream; DataSet: TDataSet);
 procedure SaveToPsvFile(const AFileName: String; ADataSet: TDataSet);
@@ -289,8 +286,8 @@ var
 begin
   Result := (ParamCount > 0) and  (_ApplicationHandle <> 0);
   if Result then begin
-    Atom := GlobalAddAtom(PChar(CMDLine));
-    SendMessage(_ApplicationHandle, WM_Call_Command, Atom, 0);
+    Atom := Windows.GlobalAddAtom(PChar(CMDLine));
+    Windows.SendMessage(_ApplicationHandle, WM_Call_Command, Atom, 0);
     GlobalDeleteAtom(Atom);
   end;
 end;
@@ -304,7 +301,7 @@ begin
   Result := Message.Msg = WM_Call_Command;
   if Result then begin
     SetLength(TempFileName, MAX_PATH);
-    GlobalGetAtomName(TMessage(Message).WParam, PChar(TempFileName), MAX_PATH);
+    Windows.GlobalGetAtomName(TMessage(Message).WParam, PChar(TempFileName), MAX_PATH);
     SetLength(TempFileName, StrLen(PChar(TempFileName)));
 
     CallBack(TempFileName);
@@ -344,17 +341,17 @@ var
   ForeGroundThreadID, ThisThreadID: LongWord;
 
 begin
-  Foreground := GetForeGroundWindow;
+  Foreground := Windows.GetForeGroundWindow;
 
   Result := ForeGround = Handle;
   if not Result then begin
-    ForeGroundThreadID := GetWindowThreadProcessId(ForeGround, nil);
-    ThisThreadID := GetWindowThreadProcessId(Handle, nil);
-    if AttachThreadInput(ThisThreadID, ForeGroundThreadID, True) then begin
-      BringWindowToTop(Handle);
-      SetForegroundWindow(Handle);
-      AttachThreadInput(ThisThreadID, ForeGroundThreadID, False);
-      Result := GetForeGroundWindow = Handle;
+    ForeGroundThreadID := Windows.GetWindowThreadProcessId(ForeGround, nil);
+    ThisThreadID := Windows.GetWindowThreadProcessId(Handle, nil);
+    if Windows.AttachThreadInput(ThisThreadID, ForeGroundThreadID, True) then begin
+      Windows.BringWindowToTop(Handle);
+      Windows.SetForegroundWindow(Handle);
+      Windows.AttachThreadInput(ThisThreadID, ForeGroundThreadID, False);
+      Result := Windows.GetForeGroundWindow = Handle;
     end;
   end;
 end;
@@ -362,8 +359,6 @@ end;
 
 class function TDBIApplication.ForceToFront(Form: TCustomForm): Boolean;
 begin
-  PostMessage(Form.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
-
   Result := ForceForeGroundWindow(Form.Handle);
 end;
 
@@ -730,41 +725,6 @@ end;
 
 // _____________________________________________________________________________
 {**
-  Jvr - 08/05/2002 13:16:58.<P>
-}
-procedure DBIGetPropertyList(ClassInfo: PTypeInfo; List: TList);
-var
-  Index, PropCount: Integer;
-  PropList: PPropList;
-
-begin
-  if not Assigned(ClassInfo) then begin
-    raise Exception.Create(
-      'No Runtime class information available for this class "' +
-      '!'#13 +
-      'Make sure your class is derived from TPersistent or that {$M+} is used.'#13 +
-      'Watch out for forward declarations!'
-    );
-  end;
-
-  PropCount := GetTypeData(ClassInfo)^.PropCount;
-  if PropCount > 0 then begin
-    GetMem(PropList, PropCount * SizeOf(Pointer));
-    try
-      GetPropInfos(ClassInfo, PropList);
-      List.Count := PropCount;
-      for Index := 0 to Pred(PropCount) do begin
-        List.Items[Index] := PropList[Index];
-      end;
-    finally
-      FreeMem(PropList);
-    end;
-  end;
-end;  { DBIGetPropertyList }
-
-
-// _____________________________________________________________________________
-{**
   Jvr - 04/09/2002 13:52:42.<P>
 }
 function DBIGetUserName: WideString;
@@ -982,15 +942,6 @@ begin
   Result := (GetFileAttributes(PAnsiChar(FileName)) and FILE_ATTRIBUTE_READONLY) <> 0;
 end;
 {$endif}
-
-// _____________________________________________________________________________
-{**
-  Jvr - 21/02/2013 14:30:11 - Moved from DBIConst<P>
-}
-function GetFieldTypeName(const DataType: TFieldType): String;
-begin
-  Result := GetEnumName(TypeInfo(TFieldType), Ord(DataType));
-end;
 
 {$ifdef fpc}
 // _____________________________________________________________________________

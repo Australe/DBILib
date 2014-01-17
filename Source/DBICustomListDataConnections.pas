@@ -31,8 +31,10 @@ interface
 
 {$I DBICompilers.inc}
 
+{. $define _USE_BLOB_OBJECT_ True}
+
 uses
-  Classes, SysUtils, TypInfo, Windows, Contnrs, DB, DBIConst, DBIInterfaces,
+  Classes, SysUtils, Windows, Contnrs, TypInfo, DB, DBIConst, DBIInterfaces,
   DBIIntfConsts, DBIStrings;
 
 type
@@ -66,15 +68,13 @@ type
       const AOwnsData: Boolean
       );
     destructor Destroy; override;
-    function Read(var Buffer; Count: Integer): Integer;
+{//##BLOB}    function Read(var Buffer; Count: Integer): Integer;
 
     property AsString: TDBIString read GetAsString;
   end;  { TDBIBlob }
 
 
 type
-  TDBITypeKinds = Set of TTypeKind;
-  
   TDBICustomListDataConnection = class(TDBIDataConnection)
   private
     FBlobData: TObjectList;
@@ -170,12 +170,6 @@ type
     procedure SetActive(const Value: Boolean); override;
     procedure DataEvent(DataObject: TObject; Event: TDBIObjectDataEvent); virtual;
 
-    function IsFieldKindOf(
-      DataObject: TObject;
-      const FieldName: TDBIFieldName;
-      ValidKinds: TDBITypeKinds
-      ): Boolean;
-
     procedure LoadFromXBaseFile(const AFileName: TFileName);
     procedure LoadFromXBaseStream(AStream: TStream);
     
@@ -183,9 +177,6 @@ type
 
     property BlobData: TObjectList read FBlobData;
 
-  public
-    class function GetTypeData(PropInfo: PPropInfo): PTypeData;
-    
   public
     constructor Create(AOwner: TObject); override;
     constructor CreateEmbedded(
@@ -297,17 +288,9 @@ uses
   Consts,
 {$endif}
   Dialogs,
+  DBITypInfo,
   DBIXbaseDataConnections,
   DBIUtils;
-
-
-// TTypeKind Aliases
-const
-{$ifdef fpc}
-  tkBoolean = tkBool;
-{$else}
-  tkBoolean = tkEnumeration;
-{$endif}
 
 
 type
@@ -379,7 +362,7 @@ begin
   end;
 end;  { GetAsString }
 
-
+//(*##BLOB
 // _____________________________________________________________________________
 {**
   Jvr - 03/05/2002 14:21:52.<P>
@@ -398,7 +381,7 @@ begin
     Move(FData^, Buffer, Result);
   end;
 end;
-
+//*)
 
 
 
@@ -519,19 +502,6 @@ begin
   Error(nil, 'IndexOfItem', '435',
     'IndexOfItem has NOT been implemented in the derived class!', []);
 end;  { IndexOfItem }
-
-
-function TDBICustomListDataConnection.IsFieldKindOf(
-  DataObject: TObject;
-  const FieldName: TDBIFieldName;
-  ValidKinds: TDBITypeKinds
-  ): Boolean;
-var
-  FieldKind: TTypeKind;
-begin
-  FieldKind := TypInfo.PropType(DataObject, FieldName);
-  Result :=  FieldKind in ValidKinds;
-end;
 
 
 // _____________________________________________________________________________
@@ -1051,7 +1021,7 @@ var
 
 begin
   // Field has no value - blank
-  Result := IsFieldkindOf(DataObject, FieldName, [tkInteger, tkInt64, tkEnumeration, tkSet]);
+  Result := TDBIPropType.IsTypeKind(DataObject, FieldName, [tkInteger, tkInt64, tkEnumeration, tkSet]);
 
   // If FieldBuffer parameter is nil, then only return a True or False value
   // indicating if there is data present or not (eg. not blank)
@@ -1086,7 +1056,7 @@ procedure TDBICustomListDataConnection.PutFieldInteger(
   const FieldNo: Word
   );
 begin
-  if not IsFieldkindOf(DataObject, FieldName, [tkInteger, tkInt64, tkEnumeration, tkSet]) then
+  if not TDBIPropType.IsTypeKind(DataObject, FieldName, [tkInteger, tkInt64, tkEnumeration, tkSet]) then
   begin
     Exit;
   end;
@@ -1123,7 +1093,7 @@ function TDBICustomListDataConnection.GetFieldBoolean(
   ): Boolean;
 begin
   // Field has no value - blank
-  Result := IsFieldkindOf(DataObject, FieldName, [tkBoolean]);
+  Result := TDBIPropType.IsTypeKind(DataObject, FieldName, [tkBoolean]);
 
   // If FieldBuffer parameter is nil, then only return a True or False value
   // indicating if there is data present or not (eg. not blank)
@@ -1144,7 +1114,7 @@ procedure TDBICustomListDataConnection.PutFieldBoolean(
   const FieldNo: Word
   );
 begin
-  if not IsFieldkindOf(DataObject, FieldName, [tkBoolean]) then
+  if not TDBIPropType.IsTypeKind(DataObject, FieldName, [tkBoolean]) then
   begin
     Exit;
   end;
@@ -1181,7 +1151,7 @@ var
 
 begin
   // Field has no value - blank
-  Result := IsFieldkindOf(DataObject, FieldName, [tkFloat]);
+  Result := TDBIPropType.IsTypeKind(DataObject, FieldName, [tkFloat]);
 
   // If FieldBuffer parameter is nil, then only return a True or False value
   // indicating if there is data present or not (eg. not blank)
@@ -1206,7 +1176,7 @@ var
   Money: Currency;
 
 begin
-  if not IsFieldkindOf(DataObject, FieldName, [tkFloat]) then
+  if not TDBIPropType.IsTypeKind(DataObject, FieldName, [tkFloat]) then
   begin
     Exit;
   end;
@@ -1234,7 +1204,7 @@ function TDBICustomListDataConnection.GetFieldFloat(
   ): Boolean;
 begin
   // Field has no value - blank
-  Result := IsFieldkindOf(DataObject, FieldName, [tkFloat]);
+  Result := TDBIPropType.IsTypeKind(DataObject, FieldName, [tkFloat]);
 
   // If FieldBuffer parameter is nil, then only return a True or False value
   // indicating if there is data present or not (eg. not blank)
@@ -1259,7 +1229,7 @@ procedure TDBICustomListDataConnection.PutFieldFloat(
   const FieldNo: Word
   );
 begin
-  if not IsFieldkindOf(DataObject, FieldName, [tkFloat]) then
+  if not TDBIPropType.IsTypeKind(DataObject, FieldName, [tkFloat]) then
   begin
     Exit;
   end;
@@ -1298,7 +1268,7 @@ var
 
 begin
   // Field has no value - blank
-  Result := IsFieldkindOf(DataObject, FieldName, [tkFloat]);
+  Result := TDBIPropType.IsTypeKind(DataObject, FieldName, [tkFloat]);
 
   DateTimeValue := GetFloatProp(DataObject, FieldName);
   Result := Result and
@@ -1336,7 +1306,7 @@ var
   FloatValue: Double;
 
 begin
-  if not IsFieldkindOf(DataObject, FieldName, [tkFloat]) then
+  if not TDBIPropType.IsTypeKind(DataObject, FieldName, [tkFloat]) then
   begin
     Exit;
   end;
@@ -1372,6 +1342,7 @@ function TDBICustomListDataConnection.GetFieldMemo(
   ): Boolean;
 const
   Caller = 'GetFieldMemo';
+  ErrMsg = 'Invalid Object DataType "%s" for Field: %ss';
 
 var
   PropKind: TTypeKind;
@@ -1379,20 +1350,17 @@ var
   DataString: TDBIString;
   DataSize: Integer;
 
+{$ifdef _BLOB_OBJECT_}
+  Position: Integer;
+{$endif}
+
 begin
-  Result := False;
+  Result :=False;
   Assert(FieldNo < Length(FieldProps));
   Assert(Assigned(DataObject));
 
   try
-    PropKind := PropType(DataObject, FieldName);
-
-    if (PropKind <> tkClass) and not (PropKind in tkStringTypes) then begin
-      Error(nil, Caller, '1035',
-        'Illegal Object Datatype: %s',
-        [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
-        );
-    end;
+    PropKind := TDBIPropType.Check(DataObject, FieldName, tkStringTypes + [tkClass]);
 
     if (PropKind <> tkClass) then begin
       DataString := TDBIString(GetStrProp(DataObject, FieldName));
@@ -1403,28 +1371,25 @@ begin
         DataString := TDBIString((PropObject as TStrings).Text);
       end
       else begin
-        Error(nil, Caller, '1050',
-          'Illegal Object Datatype: %s',
-          [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
-          );
+        Error(nil, Caller, '1420', ErrMsg, [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind)), FieldName]);
       end;
-    end;  { if }
-
-    DataSize := Length(DataString);
-
-    // If there is no data then indicate this in the FieldBuffer & return value
-    if (DataSize <= 0) then begin
-      PInteger(FieldBuffer)^ := 0;
-      Exit;
     end;
 
-    // Add Blob to the Blob Data list and return the position in the FieldBuffer
-    // of the TDBIBlob Object in the list so GetBlob can access it.
-    // Position is One Based (0=Blank)
-    PInteger(FieldBuffer)^ :=
-      FBlobData.Add(TDBIBlob.Create(PDBIChar(DataString), DataSize, PropKind = tkClass)) + 1;
-    Result := PInteger(FieldBuffer)^ > 0;
+    DataSize := Length(DataString);
+    PInteger(FieldBuffer)^ := 0;
 
+    // If there is no data then indicate this in the FieldBuffer & return value
+    if (DataSize > 0) then begin
+//##BLOB
+{$ifndef _USE_BLOB_OBJECT_}
+      PInteger(FieldBuffer)^ := IndexOfItem(DataObject) + 1;
+{$else}
+      PInteger(FieldBuffer)^ :=
+        FBlobData.Add(TDBIBlob.Create(PDBIChar(DataString), DataSize, PropKind = tkClass)) + 1;
+{$endif}
+    end;
+
+    Result := PInteger(FieldBuffer)^ > 0;
   except
     on E: Exception do
       Error(E, Caller, '1480', 'Unable to Get Blob Data for Field "%s"', [FieldName]);
@@ -1458,14 +1423,7 @@ begin
   Assert(Assigned(DataObject));
 
   try
-    PropKind := PropType(DataObject, FieldName);
-
-    if (PropKind <> tkClass) and not (PropKind in tkStringTypes) then begin
-      Error(nil, Caller, '1110',
-        'Illegal Object Datatype: %s',
-        [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
-        );
-    end;
+    PropKind := TDBIPropType.Check(DataObject, FieldName, tkStringTypes + [tkClass]);
 
     if (FieldBuffer = nil) then begin
       BlobIndex := 0;
@@ -1521,7 +1479,7 @@ function TDBICustomListDataConnection.GetFieldNullFlags(
   ): Boolean;
 begin
   // Field has no value - blank
-  Result := IsFieldkindOf(DataObject, FieldName, [tkInt64]);
+  Result := TDBIPropType.IsTypeKind(DataObject, FieldName, [tkInt64]);
 
   // If FieldBuffer parameter is nil, then only return a True or False value
   // indicating if there is data present or not (eg. not blank)
@@ -1542,7 +1500,7 @@ procedure TDBICustomListDataConnection.PutFieldNullFlags(
   const FieldNo: Word
   );
 begin
-  if not IsFieldkindOf(DataObject, FieldName, [tkInt64]) then Exit;
+  if not TDBIPropType.IsTypeKind(DataObject, FieldName, [tkInt64]) then Exit;
 
   // Assign data to object property
   if (FieldBuffer = nil) then begin
@@ -1567,25 +1525,20 @@ function TDBICustomListDataConnection.GetFieldDataset(
 const
   Caller = 'GetFieldDataset';
 
+{##JVR
 var
   PropKind: TTypeKind;
-//##JVR  PropObject: TObject;
-//##JVR  DataString: TDBIString;
-//##JVR  DataSize: Integer;
-
+  PropObject: TObject;
+  DataString: TDBIString;
+  DataSize: Integer;
+//}
 begin
   Result := False;
   Assert(FieldNo < Length(FieldProps));
   Assert(Assigned(DataObject));
 
   try
-    PropKind := PropType(DataObject, FieldName);
-    if not (PropKind in [tkClass]) then begin
-      Error(nil, Caller, '1190',
-        'Illegal Object Datatype: %s',
-        [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
-        );
-    end;
+    {##JVR PropKind :=} TDBIPropType.Check(DataObject, FieldName, [tkClass]);
 
 //##JVR - ===========================================================================
 //##JVR - Field has no data - Error(nil, Caller, '1195', 'Not implemented Yet!', []);
@@ -1649,24 +1602,18 @@ procedure TDBICustomListDataConnection.PutFieldDataset(
 
 const
   Caller = 'PutFieldDataset';
-
+{##JVR
 var
-//##JVR  BlobIndex: Integer;
+  BlobIndex: Integer;
   PropKind: TTypeKind;
-//##JVR  PropObject: TObject;
-
+  PropObject: TObject;
+//}
 begin
   Assert(FieldNo < Length(FieldProps));
   Assert(Assigned(DataObject));
 
   try
-    PropKind := PropType(DataObject, FieldName);
-    if not (PropKind in [tkClass]) then begin
-      Error(nil, Caller, '1265',
-        'Illegal Object Datatype: %s',
-        [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
-        );
-    end;
+    {##JVR PropKind :=} TDBIPropType.Check(DataObject, FieldName, [tkClass]);
 
 Error(nil, Caller, '1270', 'Not implemented Yet!', []);
 
@@ -1722,17 +1669,12 @@ const
   Caller = 'GetFieldADT';
 
 var
-  PropKind: TTypeKind;
+//##JVR  PropKind: TTypeKind;
   PropObject: TObject;
   Index: Integer;
 
 begin
-  PropKind := PropType(DataObject, FieldName);
-  if not (PropKind in [tkClass]) then begin
-    Error(nil, Caller, '1735', 'Illegal ADT Datatype: %s',
-      [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
-      );
-  end;
+  {##JVR PropKind :=} TDBIPropType.Check(DataObject, FieldName, [tkClass]);
 
   // If FieldBuffer parameter is nil, then only return a True or False value
   // indicating if there is data present or not (eg. not blank)
@@ -1772,19 +1714,13 @@ const
 
 var
   PropInfo: PPropInfo;
-  PropKind: TTypeKind;
+//##JVR  PropKind: TTypeKind;
   PropClass: TClass;
   PropObject: TObject;
   Index: Integer;
 
 begin
-  PropInfo := GetPropInfo(DataObject, FieldName);
-  PropKind := PropInfo^.PropType^.Kind;
-  if not (PropKind in [tkClass]) then begin
-    Error(nil, Caller, '1785', 'Illegal ADT Datatype: %s',
-      [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
-      );
-  end;
+  {##JVR PropKind :=} TDBIPropType.Check(DataObject, FieldName, [tkClass]);
 
   // NOTE:
   // When inserting a new record/object it seems that FieldBuffer is 'nil'
@@ -1804,10 +1740,12 @@ begin
 }
   end;
 
-  PropObject := TObject(GetOrdProp(DataObject, PropInfo));
+  PropObject := GetObjectProp(DataObject, FieldName, TObject);
+
   // If we have no object then create one
   if not Assigned(PropObject) then begin
-    PropClass := GetTypeData(PropInfo)^.ClassType;
+    PropInfo := GetPropInfo(DataObject, FieldName);
+    PropClass := TDBIPropType.GetTypeData(PropInfo)^.ClassType;
     PropObject := PropClass.Create;
 
     // Assign data from field buffer
@@ -2297,18 +2235,45 @@ const
   Caller = 'GetBlob';
 
 var
+{$ifndef _USE_BLOB_OBJECT_}
+  BlobText: AnsiString;
+  DataObject: TObject;
+{$else}
   BlobIndex: Integer;
-//##JVR  BlobObject: TDBIBlob;
+{$endif}
 
 begin
   // Get the BlobIndex using the Position which is One Based (0=Blank)
+//##BLOB
+{$ifndef _USE_BLOB_OBJECT_}
+  Assert( (Position > 0) and (Position <= LongWord(GetRecordCount(0))) );
+{$else}
   BlobIndex := Position - 1;
   Assert((Position > 0) and (BlobIndex < FBlobData.Count));
+{$endif}
 
   try
     // If PData parameter is nil, then only return the Size value
     // indicating the size of the data
+//##BLOB
+{$ifndef _USE_BLOB_OBJECT_}
+    DataObject := GetItem(Position-1);
+
+    Assert(Assigned(DataObject));
+    Assert(Integer(FieldNo) < Length(FieldProps));
+
+    BlobText := DBIAnsiGetStringProperty(DataObject, GetFieldName(FieldNo));
+
+    Size := Length(BlobText);
+    if Assigned(PData) and (Size > 0) then begin
+      Move(PAnsiChar(BlobText)^, PData^, Size);
+    end;
+
+{$else}
     Size := (FBlobData[BlobIndex] as TDBIBlob).Read(PData^, Size);
+
+{$endif}
+
   except
     on E: Exception do
       Error(E, Caller, '2330', 'Unable to Get Blob Data for Field "%d"', [FieldNo]);
@@ -2860,7 +2825,7 @@ var
       // Create Field-description records for the valid entries
       for Index := 0 to PropertyList.Count - 1 do begin
         PropInfo := PropertyList[Index];
-        TypeData := GetTypeData(PropInfo);
+        TypeData := TDBIPropType.GetTypeData(PropInfo);
 
         // If it is NOT a class type property then add a new Field-Description record
         if (PropInfo^.PropType^.Kind <> tkClass) then begin
@@ -3001,16 +2966,6 @@ begin
   EncodeFieldDescs(GetClass(ClassTypeName), FieldNo);
   SetFieldProps(FieldDescs);
 end;  { GetMetaData }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 08/11/2000 13:26:48<P>
-}
-class function TDBICustomListDataConnection.GetTypeData(PropInfo: PPropInfo): PTypeData;
-begin
-  Result := TypInfo.GetTypeData(PropInfo^.PropType{$ifndef fpc}^{$endif});
-end;
 
 
 end.

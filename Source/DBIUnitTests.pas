@@ -681,7 +681,7 @@ implementation
 {$endif}
 
 uses
-  Windows, PSAPI, SysUtils, Dialogs, Forms, DBIConst, DBIUtils, DBIDataset;
+  Windows, PSAPI, SysUtils, Dialogs, Forms, DBIConst, DBITypInfo, DBIUtils, DBIDataset;
 
 
 { Helpers }
@@ -717,7 +717,7 @@ begin
   if not Assigned(Result) then begin
     raise Exception.CreateFmt(
       'Create Field: "%s", Unsupported DataType "%s"',
-      [FieldName, DBIUtils.GetFieldTypeName(DataType)]
+      [FieldName, DBITypInfo.GetFieldTypeName(DataType)]
       );
   end;
 

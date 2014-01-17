@@ -58,6 +58,7 @@
         <DCCReference Include="vcldb.dcp"/>
         <DCCReference Include="vclx.dcp"/>
         <DCCReference Include="DBIConst.pas"/>
+        <DCCReference Include="DBITypInfo.pas"/>
         <DCCReference Include="DBICustomListDataConnections.pas"/>
         <DCCReference Include="DBICustomStreamDataConnections.pas"/>
         <DCCReference Include="DBIDataSet.pas"/>

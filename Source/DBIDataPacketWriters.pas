@@ -133,7 +133,7 @@ const
 implementation
 
 uses
-  TypInfo, DBIConst, DBIIntfConsts, DBIFileStreams;
+  DBIConst, DBIIntfConsts, DBIFileStreams;
 
 
 const

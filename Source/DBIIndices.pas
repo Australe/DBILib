@@ -887,7 +887,7 @@ type
 implementation
 
 uses
-  {$ifndef fpc} Consts, {$endif} Windows, Dialogs, TypInfo, DBIInterfaces;
+  {$ifndef fpc} Consts, {$endif} Windows, Dialogs, DBIInterfaces;
 
 
 // =============================================================================
