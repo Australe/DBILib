@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : DBILib}
+{#omcodecop off : jvr : dbilib code}
 
 unit DBITokenizerConsts;
 

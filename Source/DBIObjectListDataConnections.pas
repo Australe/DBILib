@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : native api code}
+{#omcodecop off : jvr : dbilib code}
 
 unit DBIObjectListDataConnections;
 
