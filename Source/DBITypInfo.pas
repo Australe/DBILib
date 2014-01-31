@@ -105,7 +105,6 @@ type
 
   procedure DBIGetPropertyList(ClassInfo: PTypeInfo; List: TList);
 
-  function DBIAnsiGetStringProp(Instance: TObject; const PropName: String): AnsiString;
   function DBIAnsiGetStrProp(Instance: TObject; const PropName: String): AnsiString;
   procedure DBIAnsiSetStrProp(Instance: TObject; const PropName: String; const AData: AnsiString);
 
@@ -290,44 +289,13 @@ begin
 end;  { DBIGetPropertyList }
 
 
-function DBIAnsiGetStringProp(Instance: TObject; const PropName: String): AnsiString;
-const
-  Caller = 'DBIAnsiGetStringProperty';
-
-var
-  PropKind: TTypeKind;
-  PropInstance: TObject;
-
-begin
-  try
-    PropKind := TDBIPropType.Check(Instance, PropName, tkStringTypes + [tkClass]);
-
-    if (PropKind <> tkClass) then begin
-      Result := AnsiString(GetStrProp(Instance, PropName));
-    end
-    else begin
-      PropInstance := GetObjectProp(Instance, PropName, TStrings);
-      if Assigned(PropInstance) then begin
-        Result := AnsiString((PropInstance as TStrings).Text);
-      end
-      else begin
-        raise EPropertyError.CreateFmt('Illegal Object Datatype: %s',
-          [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
-          );
-      end;
-    end;
-  except
-    raise EPropertyError.CreateFmt( 'Failed to read property "%s"', [PropName]);
-  end;
-end;
-
-
 function DBIAnsiGetStrProp(Instance: TObject; const PropName: String): AnsiString;
 const
   Caller = 'DBIAnsiGetStrProp';
 
 var
   PropKind: TTypeKind;
+  PropInstance: TObject;
 
 begin
 {$WARNINGS OFF}
@@ -348,6 +316,19 @@ begin
       Result := AnsiChar(GetOrdProp(Instance, PropName));
     end;
 
+    // Property is of type TStrings
+    tkClass: begin
+      PropInstance := GetObjectProp(Instance, PropName, TStrings);
+      if Assigned(PropInstance) then begin
+        Result := AnsiString((PropInstance as TStrings).Text);
+      end
+      else begin
+        raise EPropertyError.CreateFmt('Illegal Object Datatype: %s',
+          [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
+          );
+      end;
+    end;
+
   else
     raise EPropertyError.CreateFmt(
       '%s(): "%s" is NOT a supported String Property', [Caller, PropName]
@@ -363,6 +344,7 @@ const
 
 var
   PropKind: TTypeKind;
+  PropInstance: TObject;
 
 begin
 {$WARNINGS OFF}
@@ -382,6 +364,19 @@ begin
 
     tkChar, tkWChar: begin
       SetOrdProp(Instance, PropName, Ord(AData[1]));
+    end;
+
+    // Property is of type TStrings
+    tkClass: begin
+      PropInstance := GetObjectProp(Instance, PropName, TStrings);
+      if Assigned(PropInstance) then begin
+        (PropInstance as TStrings).Text := String(AData);
+      end
+      else begin
+        raise EPropertyError.CreateFmt('Illegal Object Datatype: %s',
+          [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
+          );
+      end;
     end;
 
 {$WARNINGS ON}

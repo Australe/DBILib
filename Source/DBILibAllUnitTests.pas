@@ -32,9 +32,7 @@ uses
 
   // Tests
   DBIUnitTests,
-{$ifdef __omTesting}
   DBICDSUnitTests,
-{$endif}
   DBIAUXUnitTests,
   DBIODSUnitTests,
   DBIXDSUnitTests;

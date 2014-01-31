@@ -116,7 +116,9 @@ type
 
   TFieldRecords = array[0..127] of TFieldRecord;
   PFieldRecords = ^TFieldRecords;
-  
+
+  TFieldTypes = set of TFieldType;
+
 type
   TDBIUnitTest = class(TPersistent)
   protected
@@ -136,6 +138,8 @@ type
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); virtual; abstract;
     class procedure AssertBlanks(ADataset: TDataset);
     class procedure AssertValues(ADataset: TDataset); virtual;
+    class procedure BlankValues(ADataset: TDataset);
+    class procedure BlankValuesOfType(ADataset: TDataset;  const DataTypes: TFieldTypes);
     class procedure CheckValues(ADataset: TDataset; Index: Integer); virtual; abstract;
     class procedure ClearValues(ADataset: TDataset);
     class procedure CreateFields(ADataset: TDataset); virtual; abstract;
@@ -3038,6 +3042,55 @@ begin
     if PFieldData^[Index].Required then begin
       FieldDef.Required := PFieldData^[Index].Required;
     end;
+  end;
+end;
+
+
+class procedure TDBIUnitTest.BlankValues(ADataset: TDataset);
+var
+  Index: Integer;
+  Field: TField;
+
+begin
+  ADataset.First;
+  while not ADataset.Eof do begin
+    ADataset.Edit;
+
+    for Index := 0 to ADataset.FieldCount-1 do begin
+      Field := ADataset.Fields[Index];
+      case Field.DataType of
+        ftString, ftWideString, ftFixedChar, ftFixedWideChar, ftMemo, ftWideMemo:
+          Field.AsString := '';
+      else
+        Field.Value := 0;
+      end;
+    end;
+
+    ADataset.Post;
+    ADataset.Next;
+  end;
+end;
+
+
+class procedure TDBIUnitTest.BlankValuesOfType(ADataset: TDataset; const DataTypes: TFieldTypes);
+var
+  Index: Integer;
+  Field: TField;
+
+begin
+  ADataset.First;
+  while not ADataset.Eof do begin
+    ADataset.Edit;
+
+    for Index := 0 to ADataset.FieldCount-1 do begin
+      Field := ADataset.Fields[Index];
+      if (Field.DataType in DataTypes) then begin
+        Field.Clear;
+      end;
+    end;
+
+    ADataset.Post;
+    ADataset.Next;
   end;
 end;
 

@@ -238,6 +238,7 @@ begin
     TBinaryData.AssertValues(CDS);
 
     CDS.SaveToFile(DataPath('cBinaryTypes.xml'));
+
     CDS.Close;
   finally
     CDS.Free;
@@ -251,6 +252,16 @@ begin
     // Verify Data was loaded correctly from CDS Xml file
     ODS.LoadFromFile(DataPath('cBinaryTypes.xml'));
     TBinaryData.AssertValues(ODS);
+
+    TBinaryData.ClearValues(ODS);
+    TBinaryData.AssertBlanks(ODS);
+
+    TBinaryData.RefillValues(ODS);
+    TBinaryData.AssertValues(ODS);
+
+    TBinaryData.BlankValuesOfType(ODS, [ftInteger, ftDateTime]);
+    TBinaryData.BlankValuesOfType(ODS, [ftString, ftMemo]);
+    TBinaryData.AssertBlanks(ODS);
 
     ODS.Close;
   finally

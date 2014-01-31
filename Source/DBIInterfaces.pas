@@ -4610,6 +4610,7 @@ var
 
 begin
   Result := DBIERR_NONE;
+  Position := 0;
   GetField(pRecBuf, iFieldNo, Pointer(@Position), IsBlank);
 
   // NewRecord but the blob is blank

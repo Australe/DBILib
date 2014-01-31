@@ -58,7 +58,6 @@ type
 
   published
     procedure FilterGad;
-    procedure TranName;
 
   end;
 
@@ -74,8 +73,7 @@ uses
   DB,
   DBIConst,
   DBIDataset,
-  DBIXbaseDatasets,
-  DBIUnitTestsData;
+  DBIXbaseDatasets;
 
 
 
@@ -159,90 +157,6 @@ begin
 end;
 
 
-procedure TDBICDSUnitTests.TranName;
-const
-  TableName = 'TranName.dbf';
-
-var
-  XDS: TXbaseDataset;
-  ODS: TObjectListDataset;
-  List: TObjectList;
-  Count: Integer;
-  Index: Integer;
-  EditValue: Variant;
-
-begin
-//  EditValue := 'CATI';
-
-  XDS := TXbaseDataset.Create(nil);
-  try
-    XDS.LoadFromFile(FilePath(TableName));
-    XDS.SaveToFile(ChangeFileExt(FilePath(TableName), '.xml'));
-
-    XDS.Close;
-  finally
-    XDS.Free;
-  end;
-
-  List := TObjectList.Create;
-  try
-    ODS := TObjectlistDataset.Create(nil);
-    try
-      ODS.ClassTypeName := TomTranName.ClassName;
-      ODS.StringFieldSize := 255;
-      ODS.List := List;
-      ODS.LoadFromFile(FilePath(TableName));
-      Count := ODS.RecordCount;
-      ODS.Close;
-
-    finally
-      ODS.Free;
-    end;
-
-
-    for Index := 500 downto 1 do begin
-      ODS := TObjectlistDataset.Create(nil);
-      try
-        Assert(List.Count = Count);
-//List.Free;
-//List.Add(nil);
-        ODS.ClassTypeName := TomTranName.ClassName;
-        ODS.StringFieldSize := 255;
-        ODS.List := List;
-        ODS.Active := True;
-
-        Assert(ODS.RecordCount = Count);
-(*##JVR
-//        EditValue := '123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345';
-        EditValue := String(PChar('This is a test')); //42.25;
-        ODS.Locate('TranType', EditValue, [loCaseInsensitive]);
-{##JVR
-//*)
-        EditValue := ODS.FieldByName('TranType').Value;
-        ODS.First;
-        Assert(ODS.Locate('TranType', EditValue, [loCaseInsensitive]));
-        ODS.Last;
-        Assert(ODS.Locate('TranType', EditValue, [loCaseInsensitive]));
-        ODS.First;
-        Assert(ODS.Locate('TranType', EditValue, [loCaseInsensitive]));
-        ODS.Next;
-        Assert(ODS.Locate('TranType', EditValue, [loCaseInsensitive]));
-        ODS.Prior;
-        Assert(ODS.Locate('TranType', EditValue, [loCaseInsensitive]));
-//}
-        ODS.Close;
-
-      finally
-        ODS.Free;
-      end;
-    end;
-
-  finally
-    List.Free;
-  end;
-end;
-
-
 class function TDBICDSUnitTests.FilePath(const AFilename: TFileName): TFileName;
 begin
   // cd ../../../Data
@@ -250,7 +164,7 @@ begin
   Result := ExtractFileDir(Result);
 {$ifndef omTesting}
   Result := ExtractFileDir(Result);
-{$endif}  
+{$endif}
   Result := ExtractFileDir(Result) + '\Data\' + AFilename;
 end;
 

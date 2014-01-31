@@ -50,32 +50,8 @@ type
     ) of object;
 
 type
-  TDBIBlob = class(TObject)
-  private
-    FData: PByte;
-    FSize: Integer;
-    FOwnsData: Boolean;
-
-  protected
-    function GetAsString: TDBIString;
-
-  public
-    constructor Create(
-      PData: Pointer;
-      const ASize: Integer;
-      const AOwnsData: Boolean
-      );
-    destructor Destroy; override;
-//##BLOB}    function Read(var Buffer; Count: Integer): Integer;
-
-    property AsString: TDBIString read GetAsString;
-  end;  { TDBIBlob }
-
-
-type
   TDBICustomListDataConnection = class(TDBIDataConnection)
   private
-    FBlobData: TObjectList;
     FClassTypeName: String;
     FOptions: TDBIListDataConnectionOptions;
     FFieldObjectStack: TList;
@@ -151,12 +127,10 @@ type
     procedure PutData(DataObject: TObject; const Buffer); virtual;
 
     function GetClassKind: TPersistentClass; virtual;
-//##JVR    function GetClassKind: TPersistentClass; virtual;
     procedure SetClassTypeName(const Value: String); virtual;
     procedure SetObjectValidationProc(const Value: TDBIMethodName);
     procedure SetOptions(const Value: TDBIListDataConnectionOptions);
 
-//##JVR    procedure GetDatasetProps(var Prop: DSProps); override;
     function GetFieldName(const FieldNo: Integer): TDBIFieldName;
     procedure GetMetaData; override;
 
@@ -172,8 +146,6 @@ type
     procedure LoadFromXBaseStream(AStream: TStream);
     
     procedure ValidateObject(DataObject: TObject); virtual;
-
-    property BlobData: TObjectList read FBlobData;
 
   public
     constructor Create(AOwner: TObject); override;
@@ -299,87 +271,33 @@ type
     Event: TDBIObjectDataEvent
     ) of object;
 
+  PDBIObject = ^TObject;
+
 
 { TDBIBlob }
 
-// _____________________________________________________________________________
-{**
-  Jvr - 22/02/2001 12:28:46 - Position is One Based (0=Blank)<P>
-}
-constructor TDBIBlob.Create(
-  PData: Pointer;
-  const ASize: Integer;
-  const AOwnsData: Boolean
-  );
-begin
-  inherited Create;
+type
+  TDBIBlob = class(TObject)
+  private
+    FDataString: TDBIString;
 
-  FSize := ASize;
-//##BLOB
-{-->}  FOwnsData := True; //##JVR AOwnsData;
-  if FOwnsData then begin
-    if (FSize > 0) then begin
-      GetMem(FData, FSize);
-      Move(PData^, FData^, FSize);
-    end
-    else begin
-      FData := nil;
-    end;
-  end
-  else begin
-    FData := PData;
-  end;
-end;  { Create }
+  public
+    constructor Create(PData: PDBIString; const Size: Integer);
 
-
-// _____________________________________________________________________________
-{**
-  Jvr - 22/02/2001 12:29:57.<P>
-}
-destructor TDBIBlob.Destroy;
-begin
-  if FOwnsData and Assigned(FData) then begin
-    FreeMem(FData);
+    property AsString: TDBIString read FDataString;
   end;
 
-  inherited Destroy;
-end;  { Destroy }
 
-
-// _____________________________________________________________________________
-{**
-  Jvr - 22/02/2001 12:31:12.<P>
-}
-function TDBIBlob.GetAsString: TDBIString;
+constructor TDBIBlob.Create(PData: PDBIString; const Size: Integer);
 begin
-  Result := '';
+  FDataString := '';
 
-  if (FSize > 0) then begin
-    SetLength(Result, FSize);
-    Move(FData^, PAnsiChar(Result)^, FSize);
-  end;
-end;  { GetAsString }
-
-(*##BLOB
-// _____________________________________________________________________________
-{**
-  Jvr - 03/05/2002 14:21:52.<P>
-}
-function TDBIBlob.Read(var Buffer; Count: Integer): Integer;
-begin
-  // If Buffer parameter is nil, then only return the Size value
-  // indicating the size of the data
-  if (@Buffer = nil) or (Count = 0) or (FSize = 0) then begin
-    Result := FSize;
-  end
-
-  // Otherwise, Assign data to Buffer
-  else begin
-    Result := Min(Count, FSize);
-    Move(FData^, Buffer, Result);
+  if (Size > 0) then begin
+    SetLength(FDataString, Size);
+    Move(PData^, PDBIString(FDataString)^, Size);
   end;
 end;
-//*)
+
 
 
 
@@ -398,7 +316,6 @@ begin
   inherited Create(AOwner);
 
   CanModify := True;
-  FBlobData := TObjectList.Create;
   FOptions := osDefaultListDataConnectionOptions;
   FStringFieldSize := Default_StringFieldLength;
   FOnCreateObject := nil;
@@ -443,9 +360,6 @@ begin
 
   FFieldObjectStack.Free;
   FFieldObjectStack := nil;
-
-  FBlobData.Free;
-  FBlobData := nil;
 
   inherited Destroy;
 end;  { Destroy }
@@ -572,10 +486,8 @@ end;  { Append }
 procedure TDBICustomListDataConnection.Cancel;
 begin
   // Cleanup validation object
-//##JVR  if (osObjectPropertyValidation in FOptions) then begin
-    FValidationObject.Free;
-    FValidationObject := nil;
-//##JVR  end;  { if }
+  FValidationObject.Free;
+  FValidationObject := nil;
 end;  { Cancel }
 
 
@@ -652,11 +564,6 @@ var
 
 begin
   Result := dsRecUnmodified;
-
-  // First of all, Free the Blob Objects in the BlobData list (if there are any)
-  // This will free any Blob Objects left hanging around by a previous call to GetData.
-  // I am concerned about threading issues.  This will have to be tested of course!
-  FBlobData.Clear;
 
   // Initialise Buffer (Logical Size)
   FillChar(Buffer, LogicalBufferSize, #0);
@@ -862,11 +769,6 @@ begin
 //##JVR      Byte(TDBIRecordBuffer(@Buffer)[FieldProps[FieldNo].iNullOffsInRec]) := Ord(IsBlank);
     end;  { if }
   end;  { for }
-
-  // Now Free the Blob Objects in the BlobData list (if there are any)
-  // This will free any Blob Objects left hanging around by PutData().
-  // I am concerned about threading issues.  This will have to be tested of course!
-  FBlobData.Clear;
 end;  { PutData }
 
 
@@ -1340,7 +1242,6 @@ function TDBICustomListDataConnection.GetFieldMemo(
   ): Boolean;
 const
   Caller = 'GetFieldMemo';
-  ErrMsg = 'Invalid Object DataType "%s" for Field: %ss';
 
 var
   DataString: TDBIString;
@@ -1352,21 +1253,19 @@ begin
   Assert(Assigned(DataObject));
 
   try
-    TDBIPropType.Check(DataObject, FieldName, tkStringTypes + [tkClass]);
-
-    DataString := DBIAnsiGetStringProp(DataObject, FieldName);
+    DataString := DBIAnsiGetStrProp(DataObject, FieldName);
     DataSize := Length(DataString);
-    PInteger(FieldBuffer)^ := 0;
+    PDBIObject(FieldBuffer)^ := nil;
 
     // Specify the data size in the FieldBuffer, Result = True if data exists
     if (DataSize > 0) then begin
-      PInteger(FieldBuffer)^ := IndexOfItem(DataObject) + 1;
+      PDBIObject(FieldBuffer)^ := DataObject;
     end;
 
-    Result := PInteger(FieldBuffer)^ > 0;
+    Result := Assigned(PDBIObject(FieldBuffer)^);
   except
     on E: Exception do
-      Error(E, Caller, '1480', 'Unable to Get Blob Data for Field "%s"', [FieldName]);
+      Error(E, Caller, '11275', 'Unable to Get Blob Data for Field "%s"', [FieldName]);
   end;
 end;  { GetFieldMemo }
 
@@ -1387,56 +1286,45 @@ const
   Caller = 'PutFieldMemo';
 
 var
-  BlobIndex: Integer;
-  BlobData: TDBIString;
-  PropKind: TTypeKind;
-  PropObject: TObject;
+  BlobObject: TObject;
+  DataString: TDBIString;
 
 begin
   Assert(FieldNo < Length(FieldProps));
   Assert(Assigned(DataObject));
 
   try
-    PropKind := TDBIPropType.Check(DataObject, FieldName, tkStringTypes + [tkClass]);
+    DataString := '';
 
-    if (FieldBuffer = nil) then begin
-      BlobIndex := 0;
-      BlobData := '';
-    end
-    else begin
-      // Get the BlobIndex using the Position which is One Based (0=Blank)
-      BlobIndex := PInteger(FieldBuffer)^ - 1;
-      if (BlobIndex > -1) then begin
-        BlobData := (FBlobData[BlobIndex] as TDBIBlob).AsString
-      end;
-    end;
+    if (FieldBuffer <> nil) then begin
+      BlobObject := PDBIObject(FieldBuffer)^;
+      if (BlobObject is TDBIBlob) then begin
+        DataString := (BlobObject as TDBIBlob).AsString;
 
-    // If (BlobIndex > -1) then set the string property from the Blob Object
-    // otherwise no data has changed
-    if (BlobIndex > -1) then begin
-      // Property is of type String
-      if (PropKind <> tkClass) then begin
-        SetStrProp(DataObject, FieldName, TDBIText(BlobData));
+        FreeAndNil(BlobObject);
       end
 
-      // Property is of type TStrings
-      else begin
-        PropObject := GetObjectProp(DataObject, FieldName, TStrings);
-        if Assigned(PropObject) then begin
-          (PropObject as TStrings).Text := TDBIText(BlobData);
-        end
-        else begin
-          Error(nil, Caller, '1250',
-            'Illegal Object Datatype: %s',
-            [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
-            );
-        end;
-      end;  { if }
-    end;  { if }
+      // If the blob object is the actual data object then the memo was NOT changed
+      else if Assigned(BlobObject) and (CompareText(FClassTypeName, BlobObject.ClassName) = 0) then begin
+        DataString := DBIAnsiGetStrProp(BlobObject, FieldName);
+      end
+
+      // If the blob object is Unassigned then the data is blank.
+      // Otherwise if the blob object is assigned and of an unexpected type, then raise an exception
+      else if Assigned(BlobObject) then begin
+        raise Exception.CreateFmt('Unexpected data object type: "%s"', [BlobObject.ClassName]);
+      end;
+
+      // Update the FieldBuffer with the DataObject Reference,
+      PDBIObject(FieldBuffer)^ := DataObject;
+    end;
+
+    // Set the specified propertyb to the value in DataString
+    DBIAnsiSetStrProp(DataObject, FieldName, DataString);
 
   except
     on E: Exception do
-      Error(E, Caller, '1555', 'Unable to Put Blob Data for Field "%s"', [FieldName]);
+      Error(E, Caller, '1335', 'Unable to Put Blob Data for Field "%s"', [FieldName]);
   end;
 end;  { PutFieldMemo }
 
@@ -1499,67 +1387,21 @@ function TDBICustomListDataConnection.GetFieldDataset(
 const
   Caller = 'GetFieldDataset';
 
-{##JVR
-var
-  PropKind: TTypeKind;
-  PropObject: TObject;
-  DataString: TDBIString;
-  DataSize: Integer;
-//}
 begin
   Result := False;
   Assert(FieldNo < Length(FieldProps));
   Assert(Assigned(DataObject));
 
   try
-    {##JVR PropKind :=} TDBIPropType.Check(DataObject, FieldName, [tkClass]);
+    TDBIPropType.Check(DataObject, FieldName, [tkClass]);
 
-//##JVR - ===========================================================================
-//##JVR - Field has no data - Error(nil, Caller, '1195', 'Not implemented Yet!', []);
-//##JVR - ===========================================================================
-//##JVR - ===========================================================================
-//##JVR - ===========================================================================
-//##JVR - ===========================================================================
-
-(*##JVR
-    if (PropKind <> tkClass) then begin
-      DataString := GetStrProp(DataObject, FieldName);
-    end
-    else begin
-      PropObject := GetObjectProp(DataObject, FieldName, TStrings);
-      if Assigned(PropObject) then begin
-        DataString := (PropObject as TStrings).Text;
-      end
-      else begin
-        Error(nil, Caller, '1050',
-          'Illegal Object Datatype: %s',
-          [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
-          );
-      end;
-    end;  { if }
-
-    DataSize := Length(DataString);
-
-    // If there is no data then indicate this in the FieldBuffer & return value
-    if (DataSize <= 0) then begin
-      Integer(FieldBuffer^) := 0;
-      Exit;
-    end;
-
-    // Add Blob to the Blob Data list and return the position in the FieldBuffer
-    // of the TDBIBlob Object in the list so GetBlob can access it.
-    // Position is One Based (0=Blank)
-    Integer(FieldBuffer^) :=
-      FBlobData.Add(TDBIBlob.Create(PDBIChar(DataString), DataSize, PropKind = tkClass)) + 1;//##JVRFalse)) + 1;
-    Result := Integer(FieldBuffer^) > 0;
-*)
   except
     on E: Exception do
-      Error(E, Caller, '1230',
+      Error(E, Caller, '1405',
         'Unable to Get Dataset Data for Field "%s"',
         [FieldName]
         );
-  end;  { try..except }
+  end;
 end;  { GetFieldDataset }
 
 
@@ -1576,56 +1418,22 @@ procedure TDBICustomListDataConnection.PutFieldDataset(
 
 const
   Caller = 'PutFieldDataset';
-{##JVR
-var
-  BlobIndex: Integer;
-  PropKind: TTypeKind;
-  PropObject: TObject;
-//}
+
 begin
   Assert(FieldNo < Length(FieldProps));
   Assert(Assigned(DataObject));
 
   try
-    {##JVR PropKind :=} TDBIPropType.Check(DataObject, FieldName, [tkClass]);
+    TDBIPropType.Check(DataObject, FieldName, [tkClass]);
 
-Error(nil, Caller, '1270', 'Not implemented Yet!', []);
-
-(*##JVR
-    // Get the BlobIndex using the Position which is One Based (0=Blank)
-    BlobIndex := Integer(FieldBuffer^) - 1;
-
-    // If (BlobIndex > -1) then set the string property from the Blob Object
-    // otherwise no data has changed
-    if (BlobIndex > -1) then begin
-      // Property is of type String
-      if (PropKind <> tkClass) then begin
-        SetStrProp(DataObject, FieldName, (FBlobData[BlobIndex] as TDBIBlob).AsString);
-      end
-
-      // Property is of type TStrings
-      else begin
-        PropObject := GetObjectProp(DataObject, FieldName, TStrings);
-        if Assigned(PropObject) then begin
-          (PropObject as TStrings).Text := (FBlobData[BlobIndex] as TDBIBlob).AsString;
-        end
-        else begin
-          Error(nil, Caller, '1135',
-            'Illegal Object Datatype: %s',
-            [GetEnumName(TypeInfo(TTypeKind), Ord(PropKind))]
-            );
-        end;
-      end;  { if }
-    end;  { if }
-*)
-
+    Error(nil, Caller, '1430', 'Not implemented Yet!', []);
   except
     on E: Exception do
-      Error(E, Caller, '1305',
+      Error(E, Caller, '1405',
         'Unable to Put Dataset Data for Field "%s"',
         [FieldName]
         );
-  end;  { try..except }
+  end;
 end;  { PutFieldDataset }
 
 
@@ -1643,12 +1451,11 @@ const
   Caller = 'GetFieldADT';
 
 var
-//##JVR  PropKind: TTypeKind;
   PropObject: TObject;
   Index: Integer;
 
 begin
-  {##JVR PropKind :=} TDBIPropType.Check(DataObject, FieldName, [tkClass]);
+  TDBIPropType.Check(DataObject, FieldName, [tkClass]);
 
   // If FieldBuffer parameter is nil, then only return a True or False value
   // indicating if there is data present or not (eg. not blank)
@@ -1688,13 +1495,12 @@ const
 
 var
   PropInfo: PPropInfo;
-//##JVR  PropKind: TTypeKind;
   PropClass: TClass;
   PropObject: TObject;
   Index: Integer;
 
 begin
-  {##JVR PropKind :=} TDBIPropType.Check(DataObject, FieldName, [tkClass]);
+  TDBIPropType.Check(DataObject, FieldName, [tkClass]);
 
   // NOTE:
   // When inserting a new record/object it seems that FieldBuffer is 'nil'
@@ -2209,22 +2015,33 @@ const
   Caller = 'GetBlob';
 
 var
-  BlobText: AnsiString;
-  DataObject: TObject;
+  BlobText: TDBIString;
+  BlobObject: TObject;
+  BlobClassName: String;
 
 begin
-  // Get the BlobIndex using the Position which is One Based (0=Blank)
-  Assert( (Position > 0) and (Position <= LongWord(GetRecordCount(0))) );
+  BlobClassName := '';
+
+  // Get the DataObject using the Position as the address of the object (0=Blank)
+  if (Position = 0) then begin
+    Size := 0;
+    Exit;
+  end;
 
   try
     // If PData parameter is nil, then only return the Size value
     // indicating the size of the data
-    DataObject := GetItem(Position-1);
-
-    Assert(Assigned(DataObject));
+    BlobObject := TObject(Position);
+    Assert(Assigned(BlobObject));
     Assert(Integer(FieldNo) < Length(FieldProps));
+    BlobClassName := BlobObject.ClassName;
 
-    BlobText := DBIAnsiGetStringProp(DataObject, GetFieldName(FieldNo));
+    if (BlobObject is TDBIBlob) then begin
+      BlobText := (BlobObject as TDBIBlob).AsString;
+    end
+    else begin
+      BlobText := DBIAnsiGetStrProp(BlobObject, GetFieldName(FieldNo));
+    end;
 
     Size := Length(BlobText);
     if Assigned(PData) and (Size > 0) then begin
@@ -2233,7 +2050,7 @@ begin
 
   except
     on E: Exception do
-      Error(E, Caller, '2330', 'Unable to Get Blob Data for Field "%d"', [FieldNo]);
+      Error(E, Caller, '2330', 'Unable to Get Blob Data for Field %s[%d]', [BlobClassName, FieldNo]);
   end;
 end;  { GetBlob }
 
@@ -2252,18 +2069,14 @@ function TDBICustomListDataConnection.PutBlob(
 const
   Caller = 'PutBlob';
 
-var
-  BlobData: TDBIBlob;
-  BlobIndex: Integer;
-
 begin
   Result := 0;  // Blank
+
   try
-    // Add the blob data to the FBlobData list in a TDBIBlob and
-    // return the Position, which is One Based, in Result (0=Blank)
-    BlobData := TDBIBlob.Create(PData, Size, True);
-    BlobIndex := FBlobData.Add(BlobData);
-    Result := BlobIndex + 1;
+    // Create a wrapper object for the blob data and return the address of this object
+    if (Size > 0) then begin
+      Result := Integer(TDBIBlob.Create(PData, Size));
+    end;
   except
     on E: Exception do
       Error(E, Caller, '2360', 'Unable to Put Blob Data for FieldNo "%d"', [FieldNo]);

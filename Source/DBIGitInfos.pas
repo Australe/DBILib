@@ -34,6 +34,7 @@ uses
   DB, DBIDataset, DBIObjectListDatasets, DBIDataPacketWriters;
 
 type
+  TDBIGitFileStatus = (gfsStaged, gfsUnstaged, gfsUntracked);
   TDBIPathType = ( ptCmd, ptCmdWOW64, ptGit, ptGrep, ptXE3, ptD2006, ptSource, pt3rdParty );
 
 const
@@ -277,11 +278,15 @@ type
 
 type
   TDBIGitFileStage = class(TDBIGitCustomCommandProcessor)
+  private
+    FFileStatus: AnsiChar;
+
   protected
     function GetParameters: String; override;
 
   public
     property FileName;
+    property FileStatus: AnsiChar read FFileStatus write FFileStatus;
     property SourceName;
     property Output;
 
@@ -386,7 +391,12 @@ end;
 
 function TDBIGitFileStage.GetParameters: String;
 begin
-  Result := 'add ' + FileName;
+  if FileStatus = 'M' then begin
+    Result := 'add ' + FileName;
+  end
+  else if FileStatus = 'D' then begin
+    Result := 'rm ' + FileName;
+  end;
 end;
 
 
@@ -605,6 +615,7 @@ end;
 function TDBIGitLogInfo.GetParameters: String;
 begin
   Result :=
+//##JVR    'log --all --follow --pretty=format:"' +
     'log --all --pretty=format:"' +
     '<ROW ' +
     'Hash=%x0B%H%x0B ' +
@@ -759,7 +770,7 @@ end;
 
 class procedure TDBIGitStatus.UpdateFields(ADataset: TDataset);
 begin
-  ADataset.FieldByName('Status').Visible := False;
+  ADataset.FieldByName('Status').DisplayWidth := 4;
   ADataset.FieldByName('FileName').DisplayWidth := 80;
   ADataset.FieldByName('SourceName').DisplayWidth := 80;
 end;
