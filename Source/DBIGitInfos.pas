@@ -391,10 +391,10 @@ end;
 
 function TDBIGitFileStage.GetParameters: String;
 begin
-  if FileStatus = 'M' then begin
+  if (FileStatus = '?') or (FileStatus = 'M') then begin
     Result := 'add ' + FileName;
   end
-  else if FileStatus = 'D' then begin
+  else if (FileStatus = 'D') then begin
     Result := 'rm ' + FileName;
   end;
 end;
