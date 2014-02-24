@@ -49,7 +49,10 @@ type
 
 
 type
-  TDBIProcessInfoOption = (piCtrlCAbort, piDetachedProcess, piVerbose);
+  TDBIProcessEmitKind = (ioNone, ioStdin, ioStdout, ioStderr, ioInfo, ioTrace, ioError, ioDebug);
+  TDBIProcessEmit = procedure(Sender: TObject; const Message: String; const Emitind: TDBIProcessEmitKind) of object;
+
+  TDBIProcessInfoOption = (piCtrlCAbort, piDetachedProcess, piRedirectOutput, piVerbose);
   TDBIProcessInfoOptions = set of TDBIProcessInfoOption;
 
 type
@@ -64,6 +67,8 @@ type
     FProcessAttributes: TSecurityAttributes;
     FStartupInfo: TStartupInfo;
     FTickOffset: LongWord;
+    FVisible: Boolean;
+    FWaitHandle: THandle;
 
     FParameters: String;
     FSourceName: String;
@@ -76,8 +81,16 @@ type
 
   private
     FOnIdle: TNotifyEvent;
+    FOnProcessBegin: TNotifyEvent;
+    FOnProcessEnd: TNotifyEvent;
 
   protected
+    procedure Emit(
+      Sender: TObject;
+      const Message: String;
+      const EmitKind: TDBIProcessEmitKind
+      ); virtual;
+
     function GetCommandLine: String; virtual;
     function GetEnvironmentVariable(const Name: String): String;
     function GetOutput: TStrings; virtual;
@@ -88,31 +101,41 @@ type
     procedure OutputRelease; virtual;
 
     procedure ProcessAbort;
+    procedure ProcessBegin; virtual;
+    procedure ProcessClose;
     procedure ProcessCloseHandles;
     function ProcessCreate: Boolean;
+    procedure ProcessEnd; virtual;
     function ProcessIdle: Boolean; virtual;
     function ProcessOutput(hRead: THandle; var TextBuffer: AnsiString; const Eof: Boolean): Boolean;
     procedure ProcessOutputLine(const Value: AnsiString); virtual;
     function ProcessStartupInfo: Boolean;
 
+    procedure RegisterDetachedCallback;
+
     procedure SetEnvironmentPath(const Value: String);
+    procedure SetOptions(const Value: TDBIProcessInfooptions); virtual;
     procedure SetOutput(Value: TStrings);
     procedure SetParameters(const Value: String); virtual;
     procedure SetSourceName(const Value: String); virtual;
     procedure SetTargetName(const Value: String); virtual;
+    procedure SetVisible(const Value: Boolean); virtual;
 
     property Aborted: Boolean read FAborted write FAborted;
     property EnvironmentPath: String read FEnvironmentPath write SetEnvironmentPath;
     property Output: TStrings read GetOutput write SetOutput;
     property ExitCode: Integer read FExitCode;
-    property Options: TDBIProcessInfoOptions read FOptions write FOptions;
+    property Options: TDBIProcessInfoOptions read FOptions write SetOptions;
 
   protected
     property CommandLine: String read GetCommandLine;
     property Parameters: String read GetParameters write SetParameters;
     property SourceName: String read GetSourceName write SetSourceName;
     property TargetName: String read GetTargetName write SetTargetName;
+    property Visible: Boolean read FVisible write SetVisible default True;
 
+    property OnProcessBegin: TNotifyEvent read FOnProcessBegin write FOnProcessBegin;
+    property OnProcessEnd: TNotifyEvent read FOnProcessEnd write FOnProcessEnd;
     property OnIdle: TNotifyEvent read FOnIdle write FOnIdle;
 
   public
@@ -125,6 +148,26 @@ type
     class procedure Release; virtual;
 
   end;
+
+
+type
+  TDBIShellProcess = class(TDBICustomProcess)
+  protected
+    procedure SetTargetName(const Value: String); override;
+
+  public
+    property Options;
+    property Parameters;
+    property SourceName;
+    property TargetName;
+    property Visible;
+
+    property OnProcessBegin;
+    property OnProcessEnd;
+    property OnIdle;
+
+  end;
+
 
 
 type
@@ -146,10 +189,14 @@ type
     property Description: String read FDescription write FDescription;
 
   public
+    constructor Create(AOwner: TComponent); override;
+
     property OutputClassType: TDBIProcessOutputInfoClass read GetOutputClassType;
     property Parameters;
     property TargetName;
 
+    property OnProcessBegin;
+    property OnProcessEnd;
     property OnIdle;
     property OnProcessItem: TDBIProcessItem read FOnProcessItem write FOnProcessItem;
 
@@ -159,11 +206,48 @@ type
 implementation
 
 
+type
+  WaitOrTimerCallback = procedure (Instance: TDBIProcess; TimeOrWaitFired: Boolean); stdcall;
+
+const
+  WT_EXECUTEDEFAULT      = $00;
+  WT_EXECUTEONLYONCE     = $08;
+  WT_EXECUTELONGFUNCTION = $10;
+
+function RegisterWaitForSingleObject(
+  var phNewWaitObject: THandle;
+  hObject: THandle;
+  Callback: WaitOrTimerCallback;
+  Context: Pointer;
+  dwMilliseconds: Cardinal;
+  dwFlags: Cardinal
+  ): Boolean; stdcall; external 'kernel32.dll';
+
+function UnregisterWait(WaitHandle: THandle): Boolean; stdcall; external 'kernel32.dll';
+
+procedure WaitCallback(Instance: TDBIProcess; TimeOrWaitFired: Boolean); stdcall;
+begin
+  Instance.ProcessEnd;
+end;
+
+
+
+
+
 { TDBIProcess }
 
 function TDBIProcess.GetOutputClassType: TDBIProcessOutputInfoClass;
 begin
   Result := TDBIProcessOutputInfo;
+end;
+
+
+constructor TDBIProcess.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+
+  Options := [piRedirectOutput];
+  Visible := False;
 end;
 
 
@@ -197,6 +281,21 @@ end;
 
 
 
+{ TDBIShellProcess }
+
+procedure TDBIShellProcess.SetTargetName(const Value: String);
+begin
+  inherited SetTargetName(Value);
+
+  if (SourceName = '') then begin
+    inherited SetSourceName(ExtractFilepath(Value));
+  end;
+end;
+
+
+
+
+
 { TDBICustomProcess }
 
 type
@@ -207,6 +306,7 @@ constructor TDBICustomProcess.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
 
+  FVisible := True;
   FTickOffset := GetTickCount;
 
   // ProcessAttributes
@@ -228,11 +328,31 @@ destructor TDBICustomProcess.Destroy;
 begin
   OutputRelease;
 
+  // Release Detached Process Wait handle
+  if (FWaitHandle <> 0) then begin
+    UnregisterWait(FWaitHandle);
+    FWaitHandle := 0;
+  end;
+
   inherited Destroy;
 end;
 
 
+procedure TDBICustomProcess.Emit(
+  Sender: TObject;
+  const Message: String;
+  const EmitKind: TDBIProcessEmitKind
+  );
+begin
+  //##NOP
+end;
+
+
 function TDBICustomProcess.Execute: Boolean;
+const
+  ExitCode_SUCCESS = 0;
+  ExitCode_STILL_ACTIVE = 259;
+
 var
   OutputBuffer: AnsiString;
   OrgEnvPath: String;
@@ -244,6 +364,8 @@ var
       Result := WaitForSingleObject(FProcessInfo.hProcess, 80) = WAIT_TIMEOUT;
     end
     else begin
+      RegisterDetachedCallback;
+
       WaitForInputIdle(FProcessInfo.hProcess, Infinite);
     end;
   end;
@@ -268,6 +390,8 @@ begin
     try
       Result := ProcessCreate;
       if Result then begin
+        ProcessBegin;
+
         ResumeThread(FProcessInfo.hThread);
         CloseHandle(FProcessInfo.hThread);
 
@@ -288,7 +412,7 @@ begin
           GetExitCodeProcess(FProcessInfo.hProcess, Cardinal(FExitCode));
 
         finally
-          CloseHandle(FProcessInfo.hProcess);
+          ProcessClose;
         end;
       end
       else begin
@@ -305,7 +429,7 @@ begin
     ProcessCloseHandles;
   end;
 
-  Result := ExitCode = 0;
+  Result := (ExitCode = ExitCode_SUCCESS) or (ExitCode = ExitCode_STILL_ACTIVE);
 end;
 
 
@@ -385,6 +509,22 @@ begin
 end;
 
 
+procedure TDBICustomProcess.ProcessBegin;
+begin
+  if Assigned(FOnProcessBegin) then begin
+    FOnProcessBegin(Self);
+  end;
+end;
+
+
+procedure TDBICustomProcess.ProcessClose;
+begin
+  if not (piDetachedProcess in Options) then begin
+    ProcessEnd;
+  end;
+end;
+
+
 procedure TDBICustomProcess.ProcessCloseHandles;
   procedure ProcessCloseHandle(AHandle: THandle);
   begin
@@ -418,6 +558,24 @@ begin
     FStartupInfo,
     FProcessInfo
     );
+end;
+
+
+procedure TDBICustomProcess.ProcessEnd;
+begin
+  try
+    if Assigned(FOnProcessEnd) then begin
+      FOnProcessEnd(Self);
+    end;
+
+  finally
+    if (FWaitHandle <> 0) then begin
+      UnregisterWait(FWaitHandle);
+      FWaitHandle := 0;
+    end;
+
+    CloseHandle(FProcessInfo.hProcess);
+  end;
 end;
 
 
@@ -472,10 +630,12 @@ begin
       // if we are at a Line-Break then process line
       if (PTextBuffer^ <> #0) or Eof then begin
         SetString(LineBuffer, PStart, PTextBuffer - PStart);
-        ProcessOutputLine(LineBuffer);
 
         if PTextBuffer^ = #13 then Inc(PTextBuffer);
         if PTextBuffer^ = #10 then Inc(PTextBuffer);
+
+        Emit(Self, String(LineBuffer), ioStdout);
+        ProcessOutputLine(LineBuffer);
       end;
     end;
   end;
@@ -492,20 +652,43 @@ end;
 
 
 function TDBICustomProcess.ProcessStartupInfo: Boolean;
+const
+  RedirectOutputFlag: array[Boolean] of Word = (0, STARTF_USESTDHANDLES);
+  ShowWindowFlag: array[Boolean] of Word = (STARTF_USESHOWWINDOW, 0);
+
 begin
-  // Standard I/O
-  Result := CreatePipe(hRead, hWrite, @FProcessAttributes, 0);
+  Result := True;
 
-  // Error I/O
-  Result := Result and CreatePipe(hAbortRead, hAbortWrite, @FProcessAttributes, 0);
-
-  if Result then begin
+  if not Visible then begin
     FStartupInfo.wShowWindow := SW_HIDE;
+  end;
+
+  if  (piRedirectOutput in Options) then begin
+    // Standard I/O
+    Result := CreatePipe(hRead, hWrite, @FProcessAttributes, 0);
+
+    // Error I/O
+    Result := Result and CreatePipe(hAbortRead, hAbortWrite, @FProcessAttributes, 0);
+
     FStartupInfo.hStdInput := hAbortRead;
     FStartupInfo.hStdOutput := hWrite;
     FStartupInfo.hStdError := FStartupInfo.hStdOutput; // redirect
-    FStartupInfo.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
   end;
+
+  FStartupInfo.dwFlags :=
+    RedirectOutputFlag[piRedirectOutput in Options] or ShowWindowFlag[Visible];
+end;
+
+
+procedure TDBICustomProcess.RegisterDetachedCallback;
+begin
+  RegisterWaitForSingleObject(
+    FWaitHandle,                  // New wait object handle
+    FProcessInfo.hProcess,        // Process Handle
+    WaitCallback,                 // Callback Routine
+    Self,                         // Context Data
+    INFINITE, WT_EXECUTEDEFAULT or WT_EXECUTELONGFUNCTION or WT_EXECUTEONLYONCE
+    );
 end;
 
 
@@ -524,6 +707,12 @@ begin
     SetEnvironmentVariable('PATH', Pointer(FEnvironmentPath));
   end;
 //}
+end;
+
+
+procedure TDBICustomProcess.SetOptions(const Value: TDBIProcessInfooptions);
+begin
+  FOptions := Value;
 end;
 
 
@@ -551,6 +740,13 @@ procedure TDBICustomProcess.SetTargetName(const Value: String);
 begin
   FTargetName := Value;
 end;
+
+
+procedure TDBICustomProcess.SetVisible(const Value: Boolean);
+begin
+  FVisible := Value;
+end;
+
 
 
 initialization

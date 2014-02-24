@@ -34,6 +34,10 @@ uses
   DB, DBIDataset, DBIObjectListDatasets, DBIDataPacketWriters;
 
 type
+  EGitCustomError = class(Exception);
+  EGitStatusError = class(EGitCustomError);
+
+type
   TDBIGitFileStatus = (gfsStaged, gfsUnstaged, gfsUntracked);
   TDBIPathType = ( ptCmd, ptCmdWOW64, ptGit, ptGrep, ptXE3, ptD2006, ptSource, pt3rdParty );
 
@@ -120,17 +124,37 @@ type
   private
     FFileName: TFileName;
     FStream: TStream;
+    FOnEmit: TDBIProcessEmit;
 
   protected
-    function GetTargetName: String; override;
-    function GetStream: TStream;
+    procedure Emit(
+      Sender: TObject;
+      const Message: String;
+      const EmitKind: TDBIProcessEmitKind
+      ); override;
 
-    property FileName: TFileName read FFileName write FFileName;
+    class function ExtractRelativeUnixName(
+      const FileName: String;
+      const SourceName: String
+      ): String;
+
+    function GetRepositoryName: String; overload;
+    function GetStream: TStream;
+    function GetTargetName: String; override;
+    procedure SetFileName(const Value: TFileName); virtual;
+
+    property FileName: TFileName read FFileName write SetFileName;
     property Stream: TStream read GetStream;
+    property RepositoryName: String read GetRepositoryName;
 
   public
+    constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    function Execute: Boolean; override;
 
+    class function GetRepositoryName(const AFileName: TFileName): String; overload;
+
+    property OnEmit: TDBIProcessEmit read FOnEmit write FOnEmit;
   end;
 
 
@@ -152,6 +176,8 @@ type
     function GetParameters: String; override;
 
     procedure ProcessOutputLine(const Value: AnsiString); override;
+
+    procedure SetFileName(const Value: TFileName); override;
 
   public
     function Execute: Boolean; override;
@@ -186,7 +212,6 @@ type
     function GetParameters: String; override;
 
   public
-//##JVR    property FileName;
     property SourceName;
     property Output;
 
@@ -250,6 +275,8 @@ type
     function GetParameters: String; override;
 
   public
+    constructor Create(AOwner: TComponent); override;
+
     property FileName;
     property Options;
     property Output;
@@ -321,7 +348,7 @@ type
 implementation
 
 uses
-  DBIUtils, DBIStrings, DBIDialogs;
+  SysConst, DBIUtils, DBIStrings, DBIDialogs;
 
 
 function Is64Bit: Boolean;
@@ -436,6 +463,13 @@ end;
 
 { TDBIGitFileCompare }
 
+constructor TDBIGitFileCompare.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+
+  Options := [piDetachedProcess, piRedirectOutput];
+end;
+
 function TDBIGitFileCompare.GetParameters: String;
 begin
   Result := 'difftool -y ' + LeftHash + ' ' + RightHash + ' ' + FileName;
@@ -486,7 +520,9 @@ begin
     Writer.Data.Assign(Output);
     Writer.Dataset := ODS;
     Writer.SaveToStream(Stream);
-    Writer.SaveToFile('C:\Temp\Data.xml');
+  end
+  else begin
+    raise EGitStatusError.Create('Fatal Git Error!'#13#13 + Output.Text);
   end;
 end;
 
@@ -663,6 +699,15 @@ begin
 end;
 
 
+procedure TDBIGitLogInfo.SetFileName(const Value: TFileName);
+begin
+  //##DEBUG
+
+  inherited SetFileName(Value);
+end;
+
+
+
 
 
 
@@ -687,11 +732,68 @@ end;
 
 { TDBIGitCustomCommandProcessor }
 
+constructor TDBIGitCustomCommandProcessor.Create(AOwner: TComponent);
+begin
+  inherited Create(Aowner);
+
+  Options := [piRedirectOutput];
+  Visible := False;
+end;
+
+
 destructor TDBIGitCustomCommandProcessor.Destroy;
 begin
   FreeAndNil(FStream);
 
   inherited Destroy;
+end;
+
+
+function TDBIGitCustomCommandProcessor.Execute: Boolean;
+begin
+  Emit(Self, '', ioTrace);
+  Emit(Self, '[ ' + SourceName + ' ] ' + GetCommandLine, ioTrace);
+
+  Result := inherited Execute;
+
+  if not Result then begin
+    raise EGitStatusError.Create('Fatal Git Error! Command Failed.');
+  end;
+end;
+
+
+function TDBIGitCustomCommandProcessor.GetRepositoryName: String;
+begin
+  Result := GetRepositoryName(FileName);
+end;
+
+
+class function TDBIGitCustomCommandProcessor.GetRepositoryName(const AFileName: TFileName): String;
+const
+  GitConfig = '\.git\config';
+
+begin
+  if (AFileName = '') then begin
+    Result := PathNames[ptSource];
+    Exit;
+  end;
+
+  if not FileExists(AFileName) then begin
+    raise EInOutError.CreateFmt(SFileNotFound + ' "%s"', [AFileName]);
+  end;
+
+  Result := AFileName;
+  while (Result <> '') do begin
+    Result := ExtractFileDir(Result);
+    if FileExists(Result + GitConfig) then begin
+      Result := Result + '\';
+      Break;
+    end;
+  end;
+
+  if (Result = '') then begin
+    raise EInOutError.CreateFmt('No Git Repository found for "%s"', [AFileName]);
+  end;
 end;
 
 
@@ -707,6 +809,39 @@ end;
 function TDBIGitCustomCommandProcessor.GetTargetName: String;
 begin
   Result := '"' + PathNames[ptGit] + '"';
+end;
+
+
+procedure TDBIGitCustomCommandProcessor.SetFileName(const Value: TFileName);
+begin
+  // If Windows Path (Has Drive specifier '$:')
+  if Pos(':', Value) > 0 then begin
+    FFileName := ExtractRelativeUnixName(Value, SourceName);
+  end
+  else begin
+    FFileName := Value;
+  end
+end;
+
+
+procedure TDBIGitCustomCommandProcessor.Emit(
+  Sender: TObject;
+  const Message: String;
+  const EmitKind: TDBIProcessEmitKind
+  );
+begin
+  if Assigned(FOnEmit) then FOnEmit(Sender, Message, EmitKind);
+end;
+
+
+class function TDBIGitCustomCommandProcessor.ExtractRelativeUnixName(
+  const FileName: String;
+  const SourceName: String
+  ): String;
+begin
+  Result := Copy(FileName, Length(SourceName)+1, 128);
+
+  Result := StringReplace(Result, '\', '/', [rfReplaceAll]);
 end;
 
 

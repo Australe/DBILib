@@ -151,6 +151,7 @@ type
     tsXmlElement,
     tsComment1,
     tsComment2,
+    tsComment3,
     tsUnknown
     );
   TDBITokenStatus = set of TDBILexerState;
@@ -456,7 +457,7 @@ type
     This may cause some unexpected issues, but I hope NOT!
   }
   TDBILexerSymbolArray = array[Tok_UnAssigned..Tok_Tilde] of TDBILexerSymbolData;
-  TDBILexerSymbolMap = array[Tok_Null..Tok_Tilde] of TDBILexerSymbolArray;
+  TDBILexerSymbolMap = array[Tok_Null..Tok_Macro] of TDBILexerSymbolArray;
   TDBILexerCharacterMap = array[#0..#255] of TDBILexerSymbolData;
 
 const

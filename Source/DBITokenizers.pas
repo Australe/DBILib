@@ -54,6 +54,7 @@ type
     function GetTokenChar: TDBIChar;
     function GetTokenInteger: Integer;
     function GetTokenName: String;
+    function GetTokenString: String;
 
     procedure SetTokenChar(const Value: TDBIChar);
     procedure SetTokenRow(const Value: Integer);
@@ -76,6 +77,7 @@ type
     property TokenKind: TDBITokenKind read FTokenKind write FTokenKind;
     property TokenName: String read GetTokenName;
     property TokenStatus: TDBITokenStatus read FTokenStatus write FTokenStatus;
+    property TokenString: String read GetTokenString;
     property TokenType: TDBITokenType read FTokenType write FTokenType;
 
   end;
@@ -1029,13 +1031,28 @@ end;
   Jvr - 07/02/2005 14:40:03 - Initial code.<br>
 }
 procedure TDBICustomAsciiLexer.LexWhiteSpace;
+var
+  PSymbolData: PLexerSymbolData;
+
 begin
+  PSymbolData := @(FLexerCharMap[LexerChar]);
+
   Token.ClearString;
   Token.TokenType := FLexerCharMap[LexerChar].TokenType;
 
   while (Token.TokenType = FLexerCharMap[LexerChar].TokenType) and not Eof do begin
     Token.AddChar(LexerChar);
     GetChar;
+  end;
+
+  // Change state according to the state array
+  if (PSymbolData^.TokenStatus <> tsNoChange) then begin
+    SetStatus(PSymbolData^.TokenStatus);
+
+    // if we are setting a state then assign state "Before"
+    if {not} (tsMask in PSymbolData^.TokenStatus) then begin
+      Token.TokenStatus := LexerStatus;
+    end;
   end;
 end;
 
@@ -1260,6 +1277,12 @@ begin
   Len := Length('Tok_') + 1;
 
   Result := Copy(GetEnumName(TypeInfo(TDBITokenType), Ord(FTokenType)), Len, 32);
+end;
+
+
+function TDBILexerToken.GetTokenString: String;
+begin
+  Result := String(FTokenString);
 end;
 
 
