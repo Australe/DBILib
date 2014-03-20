@@ -53,7 +53,6 @@ type
     procedure ReadState(Reader: TReader); override;
     procedure RemoveChild(AComponent: TDBICompoundComponent);
     procedure SetChildIndex(const Value: Integer);
-    procedure SetDisplayName(const Value: String); virtual;
 //##JVR    procedure SetName(const NewName: TComponentName); override;
     procedure SetParent(AParent: TDBICompoundComponent); virtual;
     procedure SetParentComponent(Value: TComponent); override;
@@ -62,7 +61,7 @@ type
 
     property ChildIndex: Integer read GetChildIndex write SetChildIndex stored False;
     property ChildList: TList read GetChildList;
-    property DisplayName: String read GetDisplayName write SetDisplayName;
+    property DisplayName: String read GetDisplayName;
 
   public
     constructor Create(AOwner: TComponent); overload; override;
@@ -95,10 +94,12 @@ type
     function SaveToStream(AStream: TStream): TStream;
   end;
 
+
 type
   TDBICustomPersistenceAdapter = class(TDBICompoundComponent, IPersistenceAdapter)
   private
     FRootComponent: TComponent;
+    FText: String;
 
   protected
 //##CLASSES    procedure GetChildren(Proc: TGetChildProc; Root: TComponent); override;
@@ -106,6 +107,14 @@ type
     procedure SetRootComponent(Value: TComponent); virtual;
 
     property RootComponent: TComponent read GetRootComponent write SetRootComponent;
+
+  protected
+    function GetDisplayName: String; override;
+    function GetText: String; virtual;
+    function IsTextStored: Boolean;
+    procedure SetText(const Value: String); virtual;
+
+    property Text: String read GetText write SetText stored IsTextStored;
 
   public
     function ToString: String; {$ifdef DELPHIxe2}override;{$else}virtual;{$endif}
@@ -121,7 +130,6 @@ type
     function SaveToFile(AFileName: TFileName = ''): Boolean; virtual;
     function SaveToStream(AStream: TStream): TStream; virtual;
 
-    class procedure ToStrings(AInstance: TObject; Strings: TStrings);
   end;
 
   TDBIPersistenceAdapter = class(TDBICustomPersistenceAdapter)
@@ -129,6 +137,7 @@ type
 
   TDBIPersistentComponent = class(TDBICustomPersistenceAdapter)
   end;
+
 
 type
   TDBICustomIniFilePersistenceAdapter = class(TDBICustomPersistenceAdapter)
@@ -157,10 +166,10 @@ type
 implementation
 
 uses
-  Consts, RtlConsts, IniFiles, Types, TypInfo, DBIUtils;
+  Consts, RtlConsts, IniFiles, Types, TypInfo, DBITypInfo, DBIUtils;
 
 
-(* TDBIIniFile *)
+{ TDBIIniFile }
 
 type
   TDBIIniFile = class(TMemIniFile)
@@ -242,7 +251,7 @@ end;
 
 
 
-(* TDBICustomIniFilePersistenceAdapter *)
+{ TDBICustomIniFilePersistenceAdapter }
 
 const
   ParentAttribute = '.parent';
@@ -284,7 +293,7 @@ var
       if (ItemIndex = -1) then begin
         Strings.Add(ParentAttribute + '=-1');
       end;
-      ToStrings(Item, Strings);
+      TDBIProperties.GetProperties(Item, Strings);
     end;
   end;
 
@@ -423,7 +432,7 @@ var
       if (ItemIndex = -1) then begin
         Strings.Add(ParentAttribute + '=-1');
       end;
-      ToStrings(Item, Strings);
+      TDBIProperties.GetProperties(Item, Strings);
       IniFile.WriteSectionValues(Item.Name + '=' + Item.ClassName, Strings);
     end;
   end;
@@ -453,7 +462,7 @@ end;
 
 
 
-(* TDBICustomPersistenceAdapter *)
+{ TDBICustomPersistenceAdapter }
 
 // _____________________________________________________________________________
 {**
@@ -491,6 +500,25 @@ begin
 end;
 //*)
 
+
+// _____________________________________________________________________________
+{**
+  Jvr - 30/11/2010 15:47:20 - Initial code.<br />
+}
+function TDBICustomPersistenceAdapter.GetDisplayName: string;
+begin
+  Result := GetText;
+
+  if (Result = '') then begin
+    Result := inherited GetDisplayName;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 21/12/2010 11:35:13 - Initial code.<br />
+}
 function TDBICustomPersistenceAdapter.GetFileName: TFileName;
 begin
   Result := ChangeFileExt(ParamStr(0), '.dfm');
@@ -514,11 +542,26 @@ end;
 
 // _____________________________________________________________________________
 {**
-  Jvr - 13/09/2011 19:16:00 - Initial code.<br />
+  Jvr - 02/02/2012 14:59:44 - Initial code.<br />
 }
-function TDBICustomPersistenceAdapter.ToString: String;
+function TDBICustomPersistenceAdapter.GetText: String;
 begin
-  Result := (SaveToStream(Local(TStringStream.Create('')).Obj as TStream) as TStringStream).DataString;
+  if (FText <> '') then begin
+    Result := FText;
+  end
+  else begin
+    Result := Name;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 23/11/2010 10:47:23 - Initial code.<br />
+}
+function TDBICustomPersistenceAdapter.IsTextStored: Boolean;
+begin
+  Result := (FText <> '') and (CompareText(FText, Name) <> 0);
 end;
 
 
@@ -549,7 +592,7 @@ begin
     end;
 
     Result := RootComponent;
-    
+
     if not InitInheritedComponent(RootComponent, RootAncestor) then begin
       raise EResNotFound.CreateFmt(SResNotFound, [ClassName]);
     end;
@@ -622,6 +665,10 @@ begin
 end;
 
 
+// _____________________________________________________________________________
+{**
+  Jvr - 30/11/2010 16:02:32 - Initial code.<br />
+}
 procedure TDBICustomPersistenceAdapter.SetRootComponent(Value: TComponent);
 begin
   FRootComponent := Value;
@@ -630,56 +677,28 @@ end;
 
 // _____________________________________________________________________________
 {**
+  Jvr - 22/12/2010 12:36:18 - Initial code.<br />
+}
+procedure TDBICustomPersistenceAdapter.SetText(const Value: String);
+begin
+  FText := Value;
+end;
+
+
+// _____________________________________________________________________________
+{**
   Jvr - 13/09/2011 19:16:00 - Initial code.<br />
 }
-class procedure TDBICustomPersistenceAdapter.ToStrings(AInstance: TObject; Strings: TStrings);
-  function ReadProperty(PropInfo: PPropInfo): String;
-  begin
-    Result := '';
-    if (
-      Assigned(PropInfo) and
-      Assigned(PropInfo.SetProc) and
-      Assigned(PropInfo.GetProc) and
-      Assigned(PropInfo.StoredProc) and
-      (PropInfo^.Name <> 'Name')) then
-    begin
-      case PropInfo^.PropType^.Kind of
-        tkString, tkWstring, tkLString{$ifdef DELPHIxe2}, tkUString{$endif}: Result := GetStrProp(AInstance, PropInfo);
-        tkFloat: Result := FloatToStr(GetFloatProp(AInstance, PropInfo));
-        tkInteger: Result := IntToStr(GetOrdProp(AInstance, PropInfo));
-        tkInt64: Result := IntToStr(GetInt64Prop(AInstance, PropInfo));
-        tkEnumeration: Result := GetEnumProp(AInstance, PropInfo);
-        tkChar, tkWChar: Result := Chr(GetOrdProp(AInstance, PropInfo));
-        tkSet: Result := GetSetProp(AInstance, PropInfo);
-      else
-        raise Exception.Create('Property type not supported');
-      end;
-      if (Result <> '') then begin
-        Strings.Add(String(PropInfo^.Name) + '=' + Result);
-      end;
-    end;
-  end;
-
-var
-  PropList: TList;
-  PropIndex: Integer;
-
+function TDBICustomPersistenceAdapter.ToString: String;
 begin
-  PropList := Local(TList.Create).Obj as TList;
-  PropList.Count := GetTypeData(AInstance.ClassInfo)^.PropCount;
-  if PropList.Count > 0 then begin
-    GetPropInfos(AInstance.ClassInfo, PPropList(PropList.List));
-    for PropIndex := 0 to PropList.Count - 1 do begin
-      ReadProperty(PropList[PropIndex]);
-    end;
-  end;
+  Result := (SaveToStream(Local(TStringStream.Create('')).Obj as TStream) as TStringStream).DataString;
 end;
 
 
 
 
 
-(* TDBICompoundComponent *)
+{ TDBICompoundComponent }
 
 // _____________________________________________________________________________
 {**
@@ -973,16 +992,6 @@ begin
     end;
     Parent.ChildList.Move(ChildIndex, Value);
   end;  { if }
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 30/11/2010 16:02:32 - Initial code.<br />
-}
-procedure TDBICompoundComponent.SetDisplayName(const Value: String);
-begin
-  Name := Value;
 end;
 
 

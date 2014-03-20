@@ -36,11 +36,6 @@ uses
   Classes, SysUtils;
 
 type
-  TDBIString = AnsiString;
-  TDBIChar = AnsiChar;
-  PDBIChar = PAnsiChar;
-
-type
   TDBICustomStreamAdapter = class(TPersistent)
   private
     FModified: Boolean;
@@ -55,11 +50,11 @@ type
     function GetEof: Boolean;
     function GetPosition: Integer;
     function GetStream: TStream; virtual;
-    function GetText: TDBIString;
+    function GetText: String;
 
     procedure ReleaseStream;
     procedure SetModified(const Value: Boolean); virtual;
-    procedure SetText(const Value: TDBIString);
+    procedure SetText(const Value: String);
     procedure SetReadOnly(const Value: Boolean); virtual;
     procedure SetStream(const Value: TStream);
 
@@ -68,7 +63,7 @@ type
     property Modified: Boolean read FModified;
     property ReadOnly: Boolean read FReadOnly write SetReadOnly;
     property Stream: TStream read GetStream write SetStream;
-    property Text: TDBIString read GetText write SetText;
+    property Text: String read GetText write SetText;
 
   protected
     procedure Append;
@@ -81,7 +76,7 @@ type
     procedure LoadFromFile(const AFileName: TFileName);
     procedure LoadFromStream(AStream: TStream);
 
-    function ReadChar(var AChar: TDBIChar): Integer; virtual;
+    function ReadChar(var AChar: AnsiChar): Integer; virtual;
     procedure Reset; virtual;
     procedure SaveToFile(const AFileName: TFileName);
     procedure SaveToStream(AStream: TStream);
@@ -205,13 +200,13 @@ end;
 }
 procedure TDBICustomStreamFormatter.WriteLine(const Str: AnsiString = '');
 begin
-  WriteStr(TDBIString(Str) + SLineBreak);
+  WriteStr(AnsiString(Str) + SLineBreak);
 end;
 
 {$ifdef Delphi2009}
 procedure TDBICustomStreamFormatter.WriteLine(const Str: WideString = '');
 begin
-  WriteStr(TDBIString(Str) + SLineBreak);
+  WriteStr(AnsiString(Str) + SLineBreak);
 end;
 {$endif}
 
@@ -347,7 +342,7 @@ end;
 {**
   Jvr - 17/03/2005 17:57:36 - Initial code.<br>
 }
-function TDBICustomStreamAdapter.GetText: TDBIString;
+function TDBICustomStreamAdapter.GetText: String;
 var
   StringData: TStringStream;
 
@@ -356,7 +351,7 @@ begin
   try
     SaveToStream(StringData);
 
-    Result := TDBIString(StringData.DataString);
+    Result := String(StringData.DataString);
   finally
     StringData.Free;
   end;
@@ -410,7 +405,7 @@ end;
 {**
   Jvr - 17/03/2005 18:02:53 - Initial code.<br>
 }
-function TDBICustomStreamAdapter.ReadChar(var AChar: TDBIChar): Integer;
+function TDBICustomStreamAdapter.ReadChar(var AChar: AnsiChar): Integer;
 begin
   if (Stream.Read(AChar, 1) > 0) then begin
     Result := Stream.Position;
@@ -524,7 +519,7 @@ end;
   Jvr - 17/03/2005 16:18:20 - Initial code.<br>
   Jvr - 12/04/2007 15:59:10 - Stream is now cleared, not just reset.<br>
 }
-procedure TDBICustomStreamAdapter.SetText(const Value: TDBIString);
+procedure TDBICustomStreamAdapter.SetText(const Value: String);
 var
   LocalStream: TStream;
 

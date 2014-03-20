@@ -130,6 +130,29 @@ type
 
 
 type
+  TDBIFileListAction = (flaInclude, flaExclude);
+
+  TDBIFileList = class(TStringList)
+  protected
+    function GetFileName(const Index: Integer): TFileName;
+
+  public
+    function GetFile(
+      const FileName: TFileName;
+      const Action: TDBIFileListAction = flaInclude
+      ): Boolean;
+
+    function GetFiles(
+      const PathName: TFileName;
+      const FileMask: String;
+      const Action: TDBIFileListAction = flaInclude
+      ): Boolean;
+
+    property FileName[const Index: Integer]: TFileName read GetFileName;
+  end;
+
+
+type
   ILocalInstance = interface(IUnknown)
     function Add(Instance: TObject): TObject;
   end;
@@ -152,7 +175,6 @@ procedure DBIDebug(
   Args: array of const
   );
 
-function DBIFileFind(const PathName, FileMask: TFileName; Results: TStrings): Boolean;
 function DBIForceDirectories(Dir: string): Boolean;
 function DBIGetUserName: WideString;
 function DBILocalHostName: String;
@@ -232,6 +254,77 @@ begin
     Result.Guard := TLocalInstance.Create;
   end;
   Result.Obj := Result.Guard.Add(Instance);
+end;
+
+
+
+
+
+{ TDBIFileList }
+
+function TDBIFileList.GetFileName(const Index: Integer): TFileName;
+begin
+  Result := ValueFromIndex[Index];
+end;
+
+
+function TDBIFileList.GetFile(
+  const FileName: TFileName;
+  const Action: TDBIFileListAction = flaInclude
+  ): Boolean;
+var
+  FileIndex: Integer;
+  ItemName: String;
+
+begin
+  ItemName := ChangeFileExt(ExtractFileName(FileName), '=') + FileName;
+  FileIndex :=  IndexOf(ItemName);
+
+  Result :=  (Action = flaInclude) and (FileIndex < 0);
+  if Result then begin
+    Add(ItemName);
+  end
+  else begin
+    Result :=  (Action = flaExclude) and (FileIndex > -1);
+    if Result then begin
+      Delete(FileIndex);
+    end;
+  end;
+end;
+
+
+function TDBIFileList.GetFiles(
+  const PathName: TFileName;
+  const FileMask: String;
+  const Action: TDBIFileListAction = flaInclude
+  ): Boolean;
+var
+  FileInfo: TSearchRec;
+
+begin
+  if SysUtils.FindFirst(PathName + '*.*', faDirectory, FileInfo) = 0 then begin
+    repeat
+      if (FileInfo.Name <> '.') and (FileInfo.Name <> '..') then begin
+        if FileInfo.Attr = faDirectory then begin
+          GetFiles(PathName + FileInfo.Name + '\', FileMask, Action);
+        end;
+      end;
+    until SysUtils.FindNext(FileInfo) <> 0;
+
+    SysUtils.FindClose(FileInfo);
+  end;
+
+  if SysUtils.FindFirst(PathName + FileMask, faAnyFile, FileInfo) = 0 then begin
+    repeat
+      if FileInfo.Attr <> faDirectory then begin
+        GetFile(PathName + FileInfo.Name, Action);
+      end;
+    until SysUtils.FindNext(FileInfo) <> 0;
+
+    SysUtils.FindClose(FileInfo);
+  end;
+
+  Result := Count > 0;
 end;
 
 
@@ -649,40 +742,6 @@ begin
 {$endif}
 end;
 
-
-function DBIFileFind(const PathName, FileMask: TFileName; Results: TStrings): Boolean;
-var
-  PathInfo, FileInfo: TSearchRec;
-  FolderName: String;
-
-begin
-  if FindFirst(PathName + '*.*', faDirectory, PathInfo) <> 0 then begin
-    Result := False;
-    Exit;
-  end;
-
-  repeat
-    if (PathInfo.Name <> '.') and (PathInfo.Name <> '..') then begin
-      if PathInfo.Attr = faDirectory then begin
-        FolderName := PathName + PathInfo.Name + '\';
-        DBIFileFind(FolderName, FileMask, Results);
-
-        if FindFirst(FolderName + FileMask, faAnyFile, FileInfo) = 0 then begin
-          repeat
-            if FileInfo.Attr <> faDirectory then begin
-              Results.Add(FolderName + FileInfo.Name);
-            end;
-          until FindNext(FileInfo) <> 0;
-
-          FindClose(FileInfo);
-        end;
-      end;
-    end;
-  until FindNext(PathInfo) <> 0;
-
-  FindClose(PathInfo);
-  Result := Assigned(Results) and (Results.Count > 0);
-end;
 
 
 // _____________________________________________________________________________

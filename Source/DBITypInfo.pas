@@ -77,19 +77,16 @@ type
       ): Boolean;
 
   end;
+
+
+type
+  TDBIProperties = class(TStringList)
+  public
+    class procedure GetProperties(AInstance: TObject; Strings: TStrings);
+  end;
+
+
 {##JVR
-  function DBICheckPropType(
-    Instance: TObject;
-    const PropName: String;
-    const ValidKinds: TDBITypeKinds
-    ): TTypeKind;
-
-  function IsPropertyKindOf(
-    Instance: TObject;
-    const PropName: String;
-    ValidKinds: TDBITypeKinds
-    ): Boolean;
-
 type
   TDBIAnsiStrProp = class
   public
@@ -129,7 +126,8 @@ uses
 {$ifndef fpc}
   Consts,
 {$endif}
-  SysUtils;
+  SysUtils,
+  DBIUtils;
 
 
 { TypInfo Helpers }
@@ -468,6 +466,62 @@ end;
 function GetFieldTypeName(const DataType: TFieldType): String;
 begin
   Result := GetEnumName(TypeInfo(TFieldType), Ord(DataType));
+end;
+
+
+
+
+
+{ TDBIPropertyList }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 13/09/2011 19:16:00 - Initial code.<br />
+}
+class procedure TDBIProperties.GetProperties(AInstance: TObject; Strings: TStrings);
+  function ReadProperty(PropInfo: PPropInfo): String;
+  begin
+    Result := '';
+    if (
+      Assigned(PropInfo) and
+//##JVR      Assigned(PropInfo.SetProc) and
+      Assigned(PropInfo.GetProc) and
+      Assigned(PropInfo.StoredProc) and
+      (PropInfo^.Name <> 'Name')) then
+    begin
+      case PropInfo^.PropType^.Kind of
+        tkString, tkWstring, tkLString{$ifdef DELPHIxe2}, tkUString{$endif}: Result := GetStrProp(AInstance, PropInfo);
+        tkFloat: Result := FloatToStr(GetFloatProp(AInstance, PropInfo));
+        tkInteger: Result := IntToStr(GetOrdProp(AInstance, PropInfo));
+        tkInt64: Result := IntToStr(GetInt64Prop(AInstance, PropInfo));
+        tkEnumeration: Result := GetEnumProp(AInstance, PropInfo);
+        tkChar, tkWChar: Result := Chr(GetOrdProp(AInstance, PropInfo));
+        tkSet: Result := GetSetProp(AInstance, PropInfo);
+      else
+        raise Exception.CreateFmt(
+          'Property "%s" of type "%s" not supported',
+          [PropInfo^.Name, GetEnumName(TypeInfo(TTypeKind), Ord(PropInfo^.PropType^.Kind))]
+          );
+      end;
+      if (Result <> '') then begin
+        Strings.Add(String(PropInfo^.Name) + '=' + Result);
+      end;
+    end;
+  end;
+
+var
+  PropList: TList;
+  PropIndex: Integer;
+
+begin
+  PropList := Local(TList.Create).Obj as TList;
+  PropList.Count := GetTypeData(AInstance.ClassInfo)^.PropCount;
+  if PropList.Count > 0 then begin
+    GetPropInfos(AInstance.ClassInfo, PPropList(PropList.List));
+    for PropIndex := 0 to PropList.Count - 1 do begin
+      ReadProperty(PropList[PropIndex]);
+    end;
+  end;
 end;
 
 

@@ -554,7 +554,7 @@ begin
     True,
     CREATE_SUSPENDED,
     nil,
-    PChar(FSourceName),
+    PChar(SourceName),
     FStartupInfo,
     FProcessInfo
     );

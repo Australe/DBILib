@@ -129,6 +129,7 @@ const
   soLetters = soUpperCase + soLowerCase + [Chr_Underscore];
   soDigits = ['0'..'9'];
   soDecimalDigits = soDigits + [Chr_Dot];
+  soHexDigits = soDigits + ['A'..'F'] + ['a'..'f'];
   soAlphaNumeric = soLetters + soDigits;
   soAlphaNumericObject = soAlphaNumeric + [Chr_Dot];
 
@@ -142,6 +143,13 @@ type
     tkMacro
     );
   TDBITokenKinds = set of TDBITokenKind;
+
+type
+  TDBITokenPosition = record
+    Column: Integer;
+    Row: Integer;
+    Position: Integer;
+  end;
 
 type
   TDBILexerState = (
@@ -284,9 +292,12 @@ type
     Tok_Default,                       // Used as default parameter, means lookup
     Tok_LineBreak,                     // CR/LF
     Tok_Identifier,                    // Any Word inc. Letters,Digits,Underscores
+    Tok_NameSpace,                     // Identifiers joined with dot notation
+    Tok_ControlCharacter,
     Tok_QuotedString,
     Tok_IntegerLiteral,
     Tok_FloatLiteral,
+    Tok_HexLiteral,
     Tok_Eof,
     Tok_Macro
     );

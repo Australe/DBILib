@@ -151,6 +151,13 @@ type
 
 
 type
+  TDBIDialogAsk = class(TDBIDialogListBox)
+  public
+    class function Execute(Strings: TStrings; const ATitle: String = 'Select'): Boolean; overload;
+  end;
+
+
+type
   TDBIDialogProgress = class(TDBICustomDialog)
   private
     FBar: TProgressBar;
@@ -317,6 +324,37 @@ begin
     Dialog.Next;
   end;
   Dialog.Last;
+end;
+
+
+
+
+
+{ TDBIDialogProceed }
+
+class function TDBIDialogAsk.Execute(Strings: TStrings; const ATitle: String = 'Select'): Boolean;
+const
+  BorderStyles: array[Boolean] of TFormBorderStyle = (bsDialog, bsSizeable);
+  ItemIndices: array[Boolean] of Integer = (-1, 0);
+
+var
+  Dialog: TDBIDialogask;
+
+begin
+  Result := Assigned(Strings) and (Strings.Count > 0);
+  if Result then begin
+    Dialog := BuildDialog as Self;
+    try
+      Dialog.Caption := Application.Title + ' - ' + ATitle;
+      Dialog.Listbox.Items.Assign(Strings);
+      Dialog.ListBox.ItemIndex := -1;
+      Dialog.Height := 100 + Abs(Strings.Count * Dialog.ListBox.Font.Height);
+
+      Result := Dialog.ShowModal = mrOK;
+    finally
+      Dialog.Free;
+    end;
+  end;
 end;
 
 
@@ -597,7 +635,7 @@ var
   Context: HDC;
   Rect: TRect;
   ClipRgn: HRGN;
-  
+
 begin
   // font height approximation (compensate 1px for internal leading)
   LineHeight := Padding + Abs(Font.Height) - Abs(Font.Height) div Font.Height;

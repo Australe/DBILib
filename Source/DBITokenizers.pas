@@ -31,7 +31,7 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  Classes, SysUtils, DBIStreamAdapters, DBITokenizerConsts;
+  Classes, SysUtils, DBITypInfo, DBIStreamAdapters, DBITokenizerConsts;
 
 type
   TDBIString = AnsiString;
@@ -41,10 +41,8 @@ type
 type
   TDBILexerToken = class(TPersistent)
   private
-    FColumn: Integer;
-    FPosition: Integer;
-    FRow: Integer;
     FTokenKind: TDBITokenKind;
+    FTokenPosition: TDBITokenPosition;
     FTokenStatus: TDBITokenStatus;
     FTokenString: TDBIString;
     FTokenType: TDBITokenType;
@@ -57,7 +55,6 @@ type
     function GetTokenString: String;
 
     procedure SetTokenChar(const Value: TDBIChar);
-    procedure SetTokenRow(const Value: Integer);
 
   public
     constructor Create;
@@ -70,12 +67,13 @@ type
     property AsInteger: Integer read GetTokenInteger;
     property AsString: TDBIString read FTokenString write FTokenString;
 
-    property Column: Integer read FColumn write FColumn;
-    property Row: Integer read FRow write SetTokenRow;
-    property Position: Integer read FPosition write FPosition;
+    property Column: Integer read FTokenPosition.Column write FTokenPosition.Column;
+    property Row: Integer read FTokenPosition.Row write FTokenPosition.Row;
+    property Position: Integer read FTokenPosition.Position write FTokenPosition.Position;
 
     property TokenKind: TDBITokenKind read FTokenKind write FTokenKind;
     property TokenName: String read GetTokenName;
+    property TokenPosition: TDBITokenPosition read FTokenPosition;
     property TokenStatus: TDBITokenStatus read FTokenStatus write FTokenStatus;
     property TokenString: String read GetTokenString;
     property TokenType: TDBITokenType read FTokenType write FTokenType;
@@ -92,6 +90,7 @@ type
     FInternalPosition: Integer;
     FInternalRow: Integer;
 
+    FPriorChar: TDBIChar;
     FLexerChar: TDBIChar;
     FLexerCharMap: TDBILexerCharacterMap;
     FLexerEof: Boolean;
@@ -104,7 +103,8 @@ type
     function GetTokenType: TDBITokenType;
 
     procedure LexInitialise; virtual;
-    procedure LexSymbol; virtual;
+    procedure LexSymbol; overload; virtual;
+    procedure LexSymbol(AChar: TDBIChar); overload;
     procedure LexEof; virtual;
     procedure LexNop; virtual;
 
@@ -118,10 +118,12 @@ type
 
     procedure SetBufferIndex(const Value: Integer);
     procedure SetEof(const Value: Boolean);
-    procedure SetStatus(Value: TDBITokenStatus);
+    procedure SetStatus(Value: TDBITokenStatus);  virtual;
+    procedure UpdateStatus(Value: TDBITokenStatus);
 
     property BufferIndex: Integer read GetBufferIndex write SetBufferIndex;
     property Eof: Boolean read FLexerEof write SetEof default False;
+    property PriorChar: TDBIChar read FPriorChar write FPriorChar;
     property LexerChar: TDBIChar read FLexerChar write FLexerChar;
     property LexerCharMap: TDBILexerCharacterMap read FLexerCharMap;
     property LexerStatus: TDBITokenStatus read FLexerStatus;
@@ -224,7 +226,7 @@ type
 
 type
   TDBIGetParam = function(
-      Sender: TObject; const ParamName: TDBIString; var ParamValue: Variant
+      Sender: TObject; const ParamName: String; var ParamValue: Variant
       ): Boolean of object;
 
   TDBICustomMacroProcessor = class(TDBICustomParser)
@@ -233,7 +235,7 @@ type
 
   protected
     function GetParam(
-      Sender: TObject; const ParamName: TDBIString; var ParamValue: Variant
+      Sender: TObject; const ParamName: String; var ParamValue: Variant
       ): Boolean; virtual;
 
     function GetLexerClassType: TDBICustomAsciiLexerClass; override;
@@ -247,10 +249,88 @@ type
   end;
 
 
+  TDBIReflectionMacroProcessor = class(TDBICustomMacroProcessor)
+  private
+    FProperties: TDBIProperties;
+    function GetProperties: TStrings;
+
+  protected
+    function GetParam(
+      Sender: TObject; const ParamName: String; var ParamValue: Variant
+      ): Boolean; override;
+
+    property Properties: TStrings read GetProperties;
+
+  public
+    destructor Destroy; override;
+
+  end;
+
+
+function Macro(const Format: String; const Args: array of const): String;
+
+
 implementation
 
 uses
-  TypInfo;
+  TypInfo, DBIUtils;
+
+
+function Macro(const Format: String; const Args: array of const): String;
+var
+  Processor: TDBIReflectionMacroProcessor;
+  Index: Integer;
+
+begin
+  Processor := Local(TDBIReflectionMacroProcessor.Create).Obj as TDBIReflectionMacroProcessor;
+  Processor.Input.Text := Format;
+
+  for Index := Low(Args) to High(Args) do begin
+    if (Args[Index].VType = vtObject) and (Args[Index].VObject is TPersistent) then begin
+      TDBIProperties.GetProperties(TPersistent(Args[Index].VObject), Processor.Properties);
+    end;
+  end;
+
+  Processor.Process;
+  Result := Processor.Output.Text;
+end;
+
+
+
+{ TDBIReflectionMacroProcessor }
+
+destructor TDBIReflectionMacroProcessor.Destroy;
+begin
+  FProperties.Free;
+  FProperties := nil;
+
+  inherited Destroy;
+end;
+
+
+function TDBIReflectionMacroProcessor.GetParam(
+  Sender: TObject;
+  const ParamName: String;
+  var ParamValue: Variant
+  ): Boolean;
+begin
+  Result := Properties.IndexOfName(ParamName) > -1;
+  if Result then begin
+    ParamValue := Properties.Values[ParamName];
+  end;
+end;
+
+
+function TDBIReflectionMacroProcessor.GetProperties: TStrings;
+begin
+  if not Assigned(FProperties) then begin
+    FProperties := TDBIProperties.Create;
+    FProperties.Duplicates := dupIgnore;
+    FProperties.Sorted := True;
+  end;
+  Result := FProperties;
+end;
+
 
 
 { TDBICustomMacroProcessor }
@@ -263,7 +343,7 @@ end;
 
 function TDBICustomMacroProcessor.GetParam(
   Sender: TObject;
-  const ParamName: TDBIString;
+  const ParamName: String;
   var ParamValue: Variant
   ): Boolean;
 begin
@@ -284,7 +364,7 @@ begin
   Result := Input.Token.TokenType = Tok_Macro;
   if Result then begin
     ParamValue := varNull;
-    if GetParam(Self, Input.Token.AsString, ParamValue) then begin
+    if GetParam(Self, Input.Token.TokenString, ParamValue) then begin
       ParamString := ParamValue;
 
       Input.PutBack(ParamString);
@@ -467,14 +547,14 @@ const
     '  %s'#13 +
     '  Token = "%s"'#13 +
     '  Type = "%s"'#13 +
-    '  TDBIString = "%s"';
+    '  String = "%s"';
 
 var
   Address: Pointer;
 
-  function GetUnitName: TDBIString;
+  function GetUnitName: String;
   begin
-    Result := TDBIString(TypInfo.GetTypeData(Self.ClassInfo)^.UnitName);
+    Result := String(TypInfo.GetTypeData(Self.ClassInfo)^.UnitName);
   end;
 
 begin
@@ -542,6 +622,8 @@ end;
 }
 function TDBIAbstractLexer.GetChar: Boolean;
 begin
+  FPriorChar := FLexerChar;
+
   if (BufferIndex > 0) then begin
     FLexerChar := FPutbackBuffer[BufferIndex];
     BufferIndex := BufferIndex-1;
@@ -629,8 +711,21 @@ begin
   PSymbolData := @(FLexerCharMap[LexerChar]);
   Token.TokenType := PSymbolData^.TokenType;
 
-  SetStatus(PSymbolData^.TokenStatus);
+  UpdateStatus(PSymbolData^.TokenStatus);
   GetChar;
+end;
+
+
+procedure TDBIAbstractLexer.LexSymbol(AChar: TDBIChar);
+var
+  PSymbolData: PLexerSymbolData;
+
+begin
+  Token.AsChar := AChar;
+  PSymbolData := @(FLexerCharMap[AChar]);
+  Token.TokenType := PSymbolData^.TokenType;
+
+  UpdateStatus(PSymbolData^.TokenStatus);
 end;
 
 
@@ -788,25 +883,23 @@ end;
 // _____________________________________________________________________________
 {**
   Jvr - 04/03/2005 15:37:45 - Initial code.<br/>
-
-  Example<br/>
-  <pre>
-   tsComment2           = $00000200;   // comment style-2 /* ... */
-   tsQuotedString       = $0F010000;   // Quoted String state flag toggle
-   tsToggleMask (AND)   = $F0FFFFFF;
-
-   Intermediate Result  = $00010200;
-   tsQuotedString       = $0F010000;   // Quoted String state flag toggle
-
-   Final Result         = $00000200;   // still in comment style-2 state
-  </pre>
 }
 procedure TDBIAbstractLexer.SetStatus(Value: TDBITokenStatus);
 var
   LexerState: TDBILexerState;
 
 begin
-  // Exclude
+  // Exclude Comments when in a String Literal
+  if (tsStringLiteral in FLexerStatus) then begin
+    Value := Value - [tsComment1, tsComment2, tsComment3];
+  end
+
+  // Exclude String Literal from Comments
+  else if (tsComment1 in FLexerStatus) or (tsComment2 in FLexerStatus) or  (tsComment3 in FLexerStatus) then begin
+    Value := Value - [tsStringLiteral];
+  end;
+
+  // Mask - may need to change the order of this to first
   if (tsMask in Value) then begin
     FLexerStatus := FLexerStatus - Value;
   end
@@ -832,6 +925,19 @@ begin
   end;
 end;
 
+
+procedure TDBIAbstractLexer.UpdateStatus(Value: TDBITokenStatus);
+begin
+  // Change state according to the state array
+  if (Value <> tsNoChange) then begin
+    SetStatus(Value);
+
+    // if we are clearing a state then assign state "Before"
+    if (tsMask in Value) then begin
+      Token.TokenStatus := LexerStatus;
+    end;
+  end;
+end;
 
 
 
@@ -918,15 +1024,7 @@ begin
   Token.TokenType := PSymbolData^.TokenType;
 
   // Change state according to the state array
-  if (PSymbolData^.TokenStatus <> tsNoChange) then begin
-    SetStatus(PSymbolData^.TokenStatus);
-
-    // if we are setting a state then assign state "Before"
-    if {not} (tsMask in PSymbolData^.TokenStatus) then begin
-      Token.TokenStatus := LexerStatus;
-    end;
-
-  end;
+  UpdateStatus(PSymbolData^.TokenStatus);
 
   // Call the mapped lexer function if it is assigned and not Eof
   if Assigned(PSymbolData^.LexerProc) and not Eof then begin
@@ -979,6 +1077,8 @@ begin
   end;
 
   // Numbers
+  MapSymbol(LexNumber, '+', Tok_NoChange, tkNumber);
+  MapSymbol(LexNumber, '-', Tok_NoChange, tkNumber);
   for Character := '0' to '9' do begin
     MapSymbol(LexNumber, Character, Tok_NoChange, tkNumber);
   end;
@@ -1018,6 +1118,10 @@ begin
     if (LexerChar in soDecimalDigits) then begin
       Token.AddChar(LexerChar);
     end
+    else if (PriorChar in ['+', '-']) then begin
+      LexSymbol(PriorChar);
+      Break;
+    end
     else begin
       Break;
     end;
@@ -1046,14 +1150,7 @@ begin
   end;
 
   // Change state according to the state array
-  if (PSymbolData^.TokenStatus <> tsNoChange) then begin
-    SetStatus(PSymbolData^.TokenStatus);
-
-    // if we are setting a state then assign state "Before"
-    if {not} (tsMask in PSymbolData^.TokenStatus) then begin
-      Token.TokenStatus := LexerStatus;
-    end;
-  end;
+  UpdateStatus(PSymbolData^.TokenStatus);
 end;
 
 
@@ -1190,9 +1287,9 @@ begin
     TokenData.FTokenStatus := FTokenStatus;
     TokenData.FTokenString := FTokenString;
 
-    TokenData.FRow := FRow;
-    TokenData.FColumn := FColumn;
-    TokenData.FPosition := FPosition;
+    TokenData.Row := Row;
+    TokenData.Column := Column;
+    TokenData.Position := Position;
   end
   else begin
     inherited AssignTo(Dest);
@@ -1206,12 +1303,12 @@ end;
 }
 procedure TDBILexerToken.Clear;
 begin
-  FRow := 1;
-  FColumn := 0;
-  FPosition := 0;
-  FTokenType := Tok_UnAssigned;
-  FTokenKind := tkUnAssigned;
-  FTokenStatus := tsNone;
+  Row := 1;
+  Column := 0;
+  Position := 0;
+  TokenType := Tok_UnAssigned;
+  TokenKind := tkUnAssigned;
+  TokenStatus := tsNone;
 
   SetLength(FTokenString, 0);
 end;
@@ -1280,6 +1377,10 @@ begin
 end;
 
 
+// _____________________________________________________________________________
+{**
+  Jvr - 25/05/2007 14:35:52 - Initial code - For debugging purposes.<br>
+}
 function TDBILexerToken.GetTokenString: String;
 begin
   Result := String(FTokenString);
@@ -1297,15 +1398,6 @@ begin
   FTokenString[1] := Value;
 end;
 
-
-// _____________________________________________________________________________
-{**
-  Jvr - 25/05/2007 14:35:52 - Initial code - For debugging purposes.<br>
-}
-procedure TDBILexerToken.SetTokenRow(const Value: Integer);
-begin
-  FRow := Value;
-end;
 
 
 end.

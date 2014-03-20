@@ -171,6 +171,26 @@ type
 
 
 type
+  TDBIBeyondCompare = class(TDBICustomProcess)
+  private
+    FFileName1: TFileName;
+    FFileName2: TFileName;
+
+  protected
+    function GetParameters: String; override;
+    function GetSourceName: String; override;
+    function GetTargetName: String; override;
+
+  public
+    property FileName1: TFileName read FFileName1 write FFileName1;
+    property FileName2: TFileName read FFileName2 write FFileName2;
+    property Options;
+    property Visible;
+
+  end;
+
+
+type
   TDBIGitLogInfo = class(TDBIGitCustomCommandProcessor)
   protected
     function GetParameters: String; override;
@@ -730,6 +750,31 @@ end;
 
 
 
+{ TDBIBeyondCompare }
+
+function TDBIBeyondCompare.GetParameters: String;
+begin
+  Result := FileName1 + ' ' + FileName2;
+end;
+
+function TDBIBeyondCompare.GetSourceName: String;
+begin
+  Result := 'C:\Temp\';
+end;
+
+function TDBIBeyondCompare.GetTargetName: String;
+const
+  CmdNotePad = 'C:\windows\system32\notepad.exe';
+  CmdCompare = '"C:\Program Files\Beyond Compare 3\BComp.exe"';
+
+begin
+  Result := CmdCompare;
+end;
+
+
+
+
+
 { TDBIGitCustomCommandProcessor }
 
 constructor TDBIGitCustomCommandProcessor.Create(AOwner: TComponent);
@@ -962,6 +1007,7 @@ begin
   FieldDef.Size := 127;
 
 end;
+
 
 
 initialization
