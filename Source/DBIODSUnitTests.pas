@@ -1069,6 +1069,40 @@ begin
     Gad := ODS.List[ODS.RecNo-1] as TGadData;
     Assert(ODS.FieldByName('Value').AsInteger = Gad.Value);
 
+    Assert(ODS.Locate('Status', '', []));
+    Assert(ODS.FieldByName('Status').AsString = '');
+    Assert(ODS.FieldByName('Age').AsInteger = 52);
+    Assert(ODS.FieldByName('Value').AsInteger = 102);
+    Assert(ODS.FieldByName('Gender').AsString = 'F');
+
+    Gad := ODS.List[ODS.RecNo-1] as TGadData;
+    Assert(ODS.FieldByName('Value').AsInteger = Gad.Value);
+
+
+    // Indexed Locate
+    ODS.AddIndex('KeyStatus', 'Status', []);
+    ODS.IndexName := 'KeyStatus';
+    ODS.Last;
+
+  { Age: 47; Gender: 'M'; YieldRate: 4.75; Value: 61; Status: 'ABC'; Created: '01/01/1900 01:01:01'; }
+
+    Assert(ODS.Locate('Age;Gender;YieldRate', VarArrayOf([47, 'M', 4.75]), []));
+    Assert(ODS.FieldByName('Age').AsInteger = 47);
+    Assert(ODS.FieldByName('Gender').AsString = 'M');
+    Assert(ODS.FieldByName('Status').AsString = 'ABC');
+
+    Value := ODS.FieldByName('Value').AsInteger;
+    Assert(Value = 61);
+    Assert(ODS.FieldByName('Value').AsInteger = 61);
+
+
+    Assert(ODS.Locate('Status', '', []));
+    Assert(ODS.FieldByName('Status').AsString = '');
+    Assert(ODS.FieldByName('Age').AsInteger = 52);
+    Assert(ODS.FieldByName('Value').AsInteger = 102);
+    Assert(ODS.FieldByName('Gender').AsString = 'F');
+
+
     ODS.Close;
   finally
     ODS.Free;

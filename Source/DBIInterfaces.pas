@@ -4398,6 +4398,7 @@ begin
 
       for Index := 0 to FieldCount - 1 do begin
         // Get Value and Compare with KeyValue
+        FillChar(Buffer, SizeOf(Buffer), 0);
         GetField(pRecBuf, FDSLocateProps.iKeyFields[Index],
           Pointer(@Buffer[0]), IsBlank);
         Found := DoCompare(FDSLocateProps.iKeyFields[Index], KeyValues[Index],

@@ -575,8 +575,8 @@ type
     procedure DoOnNewRecord; override;
 {$ifdef _UNUSED}
     procedure FetchMoreData(All: Boolean); virtual;
-    function FindRecord(Restart, GoForward: Boolean): Boolean; override;
 {$endif}
+    function FindRecord(Restart, GoForward: Boolean): Boolean; override;
     procedure FreeKeyBuffers;
     procedure FreeRecordBuffer(var Buffer: TDBIRecordBuffer); override;
 {$ifdef _AGGREGATES}
@@ -5964,11 +5964,10 @@ end;
 
 { Lookups }
 
-{$ifdef _UNUSED}
 function TDBIDataset.FindRecord(Restart, GoForward: Boolean): Boolean;
 var
   Status: DBIResult;
-  Cursor: IDSCursor;
+  Cursor: IDBICursor;
 begin
   CheckBrowseMode;
   SetFound(False);
@@ -6017,7 +6016,6 @@ begin
   Result := Found;
   if Result then DoAfterScroll;
 end;
-{$endif}
 
 
 // _____________________________________________________________________________
@@ -6064,9 +6062,9 @@ begin
     GetFieldList(Fields, KeyFields);
     CaseInsensitive := loCaseInsensitive in Options;
 
-    if not Assigned(FLookupCursor) then begin
-      FLookupCursor := CreateDSCursor(FDSCursor);
-    end;
+    // Always create a new LookupCursor - Indices and / or Filters may have changed
+    FLookupCursor := CreateDSCursor(FDSCursor);
+
     SortOnFields(FLookupCursor, KeyFields, CaseInsensitive, False);
     FFilterBuffer := Buffer;
     SetTempState(dsFilter);

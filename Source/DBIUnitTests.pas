@@ -1971,7 +1971,9 @@ const
     ( Age: 52; Gender: 'M'; YieldRate: 9.5; Value: 104; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
     ( Age: 52; Gender: 'F'; YieldRate: 9.5; Value: 100; Status: 'ABC'; Created: '01/01/1900 01:01:01';  ),
     ( Age: 52; Gender: 'M'; YieldRate: 9.75; Value: 106; Status: 'AB'; Created: '01/01/1900 01:01:01';  ),
-    ( Age: 52; Gender: 'F'; YieldRate: 9.75; Value: 102; Status: 'AB'; Created: '01/01/1900 01:01:01';  ),
+
+{}  ( Age: 52; Gender: 'F'; YieldRate: 9.75; Value: 102; Status:   ''; Created: '01/01/1900 01:01:01';  ),
+
     ( Age: 52; Gender: 'M'; YieldRate: 10; Value: 108; Status: 'ABCD'; Created: '01/01/1900 01:01:01';  ),
     ( Age: 52; Gender: 'F'; YieldRate: 10; Value: 104; Status: 'ABCD'; Created: '01/01/1900 01:01:01';  ),
     ( Age: 53; Gender: 'M'; YieldRate: 3; Value: 55; Status: 'ABCDEF'; Created: '01/01/1900 01:01:01';  ),
