@@ -136,6 +136,12 @@ type
   protected
     function GetFileName(const Index: Integer): TFileName;
 
+{$ifndef DELPHI2006}
+    function GetValueFromIndex(Index: Integer): String;
+
+    property ValueFromIndex[Index: Integer]: string read GetValueFromIndex;
+{$endif}
+
   public
     function GetFile(
       const FileName: TFileName;
@@ -328,6 +334,26 @@ begin
 end;
 
 
+{$ifndef DELPHI2006}
+function TDBIFileList.GetValueFromIndex(Index: Integer): string;
+const
+  NameValueSeparator = '=';
+
+var
+  SepPos: Integer;
+
+begin
+  Result := '';
+
+  if Index >= 0 then begin
+    Result := Get(Index);
+    SepPos := AnsiPos(NameValueSeparator, Result);
+    if (SepPos > 0) then begin
+      System.Delete(Result, 1, SepPos);
+    end;
+  end;
+end;
+{$endif}
 
 
 
@@ -377,10 +403,10 @@ var
   Atom: TAtom;
 
 begin
-  Result := (ParamCount > 0) and  (_ApplicationHandle <> 0);
+  Result := _ApplicationHandle <> 0;
   if Result then begin
     Atom := Windows.GlobalAddAtom(PChar(CMDLine));
-    Windows.SendMessage(_ApplicationHandle, WM_Call_Command, Atom, 0);
+    Windows.SendMessage(_ApplicationHandle, WM_Call_Command, Atom, ParamCount);
     GlobalDeleteAtom(Atom);
   end;
 end;
@@ -388,17 +414,21 @@ end;
 
 class function TDBIApplication.CallCommand(var Message: TMessage; CallBack: TDBICommandCallBack): Boolean;
 var
-  TempFileName: String;
+  Parameters: String;
 
 begin
   Result := Message.Msg = WM_Call_Command;
   if Result then begin
-    SetLength(TempFileName, MAX_PATH);
-    Windows.GlobalGetAtomName(TMessage(Message).WParam, PChar(TempFileName), MAX_PATH);
-    SetLength(TempFileName, StrLen(PChar(TempFileName)));
+    Parameters := '';
 
-    CallBack(TempFileName);
-  end
+    if (Message.LParam > 0) then begin
+      SetLength(Parameters, MAX_PATH);
+      Windows.GlobalGetAtomName(TMessage(Message).WParam, PChar(Parameters), MAX_PATH);
+      SetLength(Parameters, StrLen(PChar(Parameters)));
+    end;
+
+    CallBack(Parameters);
+  end;
 end;
 
 

@@ -31,18 +31,18 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  Classes, SysUtils, DB, DBIStrings, DBIObjectListDatasets, DBIUnitTests,
-  DBITokenizers, DBIDataPacketReaders,
+  Classes, SysUtils, DB,
 {$ifndef fpc}
   DBClient, DSIntf,
   {$ifdef omTesting}
-  omTestSuites, omTestMastery;
+  omTestSuites, omTestMastery,
   {$else}
-  TestFrameWork;
+  TestFrameWork,
   {$endif}
 {$else}
-  testregistry;
+  testregistry,
 {$endif}
+  DBIStrings, DBIObjectListDatasets, DBIUnitTests, DBITokenizers, DBIDataPacketReaders;
 
 type
   TDBICustomReader = class(TDBICustomParser)

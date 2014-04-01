@@ -31,18 +31,18 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  Classes, Contnrs, DB, DBIStrings, DBIIntfConsts, DBIObjectListDatasets,
-  DBIXbaseDatasets, DBIXbaseConsts,
+  Classes, Contnrs,
 {$ifndef fpc}
   DBClient, DSIntf,
   {$ifdef omTesting}
-  omTestSuites, omTestMastery;
+  omTestSuites, omTestMastery,
   {$else}
-  TestFrameWork;
+  TestFrameWork,
   {$endif}
 {$else}
-  fpcunit, testregistry;
+  fpcunit, testregistry,
 {$endif}
+  DB, DBIStrings, DBIIntfConsts, DBIObjectListDatasets, DBIXbaseDatasets, DBIXbaseConsts;
 
 {$ifndef omTesting}
 type

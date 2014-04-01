@@ -734,6 +734,9 @@ begin
     AParent.InsertChild(Self);
 
     Name := Self.ClassName + IntToStr(ComponentIndex);
+  end
+  else begin
+    Name := Self.ClassName + IntToStr(1);
   end;
 end;
 

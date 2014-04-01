@@ -6,8 +6,8 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, ExtCtrls, ComCtrls, Buttons, DB, DSDesign,
-  {$ifdef Delphi6} DesignIntf {$else} DsgnIntf {$endif} ;
+  StdCtrls, ExtCtrls, ComCtrls, Buttons, DB,
+  {$ifdef Delphi6} DesignIntf, {$else} DsgnIntf, {$endif} DSDesign;
 
 type
 {$ifdef Delphi6}

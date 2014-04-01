@@ -31,17 +31,18 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  Classes, SysUtils, Contnrs, DBIStrings, DBIObjectListDatasets, DBIUnitTests,
+  Classes, SysUtils, Contnrs,
 {$ifndef fpc}
   DBClient, DSIntf,
   {$ifdef omTesting}
-  omTestSuites, omTestMastery;
+  omTestSuites, omTestMastery,
   {$else}
-  TestFrameWork;
+  TestFrameWork,
   {$endif}
 {$else}
-  testregistry;
+  testregistry,
 {$endif}
+  DBIStrings, DBIObjectListDatasets, DBIUnitTests;
 
 type
   TDBICDSUnitTests = class(TDBIUnitTests)

@@ -30,25 +30,27 @@ interface
 
 uses
   Classes, SysUtils, DBIComponents, DBIDialogs, DBIStreamAdapters, DBITokenizers,
-  DBITokenizerConsts;
+  DBITokenizerConsts, omSendMail;
 
 type
   TDBIPascalKeyword = (
     pasUnknown,
 
+    // General
     pasAs,
     pasAt,
-    pasCase,
+    pasDiv,
     pasFor,
+    pasHelper,
     pasIndex,
-    pasMessage,
+    pasNot,
     pasOf,
     pasObject,
     pasPacked,
     pasReference,
-    pasSet,
     pasTo,
-    pasType,
+    pasUnit,
+    pasUses,
 
     // Types
     pasAnsiString,
@@ -57,37 +59,34 @@ type
     pasDouble,
     pasTDateTime,
     pasInteger,
+    pasSet,
     pasString,
     pasUnicodeString,
     pasWideString,
 
-    // Scope
+    // Scope Interruptors
+    pasCase,
     pasClass,
     pasConst,
     pasEnd,
     pasDispinterface,
     pasFinalization,
+    pasProperty,
     pasPrivate,
     pasProtected,
     pasPublic,
     pasPublished,
-    pasIn,
     pasInterface,
     pasInitialization,
     pasImplementation,
-    pasOut,
     pasRecord,
     pasResourceString,
+    pasStrict,
     pasThreadVar,
-    pasUnit,
-    pasUses,
+    pasType,
     pasVar,
 
-    // Class Directives
-    pasHelper,
-    pasStrict,
-
-    // Method Kinds
+    // Method Kinds / Scope Interruptors Cont.
     pasConstructor,
     pasDestructor,
     pasFunction,
@@ -96,25 +95,36 @@ type
 
     // Method Directives
     pasAbstract,
+    pasAssembler,
     pasCdecl,
     pasDeprecated,
     pasDispid,
     pasDynamic,
+    pasExternal,
+    pasForward,
     pasInline,
+    pasMessage,
     pasOverload,
     pasOverride,
     pasReintroduce,
     pasSafecall,
     pasStatic,
     pasStdcall,
+    pasVarargs,
     pasVirtual,
 
     // Property Directives
     pasDefault,
-    pasProperty,
     pasRead,
     pasStored,
     pasWrite,
+
+    // Argument Directives
+    pasIn,
+    pasOut,
+
+    // Fake
+    pasUTF8,
 
    _pasEnd
   );
@@ -126,6 +136,7 @@ type
 const
   TDBIPascalMethodKinds = [Low(TDBIPascalMethodKind)..High(TDBIPascalMethodKind)];
   TDBIPascalMethodDirectives = [Low(TDBIPascalMethodDirective)..High(TDBIPascalMethodDirective)];
+  TDBIPascalScopeInterruptors = [pasCase..pasOperator];
 
   TDBIPascalMethodKindName: array[TDBIPascalMethodKind] of String = (
     'constructor',
@@ -162,6 +173,7 @@ type
 
   public
     procedure DirectiveInclude(const ADirective: TDBIPascalKeyword);
+    procedure DirectivesInclude(const ADirectives: TDBIPascalKeywords);
 
     property Caption: String read GetDisplayName;
     property Directives: TDBIPascalKeywords read FDirectives write FDirectives;
@@ -174,13 +186,15 @@ type
     property Text;
     property ClassKindName: String read GetClassKindName write SetClassKindName;
 
-
   end;
 
 
   TDBIPascalScopedItem = class(TDBIPascalNode);
 
   TDBIPascalArgument = class(TDBIPascalScopedItem);
+  TDBIPascalArguments = class(TDBIPascalScopedItem)
+    procedure Clone(AScope: TDBIPascalNode);
+  end;
 
   TDBIPascalConst = class(TDBIPascalScopedItem)
   protected
@@ -191,16 +205,12 @@ type
   TDBIPascalField = class(TDBIPascalScopedItem);
   TDBIPascalGuid = class(TDBIPascalScopedItem);
 
-  TDBIPascalMethod = class(TDBIPascalScopedItem)
-  protected
-    function GetDisplayName: String; override;
-  end;
-
   TDBIPascalProcedure = class(TDBIPascalScopedItem)
   protected
     function GetDisplayName: String; override;
   end;
 
+  TDBIPascalMethod = class(TDBIPascalProcedure);
   TDBIPascalProperty = class(TDBIPascalScopedItem);
   TDBIPascalResourceString = class(TDBIPascalScopedItem);
 
@@ -355,19 +365,23 @@ type
     procedure LexHexadecimal;
     procedure LexIdentifier; override;
     procedure LexInitialise; override;
+    procedure LexSymbol; overload; override;
+
     procedure SetStatus(Value: TDBITokenStatus); override;
+    procedure UndoToken(const Value: AnsiString);
     procedure UptoToken;
 
     property PreviousToken: TDBILexerToken read GetPreviousToken;
 
   public
     function GetConstantValue: String;
+    function GetArguments(AScope: TDBIPascalScopedItem): Boolean;
     function GetDimensions: String;
-    function GetParameterList: String;
     function GetQuotedString: String;
-    function GetTypeSpecifier: String;
+    function GetTypeSpecifier(AScope: TDBIPascalScopedItem; var ADirectives: TDBIPascalKeywords): String;
 
     procedure IncludeDirective(var ADirectives: TDBIPascalKeywords; const Value: TDBIPascalKeyword);
+    function IsKeywordScopeInterrupter: Boolean;
 
   public
     function Check(TokenTypes: TDBITokenTypes): String; overload;
@@ -384,13 +398,13 @@ type
     function Have(TokenKinds: TDBITokenKinds): Boolean; overload;
     function Have(const Value: TDBIPascalKeyword): Boolean; overload;
 
+    function Skip(TokenTypes: TDBITokenTypes): String; overload;
+    function Skip(TokenKinds: TDBITokenKinds): String; overload;
+    function Skip(const Value: TDBIPascalKeyword): String; overload;
+
     function Upto(TokenTypes: TDBITokenTypes; const Inclusive: Boolean = False): String; overload;
     function Upto(TokenKinds: TDBITokenKinds; const Inclusive: Boolean = False): String; overload;
     function Upto(const Value: TDBIPascalKeyword): String; overload;
-
-    procedure Skip(TokenTypes: TDBITokenTypes); overload;
-    procedure Skip(TokenKinds: TDBITokenKinds); overload;
-    procedure Skip(const Value: TDBIPascalKeyword); overload;
 
     property Keyword: TDBIPascalKeyword read GetKeyword;
 
@@ -403,8 +417,6 @@ type
   TDBIPascalInterfaceLexer = class(TDBICustomPascalLexer)
   public
     procedure NextToken; override;
-
-    function UptoTokenTypeOrKeyword(TokenTypes: TDBITokenTypes; const AKeyword: TDBIPascalKeyword): String;
   end;
 
 
@@ -420,41 +432,32 @@ type
     function GetUnit: TDBIPascalUnit; virtual;
 
   protected
-    function ProcessArguments(AScope: TDBIPascalScopedItem): Boolean;
-
-    function ProcessArrayType(AScope: TDBIPascalScope; const ATypeName: String): Boolean; overload;
-    function ProcessArrayType(AScope: TDBIPascalScope; const ATypeNames: TStrings): Boolean; overload;
     function ProcessCaseType(AScope: TDBIPascalScope): Boolean;
     function ProcessComplexType(AScope: TDBIPascalScope; const ATypeName: String; AComplexType: TDBIPascalKeyword): Boolean;
     function ProcessComplexTypeKeywords(AScope: TDBIPascalScope): Boolean;
-    function ProcessComplexEnd(AScope: TDBIPascalScope): Boolean;
-    function ProcessConst(AScope: TDBIPascalScope; AConstType: TDBIPascalKeyword): Boolean;
-    function ProcessDirective(const ADirective: TDBIPascalKeyword): Boolean;
-    function ProcessEnumeratedType(AScope: TDBIPascalScope; const ATypeName: String): Boolean;
-    function ProcessField(AScope: TDBIPascalScope): Boolean;
+    function ProcessDirectives(const ADirectives: TDBIPascalKeywords; var Value: TDBIPascalKeywords): Boolean;
     function ProcessGuid(AScope: TDBIPascalScope): Boolean;
-    function ProcessProcedure(AScope: TDBIPascalScope; AProcedureType: TDBIPascalKeyword): Boolean;
     function ProcessProperty(AScope: TDBIPascalScope): Boolean;
-    function ProcessMethod(
+
+    function ProcessProcedure(
       AScope: TDBIPascalScope;
-      const AMethodKind: TDBIPascalMethodKind;
-      var MethodDirectives: TDBIPascalKeywords
+      const AProcedureType: TDBIPascalMethodKind;
+      const ADirectives: TDBIPascalKeywords
       ): Boolean;
 
-    function ProcessProceduralType(AScope: TDBIPascalScope; const ATypeName: String): Boolean;
     function ProcessScope(
       AScope: TDBIPascalScope;
       AScopeClass: TDBIPascalScopeClass;
       ScopeDirectives: TDBIPascalKeywords
       ): Boolean;
 
-    function ProcessSetType(AScope: TDBIPascalScope; const ATypeName: String): Boolean;
     function ProcessSimpleType(AScope: TDBIPascalScope; ATypeName: String): Boolean; overload;
     function ProcessSimpleType(AScope: TDBIPascalScope; ATypeNames: TStrings): Boolean; overload;
+
     function ProcessType(AScope: TDBIPascalScope): Boolean;
     function ProcessUnit(AScope: TDBIPascalScope): Boolean;
     function ProcessUses(AScope: TDBIPascalScope): Boolean;
-    function ProcessVar(AScope: TDBIPascalScope; const AVarType: TDBIPascalKeyword): Boolean;
+    function ProcessVariable(AScope: TDBIPascalScope; const AVariableType: TDBIPascalKeyword): Boolean;
 
     function ProcessKeywords: Boolean;
 
@@ -506,96 +509,6 @@ begin
 end;
 
 
-function TDBIPascalInterfaceAnalyser.ProcessArrayType(AScope: TDBIPascalScope; const ATypeName: String): Boolean;
-var
-  TypeNames: TStrings;
-
-begin
-  TypeNames := Local(TStringList.Create).Obj as TStrings;
-  TypeNames.Add(ATypeName);
-
-  Result := ProcessArraytype(AScope, TypeNames);
-end;
-
-
-function TDBIPascalInterfaceAnalyser.ProcessArguments(AScope: TDBIPascalScopedItem): Boolean;
-var
-  Argument: TDBIPascalArgument;
-  Arguments: TStringList;
-  KindName: String;
-  Data: String;
-  Index: Integer;
-  LocalDirectives: TDBIPascalKeywords;
-  Position: TDBITokenPosition;
-
-begin
-  LocalDirectives := [];
-
-  Result := Input.Have([Tok_OpenBracket]);
-  while Result and (Input.Token.TokenType <> Tok_CloseBracket) do begin
-    // Directives
-    LocalDirectives := [];
-    while (Input.Keyword in [pasConst, pasIn, pasOut, pasVar]) do begin
-      Include(LocalDirectives, Input.Keyword);
-
-      Input.Fetch(Input.Keyword);
-    end;
-
-    // Argument Name(s)
-    Arguments := Local(TStringList.Create).Obj as TStringList;
-    while not Input.Eof do begin
-      Position := Input.Token.TokenPosition;
-      Arguments.Add(Input.Fetch([Tok_Identifier, Tok_NameSpace]));
-      if not Input.Have([Tok_Comma]) then begin
-        Break;
-      end;
-    end;
-
-    KindName := Input.GetTypeSpecifier;
-    Data := Input.GetConstantValue;
-
-    for Index := 0 to Arguments.Count-1 do begin
-      Argument := TDBIPascalArgument.Create(AScope.ChildOwner, AScope);
-      Argument.Text := Arguments[Index];
-      Argument.KindName := KindName;
-      Argument.Data := Data;
-      Argument.Directives := LocalDirectives;
-      Argument.Position := Position;
-    end;
-
-    if not Input.Have([Tok_SemiColon]) then begin
-      Break;
-    end;
-  end;
-
-  Input.Fetch([Tok_CloseBracket]);
-end;
-
-
-function TDBIPascalInterfaceAnalyser.ProcessArrayType(AScope: TDBIPascalScope; const ATypeNames: TStrings): Boolean;
-var
-  KindName: String;
-  Index: Integer;
-  Position: TDBITokenPosition;
-
-begin
-  Assert(Assigned(AScope));
-  Position := Input.Token.TokenPosition;
-  Result := True;
-
-  KindName := Input.Fetch(pasArray);
-  KindName := KindName + Input.GetDimensions;
-  KindName := KindName + ' ' + Input.Fetch(pasOf);
-  KindName := KindName + ' ' + Input.Fetch([Tok_Identifier]);
-
-  Input.Skip([Tok_SemiColon]);
-
-  for Index := 0 to ATypeNames.Count-1 do begin
-    AScope.NewType(ATypeNames[Index], KindName, Position);
-  end;
-end;
-
-
 function TDBIPascalInterfaceAnalyser.ProcessCaseType(AScope: TDBIPascalScope): Boolean;
 var
   TypeName: String;
@@ -610,7 +523,7 @@ begin
   Input.Fetch(pasOf);
 
   while not Input.Eof do begin
-    if Input.Keyword <> pasUnknown then begin
+    if (Input.keyword = pasEnd) then begin
       Break;
     end;
 
@@ -635,38 +548,15 @@ begin
           end;
         end;
 
-        case Input.Keyword of
-          pasArray: Result := ProcessArrayType(AScope, TypeNames);
-        else
-          Result := ProcessSimpleType(AScope, TypeNames);
-        end;
+        Result := ProcessSimpleType(AScope, TypeNames);
       end;
     end
     else begin
       TypeName := Input.Fetch([Tok_Identifier]);
-      Input.Fetch([Tok_Colon]);
       ProcessSimpleType(AScope, TypeName);
     end;
 
     Input.Fetch([Tok_SemiColon]);
-  end;
-end;
-
-
-function TDBIPascalInterfaceAnalyser.ProcessComplexEnd(AScope: TDBIPascalScope): Boolean;
-begin
-  Result := True;
-  Input.Fetch(pasEnd);
-
-  if Input.Keyword = pasDeprecated then begin
-    ProcessDirective(pasDeprecated);
-  end
-  else begin
-    Input.Fetch([Tok_SemiColon]);
-  end;
-
-  if AScope.Parent is TDBIPascalComplexes then begin
-   (AScope.Parent as TDBIPascalComplexes).Done;
   end;
 end;
 
@@ -677,15 +567,15 @@ end;
 }
 function TDBIPascalInterfaceAnalyser.ProcessComplexType(AScope: TDBIPascalScope; const ATypeName: String; AComplexType: TDBIPascalKeyword): Boolean;
 var
+  Position: TDBITokenPosition;
+  LocalDirectives: TDBIPascalKeywords;
   KindName: String;
   Complex: TDBIPascalComplex;
-  LocalDirectives: TDBIPascalKeywords;
-  Position: TDBITokenPosition;
 
 begin
   Assert(Assigned(AScope));
-  LocalDirectives := [];
   Position := Input.Token.TokenPosition;
+  LocalDirectives := [];
   Complex := nil;
   Result := True;
   Input.Fetch(AComplexType);
@@ -696,7 +586,7 @@ begin
   // Is this a class of type definition?
   if Input.Have(pasOf) then begin
     // What is the class / interface type name
-    KindName := ' of ' + Input.fetch([Tok_Identifier]);
+    KindName := ' of ' + Input.Fetch([Tok_Identifier]);
     AComplexType := pasOf;
   end
 
@@ -745,26 +635,20 @@ begin
   while not Input.Eof do begin
     case Input.Keyword of
       pasCase: Result := ProcessCaseType(AScope);
-      pasConst: Result := ProcessConst(AScope, pasConst);
-      pasConstructor: Result := ProcessMethod(AScope, pasConstructor, LocalDirectives);
-      pasDestructor: Result := ProcessMethod(AScope, pasDestructor, LocalDirectives);
-      pasFunction: Result := ProcessMethod(AScope, pasFunction, LocalDirectives);
-      pasOperator: Result := ProcessMethod(AScope, pasOperator, LocalDirectives);
-      pasProcedure: Result := ProcessMethod(AScope, pasProcedure, LocalDirectives);
+      pasConst: Result := ProcessVariable(AScope, pasConst);
+      pasConstructor: Result := ProcessProcedure(AScope, pasConstructor, LocalDirectives);
+      pasDestructor: Result := ProcessProcedure(AScope, pasDestructor, LocalDirectives);
+      pasFunction: Result := ProcessProcedure(AScope, pasFunction, LocalDirectives);
+      pasOperator: Result := ProcessProcedure(AScope, pasOperator, LocalDirectives);
+      pasProcedure: Result := ProcessProcedure(AScope, pasProcedure, LocalDirectives);
       pasProperty: Result := ProcessProperty(AScope);
       pasPrivate: Result := ProcessScope(AScope, TDBIPascalPrivate, LocalDirectives);
       pasProtected: Result := ProcessScope(AScope, TDBIPascalProtected, LocalDirectives);
       pasPublic: Result := ProcessScope(AScope, TDBIPascalPublic, LocalDirectives);
       pasPublished: Result := ProcessScope(AScope, TDBIPascalPublished, LocalDirectives);
-//##JVR      pasRecord: Result := ProcessField(Complex);
-      PasType: Result := ProcessType(AScope); //##JVRProcessClassType(Complex);
-      pasVar: Result := ProcessVar(AScope, pasVar);
+      pasType: Result := ProcessType(AScope);
+      pasVar: Result := ProcessVariable(AScope, pasVar);
 
-      { TODO -oJVR -cTPascalCodeProcessor.ProcessComplexType() :
-        21/02/2014 11:03:22
-        Skip the Class directive for methods.
-        Will revisit this later.
-      }
       pasClass: begin
         Input.Fetch(pasClass);
         Include(LocalDirectives, pasClass);
@@ -776,21 +660,23 @@ begin
       end;
 
       pasEnd: begin
-        Result := ProcessComplexEnd(AScope);
+        Input.Fetch(pasEnd);
+
+        ProcessDirectives([pasDeprecated], LocalDirectives);
+        Input.Skip([Tok_SemiColon]);
+
+        if AScope.Parent is TDBIPascalComplexes then begin
+         (AScope.Parent as TDBIPascalComplexes).Done;
+        end;
+
         Break;
       end;
 
     else
-      if (Input.Keyword <> pasUnknown) then begin
-        Break;
-      end
-      else if (Input.Token.TokenType = Tok_Identifier) then begin
-        Result := ProcessField(AScope);
-      end
-      else if (Input.Token.TokenType = Tok_OpenSquareBracket) then begin
-        Result := ProcessGuid(AScope);
-      end
-      else begin
+      case Input.Token.TokenType of
+        Tok_Identifier: Result := ProcessVariable(AScope, pasDefault);
+        Tok_OpenSquareBracket: Result := ProcessGuid(AScope);
+      else
         Break;
       end;
     end;
@@ -798,188 +684,30 @@ begin
 end;
 
 
-function TDBIPascalInterfaceAnalyser.ProcessConst(AScope: TDBIPascalScope; AConstType: TDBIPascalKeyword): Boolean;
+function TDBIPascalInterfaceAnalyser.ProcessDirectives(
+  const ADirectives: TDBIPascalKeywords;
+  var Value: TDBIPascalKeywords
+  ): Boolean;
 var
-  Index: Integer;
-  ConstKind: String;
-  ConstValue: String;
-  Constants: TStrings;
-  NestingCount: Integer;
-  Position: TDBITokenPosition;
+  Keyword: TDBIPascalKeyword;
 
-begin
-  Assert(Assigned(AScope));
-  Position := Input.Token.TokenPosition;
-  Result := True;
-  Input.Fetch(AConstType);
-
-  Constants := Local(TStringList.Create).Obj as TStrings;
-  while not Input.Eof do begin
-
-    // Const Name
-    Constants.Add(Input.Fetch([Tok_Identifier]));
-
-    // Multiple variables
-    if Input.Have([Tok_Comma]) then begin
-      Continue;
-    end;
-
-    // Colon (:)
-    if Input.Have([Tok_Colon]) then begin
-      if Input.Have(pasArray) then begin
-        ConstKind := 'array';
-        ConstKind := ConstKind + Input.GetDimensions;
-        ConstKind := ConstKind + ' ' + Input.Fetch(pasOf);
-        ConstKind := ConstKind + ' ' + Input.Fetch([Tok_Identifier]);
-        ConstKind := ConstKind + Input.GetDimensions;
-      end
-      else begin
-        ConstKind := Input.Upto([Tok_Equals]);
-      end;
-    end;
-
-    // Equals (=)
-    Input.Fetch([Tok_Equals]);
-
-    // Const Value
-    if Input.Have([Tok_OpenBracket]) then begin
-      ConstValue := Chr_OpenBracket;
-
-      NestingCount := 1;
-      while (NestingCount > 0) and not Input.Eof do begin
-        if Input.Token.TokenType = Tok_OpenBracket then begin
-          Inc(NestingCount);
-        end;
-
-        if Input.Token.TokenType = Tok_CloseBracket then begin
-          Dec(NestingCount);
-        end;
-
-        ConstValue := ConstValue + Input.Token.TokenString;
-        Input.NextToken;
-      end;
-    end
-    else begin
-      ConstValue := Input.Upto([Tok_SemiColon]);
-    end;
-    Input.Fetch([Tok_SemiColon]);
-
-    // Check next keyword
-    if (Input.Keyword <> pasUnknown) then begin
-      Break;
-    end;
-  end;
-
-  for Index := 0 to Constants.Count-1 do begin
-    case AConstType of
-//##JVR        pasArray: Result := ProcessArrayType(Ast.GetConsts, Constants);
-      pasConst: AScope.NewConst(Constants[Index], ConstKind, Position).Data := ConstValue;
-      pasResourceString: AScope.NewResourceString(Constants[Index], Position).Data := ConstValue;
-    end;
-  end;
-end;
-
-
-function TDBIPascalInterfaceAnalyser.ProcessDirective(const ADirective: TDBIPascalKeyword): Boolean;
 begin
   Result := True;
-  Input.Fetch(ADirective);
 
-  if ADirective = pasDeprecated then begin
-    if Input.Have([Tok_Apostrophe]) then begin
-      while (tsStringLiteral in Input.Token.TokenStatus) do begin
-        Input.Nexttoken;
-      end;
+  Keyword := Input.Keyword;
+  while (Keyword in ADirectives) do begin
+    Include(Value, Keyword);
+
+    Input.NextToken;
+    case Keyword of
+      pasDeprecated: Input.GetQuotedString;
+      pasDispid: Input.Fetch([Tok_IntegerLiteral]);
+      pasExternal: Input.GetQuotedString;
+      pasMessage: Input.Fetch([Tok_Identifier]);
     end;
-  end;
-
-  Input.Fetch([Tok_SemiColon]);
-end;
-
-
-function TDBIPascalInterfaceAnalyser.ProcessEnumeratedType(AScope: TDBIPascalScope; const ATypeName: String): Boolean;
-var
-  Data: TStrings;
-  Enum: TDBIPascalScopedItem;
-  EnumName: String;
-  Position: TDBITokenPosition;
-
-begin
-  Assert(Assigned(AScope));
-  Position := Input.Token.TokenPosition;
-  Result := True;
-  Input.Fetch([Tok_OpenBracket]);
-
-  Enum := AScope.NewType(ATypeName, 'Enumerated', Position);
-
-  Data := Local(TStringList.Create).Obj as TStrings;
-  while not Input.Eof do begin
-    EnumName := Input.Fetch([Tok_Identifier]);
-    if Input.Have([Tok_Equals]) then begin
-      Data.Add(EnumName + '=' + Input.Fetch([Tok_IntegerLiteral]));
-    end
-    else begin
-      Data.Add(EnumName);
-    end;
-
-    if Input.Have([Tok_CloseBracket]) then begin
-      Break;
-    end
-    else begin
-      Input.Fetch([Tok_Comma]);
-    end;
-  end;
-
-  Enum.Data := Data.Text;
-  Input.Fetch([Tok_SemiColon]);
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 08/12/2010 15:47:20 - Initial code.<br />
-}
-function TDBIPascalInterfaceAnalyser.ProcessField(AScope: TDBIPascalScope): Boolean;
-var
-  FieldNames: TStrings;
-  Position: TDBITokenPosition;
-  TypeName: String;
-  Index: Integer;
-
-begin
-  Assert(Assigned(AScope));
-  Result := Input.Token.TokenType <> Tok_Eof;
-
-  if Result then begin
-    Position := Input.Token.TokenPosition;
-
-    FieldNames := Local(TStringList.Create).Obj as TStrings;
-    while (Input.Token.TokenType <> Tok_Eof) do begin
-      FieldNames.Add(Input.Fetch([Tok_Identifier]));
-
-      if not Input.Have([Tok_Comma]) then begin
-        Break;
-      end;
-    end;
-
-    TypeName := Input.GetTypeSpecifier;
-(*##JVR
-    Input.Fetch([Tok_Colon]);
-
-    if (Input.Keyword = pasRecord) then begin
-      Input.Fetch(pasRecord);
-      TypeName := Input.UptoTokenTypeOrKeyword([Tok_SemiColon], pasEnd);
-      Input.Fetch(pasEnd);
-    end
-    else begin
-      TypeName := {Input.GetTypeSpecifier; //##JVR} Input.UptoTokenTypeOrKeyword([Tok_SemiColon], pasEnd);
-    end;
-//*)
-    for Index := 0 to FieldNames.Count-1 do begin
-      AScope.NewField(FieldNames[Index], TypeName, Position);
-    end;
-
     Input.Skip([Tok_SemiColon]);
+
+    Keyword := Input.Keyword;
   end;
 end;
 
@@ -1002,151 +730,92 @@ var
   UnitScope: TDBIPascalScope;
 
 begin
+  Result := True;
   UnitScope := GetUnit;
 
   case Input.KeyWord of
-    pasConst: Result := ProcessConst(UnitScope, pasConst);
+    pasConst: Result := ProcessVariable(UnitScope, pasConst);
     pasImplementation: Result := False;
-    pasResourceString: Result := ProcessConst(UnitScope, pasResourceString);
-    pasThreadVar: Result := ProcessVar(UnitScope, pasThreadVar);
+    pasInterface: Input.NextToken;
+    pasResourceString: Result := ProcessVariable(UnitScope, pasResourceString);
+    pasThreadVar: Result := ProcessVariable(UnitScope, pasThreadVar);
     pasType: Result := ProcessType(UnitScope);
     pasUnit: Result := ProcessUnit(UnitScope);
     pasUses: Result := ProcessUses(UnitScope);
-    pasVar: Result := ProcessVar(UnitScope, pasVar);
+    pasVar: Result := ProcessVariable(UnitScope, pasVar);
 
-    pasFunction: Result := ProcessProcedure(UnitScope, pasFunction);
-    pasProcedure: Result := ProcessProcedure(UnitScope, pasProcedure);
+    pasFunction: Result := ProcessProcedure(UnitScope, pasFunction, []);
+    pasProcedure: Result := ProcessProcedure(UnitScope, pasProcedure, []);
   else
-    Input.NextToken;
-    Result := True;
+    case Input.Token.TokenType of
+      Tok_Unassigned: Input.NextToken;
+
+      Tok_Apostrophe: begin
+        Input.GetQuotedString;  //##JVR - NOT nice - Used to force compilation errors
+      end;
+
+      Tok_UTF8: begin
+        Input.Fetch([Tok_UTF8]);
+        UnitScope.DirectiveInclude(pasUTF8);
+      end;
+
+    else
+      Input.Check([Tok_Apostrophe, Tok_Unassigned, Tok_UTF8]);
+//##JVR      Input.NextToken;
+    end;
   end;
 end;
 
 
-function TDBIPascalInterfaceAnalyser.ProcessMethod(
+function TDBIPascalInterfaceAnalyser.ProcessProcedure(
   AScope: TDBIPascalScope;
-  const AMethodKind: TDBIPascalMethodKind;
-  var MethodDirectives: TDBIPascalKeywords
+  const AProcedureType: TDBIPascalMethodKind;
+  const ADirectives: TDBIPascalKeywords
   ): Boolean;
 var
-  Method: TDBIPascalMethod;
   Position: TDBITokenPosition;
-
-begin
-  Assert(Assigned(AScope));
-  Position := Input.Token.TokenPosition;
-  Result := True;
-  Input.Fetch(AMethodKind);
-  Method := AScope.NewMethod(Input.Fetch([Tok_NameSpace, Tok_Identifier]), Position);
-
-  // Do we have parameters?
-  if Input.Token.TokenType = Tok_OpenBracket then begin
-    ProcessArguments(Method);
-  end;
-
-{##ARGS
-  if Input.Have([Tok_OpenBracket]) then begin
-    Method.Data := Input.Upto([Tok_CloseBracket]);
-    Input.Fetch([Tok_CloseBracket]);
-  end;
-//}
-  // Do we have a return type? or is this interface method assigned to some other method
-  Method.KindName := Input.GetTypeSpecifier;
-  Input.Fetch([Tok_SemiColon]);
-
-  Include(MethodDirectives, AMethodKind);
-  while not Input.Eof do begin
-    if (Input.Keyword = pasDispid) then begin
-      Input.Fetch(pasDispid);
-      Input.Fetch([Tok_IntegerLiteral]);
-      Input.Fetch([Tok_SemiColon]);
-    end
-    else if (Input.Keyword in TDBIPascalMethodDirectives) then begin
-      Result := ProcessDirective(Input.Keyword);
-    end
-    else begin
-      Break;
-    end;
-
-    Include(MethodDirectives, Input.Keyword);
-  end;
-
-  Method.Directives := MethodDirectives;
-  MethodDirectives := [];
-end;
-
-
-function TDBIPascalInterfaceAnalyser.ProcessProceduralType(AScope: TDBIPascalScope; const ATypeName: String): Boolean;
-var
-  Proc: TDBIPascalScopedItem;
-  Position: TDBITokenPosition;
-
-begin
-  Assert(Assigned(AScope));
-  Position := Input.Token.TokenPosition;
-  Result := True;
-
-  Proc := AScope.NewType(ATypeName, Input.Fetch([Tok_Identifier]), Position);
-
-  if (Input.Token.TokenType = Tok_OpenBracket) then begin
-    Proc.Data := Input.Upto([Tok_CloseBracket]);
-    Input.Fetch([Tok_CloseBracket]);
-  end;
-
-  // Is it a function
-  if Input.Have([Tok_Colon]) then begin
-    Input.Fetch([Tok_Identifier]);
-  end;
-
-  Input.Skip(pasOf);
-  Input.Skip(pasObject);
-  Input.Skip([Tok_SemiColon]);
-
-  // Directives
-  if Input.Have(pasCdecl) then begin
-    Proc.Directives := Proc.Directives + [pasCdecl];
-    Input.Fetch([Tok_SemiColon]);
-  end;
-
-  if Input.Have(pasStdCall) then begin
-    Proc.Directives := Proc.Directives + [pasStdCall];
-    Input.Fetch([Tok_SemiColon]);
-  end;
-
-end;
-
-
-function TDBIPascalInterfaceAnalyser.ProcessProcedure(AScope: TDBIPascalScope; AProcedureType: TDBIPascalKeyword): Boolean;
-var
-  Position: TDBITokenPosition;
-  ProcName: String;
-  ProcItem: TDBIPascalProcedure;
   LocalDirectives: TDBIPascalKeywords;
+  ItemName: String;
+  Item: TDBIPascalProcedure;
 
 begin
   Assert(Assigned(AScope));
+  Position := Input.Token.TokenPosition;
   LocalDirectives := [];
   Result := True;
 
   Input.Fetch(AProcedureType);
   Include(LocalDirectives, AProcedureType);
-  Position := Input.Token.TokenPosition;
-  ProcName := Input.Fetch([Tok_Identifier]);
+  ItemName := Input.Fetch([Tok_Identifier, Tok_NameSpace]);
 
-  ProcItem := AScope.NewProcedure(ProcName, Position);
-  ProcItem.Data := Input.GetParameterList;
-  ProcItem.KindName := Input.GetTypeSpecifier;
-  ProcItem.Directives := LocalDirectives;
+  if AScope is TDBIPascalComplex then begin
+    Item := AScope.NewMethod(ItemName, Position);
+  end
+  else begin
+    Item := AScope.NewProcedure(ItemName, Position);
+  end;
 
+  // Do we have parameters?
+  if (Input.Token.TokenType = Tok_OpenBracket) then begin
+    Input.GetArguments(Item);
+  end;
+
+  // Do we have a return type? or is this interface method assigned to some other method
+  if (Input.Token.TokenType in [Tok_Colon, Tok_Equals]) then begin
+    Item.KindName := Input.GetTypeSpecifier(nil, LocalDirectives);
+  end;
   Input.Fetch([Tok_SemiColon]);
+
+  ProcessDirectives(TDBIPascalMethodDirectives, LocalDirectives);
+  Item.Directives := LocalDirectives;
 end;
 
 
 function TDBIPascalInterfaceAnalyser.ProcessProperty(AScope: TDBIPascalScope): Boolean;
 var
-  Prop: TDBIPascalProperty;
-  LocalDirectives: TDBIPascalKeywords;
   Position: TDBITokenPosition;
+  LocalDirectives: TDBIPascalKeywords;
+  Prop: TDBIPascalProperty;
 
 begin
   LocalDirectives := [];
@@ -1156,21 +825,17 @@ begin
   Position := Input.Token.TokenPosition;
   Input.Fetch(pasProperty);
   Prop := AScope.NewProperty(Input.Fetch([Tok_Identifier]), Position);
-  Prop.KindName := Input.GetTypeSpecifier;
+
+  // Is this property indexed
+  Input.GetDimensions;
+
+  if (Input.Token.TokenType = Tok_Colon) then begin
+    Prop.KindName := Input.GetTypeSpecifier(nil, LocalDirectives);
+  end;
   Prop.Data := Input.UpTo([Tok_SemiColon]);
   Input.Fetch([Tok_SemiColon]);
 
-  while not Input.Eof do begin
-    case Input.Keyword of
-      pasDefault: Result := ProcessDirective(pasDefault);
-      pasStored: Result := ProcessDirective(pasStored);
-    else
-      Break;
-    end;
-
-    Include(LocalDirectives, Input.Keyword);
-  end;
-
+  ProcessDirectives([pasDefault, pasStored], LocalDirectives);
   Prop.Directives := LocalDirectives;
 end;
 
@@ -1194,39 +859,13 @@ begin
 end;
 
 
-function TDBIPascalInterfaceAnalyser.ProcessSetType(AScope: TDBIPascalScope; const ATypeName: String): Boolean;
-var
-  KindName: String;
-  Position: TDBITokenPosition;
-
-begin
-  Assert(Assigned(AScope));
-  Position := Input.Token.TokenPosition;
-  Result := True;
-
-  Input.Fetch(pasSet);
-  Input.Fetch(pasOf);
-
-  if Input.Have([Tok_OpenBracket]) then begin
-    KindName := Input.Upto([Tok_CloseBracket]);
-    Input.Fetch([Tok_CloseBracket]);
-  end
-  else begin
-    KindName := Input.Upto([Tok_SemiColon]);
-  end;
-  Input.Fetch([Tok_SemiColon]);
-
-  AScope.NewType(ATypeName, KindName, Position);
-end;
-
-
 function TDBIPascalInterfaceAnalyser.ProcessSimpleType(AScope: TDBIPascalScope; ATypeName: String): Boolean;
 var
   TypeNames: TStrings;
 
 begin
   TypeNames := Local(TStringList.Create).Obj as TStrings;
-  Typenames.Add(ATypeName);
+  TypeNames.Add(ATypeName);
 
   Result := ProcessSimpleType(AScope, TypeNames);
 end;
@@ -1234,71 +873,27 @@ end;
 
 function TDBIPascalInterfaceAnalyser.ProcessSimpleType(AScope: TDBIPascalScope; ATypeNames: TStrings): Boolean;
 var
+  Position: TDBITokenPosition;
+  LocalDirectives: TDBIPascalKeywords;
   KindName: String;
   Index: Integer;
-  LocalDirectives: TDBIPascalKeywords;
   SimpleType: TDBIPascalScopedItem;
-  Position: TDBITokenPosition;
+  Args: TDBIPascalArguments;
 
 begin
   Assert(Assigned(AScope));
-  LocalDirectives := [];
   Position := Input.Token.TokenPosition;
+  LocalDirectives := [];
   Result := True;
 
-  if Input.Have([Tok_Caret]) then begin
-    KindName := Chr_Caret;
-  end;
-
-  // Type directive
-  if Input.Have(pasType) then begin
-    Include(LocalDirectives, pasType);
-  end;
-
-  // Reference to
-  if Input.Have(pasReference) then begin
-    KindName := KindName + 'reference ' + Input.Fetch(pasTo);
-    KindName := KindName + Input.Upto([Tok_SemiColon]);
-  end
-
-  // Char or String
-  else if Input.Have([Tok_Apostrophe]) then begin
-    KindName := KindName + Chr_Apostrophe;
-    KindName := KindName + Input.Fetch([Tok_Identifier, Tok_IntegerLiteral]);
-    KindName := KindName + Input.Fetch([Tok_Apostrophe]);
-  end
-
-  // Simple
-  else begin
-    KindName := KindName + Input.Fetch([Tok_NameSpace, Tok_Identifier, Tok_IntegerLiteral]);
-  end;
-
-
-  // Range
-  if Input.Have([Tok_DotDot]) then begin
-    if Input.Have([Tok_Apostrophe]) then begin
-      KindName := KindName + Chr_DotDot + Chr_Apostrophe;
-      KindName := KindName + Input.Fetch([Tok_Identifier, Tok_IntegerLiteral]);
-      KindName := KindName + Input.Fetch([Tok_Apostrophe]);
-    end
-    else begin
-      KindName := KindName + '..' + Input.Fetch([Tok_Identifier, Tok_IntegerLiteral]);
-    end
-  end
-
-  // Generics
-  else if Input.Have([Tok_Smaller]) then begin
-    KindName := KindName + '<' + Input.Upto([Tok_Greater]) +'>';
-    Input.Fetch([Tok_Greater]);
-  end;
-
-  // Dimensions
-  KindName := Kindname + Input.GetDimensions;
+  Args := Local(TDBIPascalArguments.Create(nil)).Obj as TDBIPascalArguments;
+  KindName := Input.GetTypeSpecifier(Args, LocalDirectives);
   Input.Skip([Tok_SemiColon]);
 
   for Index := 0 to ATypeNames.Count-1 do begin
-    SimpleType := AScope.NewType(ATypeNames[Index], KindName, Position); //##JVR .Data := Data;
-    SimpleType.directives := localDirectives;
+    SimpleType := AScope.NewType(ATypeNames[Index], KindName, Position);
+    SimpleType.Directives := LocalDirectives;
+    Args.Clone(SimpleType);
   end;
 end;
 
@@ -1308,9 +903,6 @@ end;
   Jvr - 13/12/2010 10:53:35 - Initial code.<br />
 }
 function TDBIPascalInterfaceAnalyser.ProcessType(AScope: TDBIPascalScope): Boolean;
-const
-  SUnexpectedKeyword = 'Unexpected keyword "%s" at [%d, %d], following packed, valid are array, record and set';
-
 var
   TypeName: String;
 
@@ -1319,50 +911,29 @@ begin
   Input.Fetch(pasType);
 
   while not Input.Eof do begin
-    if (Input.Keyword <> pasUnknown) then begin
+    // Check next keyword
+    if Input.IsKeywordScopeInterrupter then begin
       Break;
     end;
 
     TypeName := Input.Fetch([Tok_Identifier]);
     Input.Fetch([Tok_Equals]);
 
-    case Input.Token.TokenType of
-      Tok_OpenBracket: Result := ProcessEnumeratedType(AScope, TypeName);
+    // Process Packed Directive - Skip it for now
+    Input.Skip(pasPacked);
 
+    case Input.Keyword of
+      pasClass: Result := ProcessComplexType(AScope, TypeName, pasClass);
+      pasConst: Result := ProcessVariable(AScope, pasConst);
+      pasDispinterface: Result := ProcessComplexType(AScope, TypeName, pasDispinterface);
+      pasFunction: Result := ProcessSimpleType(AScope, TypeName);
+      pasInterface: Result := ProcessComplexType(AScope, TypeName, pasInterface);
+      pasProcedure: Result := ProcessSimpleType(AScope, TypeName);
+      pasRecord: Result := ProcessComplexType(AScope, TypeName, pasRecord);
     else
-      case Input.Keyword of
-        pasArray: Result := ProcessArrayType(AScope, TypeName);
-        pasClass: Result := ProcessComplexType(AScope, TypeName, pasClass);
-        pasConst: Result := ProcessConst(AScope, pasConst);
-        pasDispinterface: Result := ProcessComplexType(AScope, TypeName, pasDispinterface);
-        pasFunction: Result := ProcessProceduralType(AScope, TypeName);
-        pasInterface: Result := ProcessComplexType(AScope, TypeName, pasInterface);
-        pasProcedure: Result := ProcessProceduralType(AScope, TypeName);
-        pasRecord: Result := ProcessComplexType(AScope, TypeName, pasRecord);
-        pasSet: Result := ProcessSetType(AScope, TypeName);
-
-        { TODO -oJVR -cTPascalCodeProcessor.ProcessComplexType() :
-          21/02/2014 14:33:02
-          Skip the packed directive for records.
-          Will revisit this later.
-        }
-        pasPacked: begin
-          Input.Fetch(pasPacked);
-          case Input.Keyword of
-            pasArray: Result := ProcessArrayType(AScope, TypeName);
-            pasRecord: Result := ProcessComplexType(AScope, TypeName, pasRecord);
-            pasSet: Result := ProcessSetType(AScope, TypeName);
-          else
-            raise ECodeAnalyserError.CreateFmt(
-              SUnexpectedKeyword, [Input.Token.TokenString, Input.Token.Row, Input.Token.Column]);
-          end;
-        end;
-
-      // Otherwise it is some other type
-      else
-        ProcessSimpleType(AScope, TypeName);
-      end;
+      Result := ProcessSimpleType(AScope, TypeName);
     end;
+
   end;
 end;
 
@@ -1380,13 +951,19 @@ end;
 
 
 function TDBIPascalInterfaceAnalyser.ProcessUses(AScope: TDBIPascalScope): Boolean;
+var
+  Position: TDBITokenPosition;
+  UnitName: String;
+
 begin
   Assert(Assigned(AScope));
+  Position := Input.Token.TokenPosition;
   Result := True;
   Input.Fetch(pasUses);
 
   while not Input.Eof do begin
-    AScope.NewUnit(Input.Fetch([Tok_NameSpace, Tok_Identifier]), Input.Token.TokenPosition);
+    UnitName := Input.Fetch([Tok_NameSpace, Tok_Identifier]);
+    AScope.NewUnit(UnitName, Position);
 
     if Input.Have([Tok_SemiColon]) then begin
       Break;
@@ -1398,56 +975,68 @@ begin
 end;
 
 
-function TDBIPascalInterfaceAnalyser.ProcessVar(AScope: TDBIPascalScope; const AVarType: TDBIPascalKeyword): Boolean;
+// _____________________________________________________________________________
+{**
+  Jvr - 08/12/2010 15:47:20 - Initial code.<br />
+}
+function TDBIPascalInterfaceAnalyser.ProcessVariable(AScope: TDBIPascalScope; const AVariableType: TDBIPascalKeyword): Boolean;
 var
-  Index: Integer;
   Position: TDBITokenPosition;
-  VarKind: String;
-  VarValue: String;
-  Variables: TStrings;
+  LocalDirectives: TDBIPascalKeywords;
+  KindName: String;
+  Data: String;
+  Item: TDBIPascalScopedItem;
+  Items: TStrings;
+  Index: Integer;
 
 begin
   Assert(Assigned(AScope));
-  Position := Input.Token.TokenPosition;
   Result := True;
-  Input.Fetch(AVarType);
 
-  Variables := Local(TStringList.Create).Obj as TStrings;
+  Input.Skip(AVariableType);
+
+  Items := Local(TStringList.Create).Obj as TStrings;
   while not Input.Eof do begin
+    Position := Input.Token.TokenPosition;
+    LocalDirectives := [];
+    KindName := '';
+    Data := '';
 
-    // Var Name
-    Variables.Add(Input.Fetch([Tok_Identifier]));
+    // Multiple Names
+    Items.Clear;
+    repeat
+      Items.Add(Input.Fetch([Tok_Identifier]));
+    until not Input.Have([Tok_Comma]);
 
-    // Multiple variables
-    if Input.Have([Tok_Comma]) then begin
-      Continue;
+    // Kind
+    if (Input.Token.TokenType = Tok_Colon) then begin
+      KindName := Input.GetTypeSpecifier(nil, LocalDirectives);
     end;
 
-    // Colon (:)
-    Input.Fetch([Tok_Colon]);
+    // Value
+    Data := Input.GetConstantValue;
+    Input.Skip([Tok_SemiColon]);
 
-    // Var Kind
-    VarKind := Input.Upto([Tok_Assign, Tok_SemiColon]);
+    // Create the Variables
+    for Index := 0 to Items.Count-1 do begin
+      case AVariableType of
+        pasConst: Item := AScope.NewConst(Items[Index], KindName, Position);
+        pasDefault: Item := AScope.NewField(Items[Index], KindName, Position);
+        pasResourceString: Item := AScope.NewResourceString(Items[Index], Position);
+        pasThreadVar: Item := AScope.NewVar(Items[Index], KindName, Position);
+        pasVar: Item := AScope.NewVar(Items[Index], KindName, Position);
+      else
+        Item := nil;
+        Input.Check(pasUnknown);
+      end;
 
-    // Var Value;
-    if Input.Have([Tok_Assign]) then begin
-      VarValue := Input.Upto([Tok_SemiColon]);
-    end
-    else begin
-      VarValue := '';
+      Item.Data := Data;
+      Item.DirectivesInclude(LocalDirectives);
     end;
-    Input.Fetch([Tok_SemiColon]);
 
     // Check next keyword
-    if (Input.Keyword <> pasUnknown) then begin
+    if Input.IsKeywordScopeInterrupter then begin
       Break;
-    end;
-  end;
-
-  for Index := 0 to Variables.count-1 do begin
-    case AVarType of
-      pasThreadVar: AScope.NewVar(Variables[Index], VarKind, position).Data := VarValue;
-      pasVar: AScope.NewVar(Variables[Index], VarKind, Position).Data := VarValue;
     end;
   end;
 end;
@@ -1486,8 +1075,6 @@ end;
 
 procedure TDBIPascalInterfaceLexer.NextToken;
 begin
-//##JVR  PreviousToken.Assign(Token);
-
   inherited NextToken;
 
   while not Eof do begin
@@ -1514,23 +1101,6 @@ begin
     else begin
       Break;
     end;
-  end;
-end;
-
-
-function TDBIPascalInterfaceLexer.UptoTokenTypeOrKeyword(TokenTypes: TDBITokenTypes; const AKeyword: TDBIPascalKeyword): String;
-begin
-  Result := '';
-
-  while not Eof do begin
-    if ((not (tsStringLiteral in Token.TokenStatus)) and
-       ((Token.TokenType in TokenTypes) or (Keyword = AKeyword))) then
-    begin
-      Break;
-    end;
-
-    Result := Result + Token.TokenString;
-    UptoToken;
   end;
 end;
 
@@ -1631,13 +1201,69 @@ begin
 end;
 
 
+function TDBICustomPascalLexer.GetArguments(AScope: TDBIPascalScopedItem): Boolean;
+var
+  Position: TDBITokenPosition;
+  LocalDirectives: TDBIPascalKeywords;
+  KindName: String;
+  Data: String;
+  Argument: TDBIPascalArgument;
+  Arguments: TStringList;
+  Index: Integer;
+
+begin
+  LocalDirectives := [];
+
+  Result := Have([Tok_OpenBracket]);
+  while Result and (Token.TokenType <> Tok_CloseBracket) do begin
+    // Directives
+    LocalDirectives := [];
+    while (Keyword in [pasConst, pasIn, pasOut, pasVar]) do begin
+      Include(LocalDirectives, Keyword);
+
+      Fetch(Keyword);
+    end;
+
+    // Argument Name(s)
+    Arguments := Local(TStringList.Create).Obj as TStringList;
+    while not Eof do begin
+      Position := Token.TokenPosition;
+      Arguments.Add(Fetch([Tok_Identifier, Tok_NameSpace]));
+      if not Have([Tok_Comma]) then begin
+        Break;
+      end;
+    end;
+
+    // Does this Argument have a type
+    if (Token.TokenType = Tok_Colon) then begin
+      KindName := GetTypeSpecifier(nil, LocalDirectives);
+    end;
+    Data := GetConstantValue;
+
+    for Index := 0 to Arguments.Count-1 do begin
+      Argument := TDBIPascalArgument.Create(AScope.ChildOwner, AScope);
+      Argument.Text := Arguments[Index];
+      Argument.KindName := KindName;
+      Argument.Data := Data;
+      Argument.Directives := LocalDirectives;
+      Argument.Position := Position;
+    end;
+
+    if not Have([Tok_SemiColon]) then begin
+      Break;
+    end;
+  end;
+
+  Fetch([Tok_CloseBracket]);
+end;
+
+
 function TDBICustomPascalLexer.GetConstantValue: String;
 const
-  Tok_ArithmeticOperators = [Tok_Multiply, Tok_Plus, Tok_Minus, Tok_Divide];
-  Tok_Values = [
+  Tok_ArithmeticOperators = [Tok_Multiply, Tok_Plus, Tok_Minus, Tok_Divide, Tok_Identifier];
+  Tok_SimpleValues = [
     Tok_Identifier,
     Tok_NameSpace,
-    Tok_ControlCharacter,
     Tok_HexLiteral,
     Tok_IntegerLiteral,
     Tok_FloatLiteral
@@ -1645,38 +1271,59 @@ const
 
 var
   Success: Boolean;
+  NestingCount: Integer;
 
 begin
   Result := '';
 
-  Success := Token.TokenType = Tok_Equals;
-  if Success then begin
-    Result := Result + Fetch([Tok_Equals]);
-
-    // String Literal
-    if (Token.TokenType = Tok_Apostrophe) then begin
-      Result := Result + GetQuotedString;
+  Success := Have([Tok_Equals]);
+  while Success do begin
+    // Arithmetic
+    if (Token.TokenType in Tok_ArithmeticOperators) or (keyword in [pasDiv, pasNot]) then begin
+      Result := Result + Chr_Space + Fetch(Tok_ArithmeticOperators);
     end
 
     // Open Array
     else if (Token.TokenType = Tok_OpenSquareBracket) then begin
-      Result := Result + GetOpenArray;
+      Result := Result + Chr_Space + GetOpenArray;
+    end
+
+    // Constant Array of Records or Values
+    else if (Token.TokenType = Tok_OpenBracket) then begin
+      Result := Result + Fetch([Tok_OpenBracket]);
+
+      NestingCount := 1;
+      while (NestingCount > 0) and not Eof do begin
+        case Token.TokenType of
+          Tok_OpenBracket: Inc(NestingCount);
+          Tok_CloseBracket: Dec(NestingCount);
+        end;
+
+        Result := Result + Token.TokenString;
+        NextToken;
+      end;
+    end
+
+    // String Literal + Control Characters
+    else if (Token.TokenType in [Tok_ControlCharacter, Tok_Apostrophe]) then begin
+      while (Token.TokenType in [Tok_ControlCharacter, Tok_Apostrophe]) do begin
+        if (Token.TokenType = Tok_Apostrophe) then begin
+          Result := Result + GetQuotedString;
+        end;
+
+        while (Token.TokenType = Tok_ControlCharacter) do begin
+          Result := Result + Fetch([Tok_ControlCharacter]);
+        end;
+      end;
     end
 
     // Otherwise simple value
-    else begin
-      Result := Result + ' ' + Fetch(Tok_Values);
-    end;
-
-    // Arithmetic
-    if (Token.TokenType in Tok_ArithmeticOperators) then begin
-      Result := Result + Fetch(Tok_ArithmeticOperators);
-      Result := Result + ' ' + Fetch(Tok_Values);
+    else if (Token.TokenType in Tok_SimpleValues) then begin
+      Result := Result + Chr_Space + Fetch(Tok_SimpleValues);
     end
 
-    else if (Token.TokenType = Tok_OpenBracket) then begin
-      Result := Result + Upto([Tok_CloseBracket]);
-      Result := Result + Fetch([Tok_CloseBracket]);
+    else begin
+      Success := False;
     end;
   end;
 end;
@@ -1698,6 +1345,10 @@ begin
 end;
 
 
+// _____________________________________________________________________________
+{**
+  Jvr - 07/01/2011 11:17:26 - Initial code.<br />
+}
 function TDBICustomPascalLexer.GetKeyword: TDBIPascalKeyword;
 var
   Index: Integer;
@@ -1705,31 +1356,15 @@ var
 begin
   Result := pasUnknown;
 
-  if (Token.TokenType = Tok_Identifier) and (Token.TokenStatus = []) then begin
+  if (Token.TokenType = Tok_UTF8) then begin
+    Result := pasUTF8;
+  end
+
+  else if (Token.TokenType = Tok_Identifier) and (Token.TokenStatus = []) then begin
     Index := GetEnumValue(TypeInfo(TDBIPascalKeyword), 'pas' + Token.TokenString);
     if (Index <> -1) then begin
       Result := TDBIPascalKeyword(Index);
     end;
-  end;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 07/01/2011 11:17:26 - Initial code.<br />
-}
-function TDBICustomPascalLexer.GetParameterList: String;
-var
-  Success: Boolean;
-
-begin
-  Result := '';
-
-  Success := Token.TokenType = Tok_OpenBracket;
-  while Success do begin
-    Success := not (Token.TokenType in [Tok_CloseBracket, Tok_Eof]);
-    Result := Result + Token.TokenString;
-    NextToken;
   end;
 end;
 
@@ -1751,99 +1386,184 @@ var
 begin
   Result := '';
 
-  Success := Token.TokenType = Tok_Apostrophe;
-  while Success and not Eof do begin
-    Result := Result + Token.TokenString;
-    NextToken;
-    Success := tsStringLiteral in Token.TokenStatus;
-  end;
+  repeat
+    Success := Token.TokenType = Tok_Apostrophe;
+    while Success do begin
+      Result := Result + Token.TokenString;
+      NextToken;
+      Success := tsStringLiteral in Token.TokenStatus;
+    end;
+  until not (Token.TokenType = Tok_Apostrophe);
 end;
 
 
-function TDBICustomPascalLexer.GetTypeSpecifier: String;
+function TDBICustomPascalLexer.GetTypeSpecifier(AScope: TDBIPascalScopedItem; var ADirectives: TDBIPascalKeywords): String;
 var
   Success: Boolean;
 
 begin
-  Result := GetDimensions;
+  Result := '';
 
-  // Get Type (Kind) name
-  Success := Token.TokenType in [Tok_Colon, Tok_Equals];
-  if Success then begin
-    // Fetch leadin
-    if (Token.TokenType = Tok_Colon) then begin
-      Fetch([Tok_Colon]);
-    end
-    else begin
-      Result := Result + Fetch([Tok_Equals]);
-    end;
+  // leadin
+  if (Token.TokenType = Tok_Colon) then begin
+    Fetch([Tok_Colon]);
+  end
+  else begin
+    Result := Result + Skip([Tok_Equals]);
+  end;
 
-    // Pointer
-    if (Token.TokenType = Tok_Caret) then begin
-      Result := Result + Fetch([Tok_Caret]);
-    end;
+  // Pointer
+  if (Token.TokenType = Tok_Caret) then begin
+    Result := Result + Fetch([Tok_Caret]);
+  end;
 
-{##JVR
-    // Type directive
-    if Input.Have(pasType) then begin
-      Include(LocalDirectives, pasType);
-    end;
-//}
-    // Reference to
-    if (Keyword = pasReference) then begin
-      Result := Result + Fetch(pasReference);
-      Result := Result + ' ' + Fetch(pasTo);
-      Result := Result + ' ' + Fetch([Tok_Identifier, Tok_NameSpace]);
-//##JVR      Result := Result + ' ' + Upto([Tok_SemiColon]);
-    end
-{##JVR
-    // Char or String
-    else if Have([Tok_Apostrophe]) then begin
-      Result := Result + Chr_Apostrophe;
-      Result := Result + Fetch([Tok_Identifier, Tok_IntegerLiteral]);
-      Result := Result + Fetch([Tok_Apostrophe]);
-    end
-//}
-    // Record Pointer
-    else if (Keyword = pasRecord) then begin
-      Result := Result + Fetch(pasRecord);
-      Result := Result + Upto(pasEnd);
-      Result := Result + ' ' + Fetch(pasEnd);
-    end
-
-    // Array
-    else if (Keyword = pasArray) then begin
-      Result := Result + Fetch(pasArray);
-      Result := Result + GetDimensions;
-      Result := Result + ' ' + Fetch(pasOf);
-      Result := Result + ' ' + Fetch([Tok_Identifier, Tok_NameSpace]);
-      Result := Result + GetDimensions;
-    end
-
-    // Otherwise default
-    else begin
-      Result := Result + Fetch([Tok_Identifier, Tok_NameSpace]);
-
-      // To Help avoid {$ifdef} - {$else} - {$endif} problens, skip the {$else} bit
-      if (Keyword <> pasEnd) then begin
-        Skip([Tok_Identifier, Tok_NameSpace]);
-      end;
-
-      Result := Result + GetDimensions;
-    end;
-
+  // Packed directive
+  if Have(pasPacked) then begin
+    Include(ADirectives, pasPacked);
   end;
 
 
-  // Generics
-  Success := Success and (Token.TokenType = Tok_Smaller);
-  if Success then begin
-    Result := Result + Fetch([Tok_Smaller]);
-    while Success do begin
-      Success := not (Token.TokenType in [Tok_Greater, Tok_Eof]);
-      Result := Result + Token.tokenString;
-      NextToken;
+  // Procedural Type
+  if (Keyword in [pasFunction, pasProcedure]) then begin
+    Include(ADirectives, Keyword);
+    Result := Result + Fetch(Keyword);
+
+    // Do we have parameters?
+    if (Token.TokenType = Tok_OpenBracket) then begin
+      if Assigned(AScope) then begin
+        GetArguments(AScope);
+      end
+      else begin
+        Result := Result + Upto([Tok_CloseBracket]);
+        Result := Result + Fetch([Tok_CloseBracket]);
+      end;
     end;
+
+    // Is it a Function
+    if Have([Tok_Colon]) then begin
+      Result := Result + Chr_Colon + Chr_Space + Fetch([Tok_Identifier]);
+    end;
+
+    // Is it a Method Type
+    if (Keyword = pasOf) then begin
+      Result := Result + Chr_Space + Fetch(pasOf) + Chr_Space + Fetch(pasObject);
+    end;
+
+    // SemiColon
+    Success := Skip([Tok_SemiColon]) <> '';
+
+    // Directives
+    case Keyword of
+      pasCdecl: begin
+        Include(ADirectives, pasCdecl);
+        Fetch(pasCdecl);
+      end;
+
+      pasStdCall: begin
+        Include(ADirectives, pasStdCall);
+        Fetch(pasStdCall);
+      end;
+    else
+      if Success then begin
+        UndoToken(Chr_SemiColon);
+      end;
+    end;
+
+    // Premature Exit;
+//##JVR}    Exit;
+  end
+
+  // Array
+  else if (Keyword = pasArray) then begin
+    Result := Result + Fetch(pasArray);
+    Result := Result + GetDimensions;
+    Result := Result + Chr_Space + Fetch(pasOf);
+    Result := Result + Chr_Space + Fetch([Tok_Identifier, Tok_NameSpace]);
+    Result := Result + GetDimensions;
+  end
+
+  // Reference to
+  else if (Keyword = pasReference) then begin
+    Result := Result + Fetch(pasReference);
+    Result := Result + Chr_Space + Fetch(pasTo);
+    Result := Result + Chr_Space + Fetch([Tok_Identifier, Tok_NameSpace]);
+    Result := Result + Chr_Space + Upto([Tok_SemiColon]);
+  end
+
+  // Record Pointer
+  else if (Keyword = pasRecord) then begin
+    Result := Result + Fetch(pasRecord);
+    Result := Result + Upto(pasEnd);
+    Result := Result + Chr_Space + Fetch(pasEnd);
+  end
+
+  // Set Type
+  else if (Keyword = pasSet) then begin
+    Fetch(pasSet);
+    Fetch(pasOf);
+
+    if Have([Tok_OpenBracket]) then begin
+      Result := Result + Upto([Tok_CloseBracket]) + Fetch([Tok_CloseBracket]);
+    end
+    else begin
+      Result := Result + Upto([Tok_SemiColon]);
+    end;
+  end
+
+  // Char or String
+  else if (Token.TokenType = Tok_Apostrophe) then begin
+    Result := Result + Fetch([Tok_Apostrophe]);
+    Result := Result + Fetch([Tok_Identifier, Tok_IntegerLiteral]);
+    Result := Result + Fetch([Tok_Apostrophe]);
+  end
+
+  // Enumerated Type
+  else if (Token.TokenType = Tok_OpenBracket) then begin
+    repeat
+      Result := Result + Fetch([Token.TokenType]);
+      Result := Result + Chr_Space + Fetch([Tok_Identifier]);
+
+      // User defined ordinal value
+      if (Token.TokenType = Tok_Equals) then begin
+        Result := Result + Chr_Space + Fetch([Tok_Equals]);
+        Result := Result + Chr_Space + Fetch([Tok_IntegerLiteral]);
+      end;
+    until (Token.TokenType <> Tok_Comma);
+    Result := Result + Fetch([Tok_CloseBracket]);
+  end
+
+  // Otherwise Simple Type
+  else begin
+    Result := Result + Fetch([Tok_Identifier, Tok_IntegerLiteral, Tok_NameSpace]);
+  end;
+
+
+  // Range
+  if Have([Tok_DotDot]) then begin
+    if Have([Tok_Apostrophe]) then begin
+      Result := Result + Chr_DotDot + Chr_Apostrophe;
+      Result := Result + Fetch([Tok_Identifier, Tok_IntegerLiteral]);
+      Result := Result + Fetch([Tok_Apostrophe]);
+    end
+    else begin
+      Result := Result + Chr_DotDot + Fetch([Tok_Identifier, Tok_IntegerLiteral]);
+    end
+  end;
+
+  // To Help avoid {$ifdef} - {$else} - {$endif} problens, skip the {$else} bit
+  if (Keyword <> pasEnd) then begin
+    Skip([Tok_Identifier, Tok_NameSpace]);
+  end;
+
+  Result := Result + GetDimensions;
+
+
+  // Generics
+  Success := Have([Tok_Smaller]);
+  while Success do begin
+    Success := not (Token.TokenType in [Tok_Greater, Tok_Eof]);
+    Result := Result + Token.TokenString;
+    NextToken;
   end;
 end;
 
@@ -1884,6 +1604,15 @@ begin
     NextToken;
 
     Include(ADirectives, Value);
+  end;
+end;
+
+
+function TDBICustomPascalLexer.IsKeywordScopeInterrupter: Boolean;
+begin
+  Result := Keyword in TDBIPascalScopeInterruptors;
+  if not (Result or (Keyword in [pasUnknown, pasIndex]) ) then begin
+    Check(pasUnknown);
   end;
 end;
 
@@ -1946,26 +1675,36 @@ begin
 end;
 
 
+// _____________________________________________________________________________
+{**
+  Jvr - 21/12/2010 15:10:47 - Initial code.<br />
+}
 procedure TDBICustomPascalLexer.LexIdentifier;
 begin
   inherited LexIdentifier;
 
-  if (LexerChar = Chr_Dot) then begin
-    Token.TokenType := Tok_NameSpace;
+  while (LexerChar = Chr_Dot) do begin
+    GetChar;
 
-    while (LexerChar = Chr_Dot) do begin
-      Token.AddChar(LexerChar);
+    // Is it a DotDot
+    if (LexerChar = Chr_Dot) then begin
+      PutChar(LexerChar);
+      PutChar(PriorChar);
+      GetChar;
+      Break;
+    end
 
-      while GetChar do begin
-        if (LexerChar in soAlphaNumeric) then begin
-          Token.AddChar(LexerChar);
-        end
-        else begin
-          Break;
-        end;
+    // Otherwise it is a namespace
+    else begin
+      Token.TokenType := Tok_NameSpace;
+      Token.AddChar(Chr_Dot);
+
+      while (LexerChar in soAlphaNumeric) do begin
+        Token.AddChar(LexerChar);
+        GetChar;
       end;
-
     end;
+
   end;
 end;
 
@@ -2009,6 +1748,30 @@ begin
 end;
 
 
+procedure TDBICustomPascalLexer.LexSymbol;
+const
+  Chr_EF = #239;
+  Chr_BF = #191;
+  Chr_BB = #187;
+
+begin
+  inherited LexSymbol;
+
+  // Bom - UTF8
+  if (PriorChar = Chr_EF) and (Token.Row = 1) and (Token.Column = 1) then begin
+    Token.TokenType := Tok_UTF8;
+
+    Assert(LexerChar = Chr_BB);
+    Token.AddChar(LexerChar);
+    GetChar;
+
+    Assert(LexerChar = Chr_BF);
+    Token.AddChar(LexerChar);
+    GetChar;
+  end;
+end;
+
+
 procedure TDBICustomPascalLexer.SetStatus(Value: TDBITokenStatus);
 begin
   // Exclude // and (* *) embedded style comments in a { } comment
@@ -2034,9 +1797,11 @@ end;
 {**
   Jvr - 14/10/2009 12:09:08 - Initial code.<br />
 }
-procedure TDBICustomPascalLexer.Skip(TokenTypes: TDBITokenTypes);
+function TDBICustomPascalLexer.Skip(TokenTypes: TDBITokenTypes): String;
 begin
+  Result := '';
   while (Token.TokenType in TokenTypes) and not Eof do begin
+    Result := Result + Token.TokenString;
     NextToken;
   end;
 end;
@@ -2046,17 +1811,21 @@ end;
 {**
   Jvr - 17/03/2008 20:50:03 - Initial code.<br />
 }
-procedure TDBICustomPascalLexer.Skip(TokenKinds: TDBITokenKinds);
+function TDBICustomPascalLexer.Skip(TokenKinds: TDBITokenKinds): String;
 begin
+  Result := '';
   while (Token.TokenKind in TokenKinds) and not Eof do begin
+    Result := Result + Token.TokenString;
     NextToken;
   end;
 end;
 
 
-procedure TDBICustomPascalLexer.Skip(const Value: TDBIPascalKeyword);
+function TDBICustomPascalLexer.Skip(const Value: TDBIPascalKeyword): String;
 begin
+  Result := '';
   while (Keyword = Value) and not Eof do begin
+    Result := Result + Token.TokenString;
     NextToken;
   end;
 end;
@@ -2097,6 +1866,26 @@ begin
     Result := Result + Token.TokenString;
     UptoToken;
   end;
+end;
+
+
+procedure TDBICustomPascalLexer.UndoToken(const Value: AnsiString);
+var
+  Data: AnsiString;
+
+begin
+  if not Eof then begin
+    PutChar(LexerChar);
+  end;
+
+  PutChar(Chr_Space);
+  Data := Token.AsString;
+  PutStr(Data);
+  PutChar(Chr_Space);
+  PutStr(Value);
+
+  GetChar;
+  NextToken;
 end;
 
 
@@ -2164,7 +1953,6 @@ function TDBIPascalScope.GetScopeForClass: TDBIPascalScope;
 begin
   Result := GetScope;
 end;
-
 
 function TDBIPascalScope.GetScopeForConst: TDBIPascalScope;
 begin
@@ -2250,6 +2038,7 @@ end;
 function TDBIPascalScope.NewGuid(const AName: String; APosition: TDBITokenPosition): TDBIPascalGuid;
 begin
   Result := TDBIPascalGuid.Create(ChildOwner, GetScope);
+  Result.Text := AName;
   Result.Position := APosition;
 end;
 
@@ -2282,10 +2071,6 @@ begin
 end;
 
 
-// _____________________________________________________________________________
-{**
-  Jvr - 21/12/2010 15:10:47 - Initial code.<br />
-}
 function TDBIPascalScope.NewProperty(const AName: String; APosition: TDBITokenPosition): TDBIPascalProperty;
 begin
   Result := TDBIPascalProperty.Create(ChildOwner, GetScope);
@@ -2432,7 +2217,7 @@ end;
 
 function TDBIPascalUnit.GetScopeForResourceString: TDBIPascalScope;
 begin
-  if (ugoresourceStrings in GroupingOptions) then begin
+  if (ugoResourceStrings in GroupingOptions) then begin
     if not Assigned(FResourceStrings) then begin
       FResourceStrings := TDBIPascalResourceStrings.Create(ChildOwner, Self);
       FResourceStrings.Text := 'ResourceStrings';
@@ -2563,7 +2348,7 @@ function TDBIPascalComplex.GetDisplayName: String;
 begin
   Result := Text + ' = ' + ClassKindName;
 
-  if  (kindName <> '') then begin
+  if  (KindName <> '') then begin
     Result := Result + ' (' + KindName + ')';
   end;
 
@@ -2591,7 +2376,7 @@ begin
     Result := Self;
   end;
 
-  Assert(Result is TDBIPascalUnit);
+  Assert(Assigned(Result));
 end;
 
 
@@ -2601,9 +2386,15 @@ begin
 end;
 
 
+procedure TDBIPascalNode.DirectivesInclude(const ADirectives: TDBIPascalKeywords);
+begin
+  FDirectives := FDirectives + ADirectives;
+end;
+
+
 function TDBIPascalNode.GetClassKindName: String;
 const
-  KindOffset = 11; // 'TDBIPascal'
+  KindOffset = 11; // length('TDBIPascal') + 1;
 begin
   Result := LowerCase(Copy(Self.ClassName, KindOffset, 128));
 end;
@@ -2646,22 +2437,6 @@ end;
 
 function TDBIPascalProcedure.GetDisplayName: String;
 begin
-  if (pasFunction in Directives) then begin
-    Result := 'function  ' + Text + ': ' + KindName;
-  end
-  else begin
-    Result := 'procedure   ' + Text;
-  end;
-end;
-
-
-
-
-
-{ TDBIPascalMethod }
-
-function TDBIPascalMethod.GetDisplayName: String;
-begin
   if (pasConstructor in Directives) then begin
     Result := TDBIPascalMethodKindName[pasConstructor] + '  ' + Text;
   end
@@ -2669,7 +2444,7 @@ begin
     Result := TDBIPascalMethodKindName[pasDestructor] + '  ' + Text;
   end
   else if (pasFunction in Directives) then begin
-    Result := TDBIPascalMethodKindName[pasFunction] + '  ' + Text + ': ' + kindName;
+    Result := TDBIPascalMethodKindName[pasFunction] + '  ' + Text + ': ' + KindName;
   end
   else if (pasProcedure in Directives) then begin
     Result := TDBIPascalMethodKindName[pasProcedure] + '  ' + Text;
@@ -2697,6 +2472,28 @@ end;
 
 
 
+
+
+{ TDBIPascalArguments }
+
+procedure TDBIPascalArguments.Clone(AScope: TDBIPascalNode);
+var
+  Index: Integer;
+  Item: TDBIPascalArgument;
+  Argument: TDBIPascalArgument;
+
+begin
+  for Index := 0 to ChildCount-1 do begin
+    Item := Children[Index] as TDBIPascalArgument;
+
+    Argument := TDBIPascalArgument.Create(AScope.ChildOwner, AScope);
+    Argument.Text := Item.Text;
+    Argument.KindName := Item.KindName;
+    Argument.Data := Item.Data;
+    Argument.Directives := Item.Directives;
+    Argument.Position := Item.Position;
+  end;
+end;
 
 
 end.

@@ -299,7 +299,8 @@ type
     Tok_FloatLiteral,
     Tok_HexLiteral,
     Tok_Eof,
-    Tok_Macro
+    Tok_Macro,
+    Tok_UTF8
     );
 
   TDBITokenTypes = set of TDBITokenType;

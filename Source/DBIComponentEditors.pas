@@ -29,8 +29,8 @@ unit DBIComponentEditors;
 interface
 
 uses
-  Classes, Forms, Dialogs, DB, DBReg, DBIConst, DBIObjectListDatasets, DSDesign,
-  {$ifdef Delphi6} DesignIntf {$else} DsgnIntf {$endif} ;
+  Classes, Forms, Dialogs, DB, DBReg, DBIConst, DBIObjectListDatasets,
+  {$ifdef Delphi6} DesignIntf, {$else} DsgnIntf, {$endif} DSDesign;
 
 type
   TObjectListDatasetEditor = class(TDataSetEditor)

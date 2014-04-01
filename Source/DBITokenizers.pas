@@ -136,6 +136,7 @@ type
 
     function GetChar: Boolean; virtual;
     procedure PutChar(const Value: TDBIChar); virtual;
+    procedure PutStr(const Value: AnsiString);
 
     procedure NextToken; virtual;
 
@@ -431,8 +432,6 @@ var
   end;
 
 begin
-  Token.TokenType := LexerTokenType;
-  Token.AsString := LexerChar;
   Leadin := LexerChar;
   GetChar;
 
@@ -444,7 +443,7 @@ begin
   // If Ch is alphanumeric then we have an identifier
   if (LexerChar in soAlphaNumeric) then begin
     Token.TokenKind := tkMacro;
-    Token.AsString := LexerChar;
+    Token.AsChar := LexerChar;
     while GetChar do begin
       if IsValidMacroChar(LexerChar) then begin
         Token.AsString := Token.AsString + LexerChar;
@@ -785,6 +784,7 @@ begin
   PSymbolData := @(FLexerCharMap[LexerChar]);
   Token.TokenKind := PSymbolData.TokenKind;
   Token.TokenStatus := LexerStatus;
+  Token.TokenType := PSymbolData.TokenType;
 
   if Eof then begin
     LexEof;
@@ -835,6 +835,19 @@ begin
   BufferIndex := BufferIndex + 1;
   Assert(BufferIndex < SizeOf(FPutbackBuffer));
   FPutbackBuffer[BufferIndex] := Value;
+end;
+
+
+procedure TDBIAbstractLexer.PutStr(const Value: AnsiString);
+var
+  Index: Integer;
+
+begin
+  if (Value <> '') then begin
+    for Index := Length(Value) downto 1 do begin
+      PutChar(Value[Index]);
+    end;
+  end;
 end;
 
 
@@ -1007,7 +1020,7 @@ begin
     PSymbolData := @(FLexerSymbolMap[PSymbol1Data.TokenType, PSymbol2Data^.TokenType]);
 
     // Are these two symbols mapped to a TokenType?
-    if not  (PSymbolData^.TokenType in [Tok_Unassigned, Tok_None]) then begin //##JVR(PSymbolData^.TokenType <> Tok_None) then begin
+    if not  (PSymbolData^.TokenType in [Tok_Unassigned, Tok_None]) then begin
       Token.AddChar(LexerChar);
 
       GetChar;
@@ -1015,7 +1028,6 @@ begin
 
     // Otherwise the token is a single character symbol
     else begin
-//##JVR      PSymbolData := PSymbol1Data;
       PSymbolData := @(FLexerSymbolMap[PSymbol1Data.TokenType, Tok_Unassigned]);
     end;
   end;
@@ -1041,8 +1053,8 @@ end;
 }
 procedure TDBICustomAsciiLexer.LexIdentifier;
 begin
-  Token.AsChar := LexerChar;
   Token.TokenType := Tok_Identifier;
+  Token.AsChar := LexerChar;
 
   while GetChar do begin
     if (LexerChar in soAlphaNumeric) then begin
@@ -1076,16 +1088,16 @@ begin
     MapSymbol(LexIdentifier, Character, Tok_NoChange, tkIdentifier);
   end;
 
+  // Underscore Identifier
+  MapSymbol(LexIdentifier, Chr_UnderScore, Tok_NoChange, tkIdentifier);
+
   // Numbers
-  MapSymbol(LexNumber, '+', Tok_NoChange, tkNumber);
-  MapSymbol(LexNumber, '-', Tok_NoChange, tkNumber);
+  MapSymbol(LexNumber, Chr_Plus, Tok_NoChange, tkNumber);
+  MapSymbol(LexNumber, Chr_Minus, Tok_NoChange, tkNumber);
+
   for Character := '0' to '9' do begin
     MapSymbol(LexNumber, Character, Tok_NoChange, tkNumber);
   end;
-
-  // Underscore Identifier
-  Character := '_';
-  MapSymbol(LexIdentifier, Character, Tok_NoChange, tkIdentifier);
 
 end;
 
