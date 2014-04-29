@@ -54,6 +54,7 @@ type
 
   TDBIProcessInfoOption = (piCtrlCAbort, piDetachedProcess, piRedirectOutput, piVerbose);
   TDBIProcessInfoOptions = set of TDBIProcessInfoOption;
+  
 
 type
   TDBICustomProcess = class(TComponent)

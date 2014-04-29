@@ -28,6 +28,8 @@ unit DBIDialogs;
 
 interface
 
+{$I DBICompilers.inc}
+
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   StdCtrls, ExtCtrls, ComCtrls, DB, DBGrids;
@@ -200,6 +202,8 @@ implementation
 uses
   DBIUTils;
 
+const
+  clHotLight = $00CC6600;
 
 { TDBIDialogProgress }
 
@@ -510,7 +514,9 @@ function TDBICustomDialog.GetClient: TPanel;
 begin
   if not Assigned(FClient) then begin
     FClient := TPanel.Create(Self);
+{$ifdef DelphiXE}
     FClient.ParentBackground := False;
+{$endif}
     FClient.Align := alClient;
     FClient.BevelOuter := bvNone;
     FClient.Caption := '';
@@ -571,7 +577,9 @@ function TDBICustomDialog.GetFooter: TPanel;
 begin
   if not Assigned(FFooter) then begin
     FFooter := TPanel.Create(Self);
+{$ifdef DelphiXE}
     FFooter.ParentBackground := False;
+{$endif}
     FFooter.Align := alBottom;
     FFooter.BevelOuter := bvNone;
     FFooter.Caption := '';

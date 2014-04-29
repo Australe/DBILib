@@ -34,20 +34,6 @@ uses
   Classes, SysUtils, DB, DBIStrings,  DBITokenizers, DBITokenizerConsts;
 
 type
-  TDBICustomXMLLexer = class(TDBICustomAsciiLexer)
-  protected
-    procedure LexInitialise; override;
-
-    procedure Skip(TokenTypes: TDBITokenTypes); overload;
-    procedure Skip(TokenKinds: TDBITokenKinds); overload;
-
-    procedure Take(ATokenType: TDBITokenType); overload;
-    procedure Take(ATokenKind: TDBITokenKind); overload;
-
-  end;
-
-
-type
   TDBICustomDataPacketReader = class(TDBICustomParser)
   protected
     function CreateColumn(
@@ -60,14 +46,12 @@ type
 
     function CreateRow(RowData: TStrings): Boolean; virtual;
 
-    function GetInput: TDBICustomXMLLexer;
     procedure PushChar(const Character: AnsiChar);
 
   public
     function GetData: Boolean; virtual; abstract;
     function GetMetaData: Boolean; virtual; abstract;
 
-    property Input: TDBICustomXMLLexer read GetInput;
   end;
 
 
@@ -104,17 +88,6 @@ type
 
 
 type
-  TDBIXMLDataPacketLexer = class(TDBICustomXMLLexer)
-  protected
-    procedure LexXMLEntity;
-    procedure LexEncodedSymbol;
-    procedure LexInitialise; override;
-
-  end;
-
-
-
-type
   TDBIXmlAttribute = (
     xmlAttribute_None,
     xmlAttribute_AttrName,
@@ -141,7 +114,10 @@ type
     xmlElement_RowData
     );
 
+
 type
+  TDBIXMLDataPacketLexer = class(TDBICustomXMLLexer);
+
   TDBICustomXMLDataPacketReader = class(TDBIDatasetDataPacketReader)
   private
     FContext: TDBIXmlElement;
@@ -170,7 +146,12 @@ type
 
 
 type
-  TDBICSVDataPacketLexer = class(TDBICustomXMLLexer);
+  TDBICSVDataPacketLexer = class(TDBICustomAsciiLexer)
+  protected
+    procedure LexInitialise; override;
+
+  end;
+
 
   TDBICustomCSVDataPacketReader = class(TDBIDatasetDataPacketReader)
   protected
@@ -205,7 +186,7 @@ begin
   // If the value is "Delimited by Quotes", then we have a value
   // Otherwise it is assumed that we have NO Value
   if Input.Token.TokenType = Tok_Quotes then begin
-    Input.Take(Tok_Quotes);
+    Input.Fetch([Tok_Quotes]);
 
     if Input.Token.TokenType <> Tok_Quotes then begin
       Data := TStringStream.Create('');
@@ -229,7 +210,7 @@ begin
       end;
     end;
 
-    Input.Take(Tok_Quotes);
+    Input.Fetch([Tok_Quotes]);
   end;
 end;
 
@@ -280,7 +261,7 @@ begin
 
     FieldIndex := 0;
     while Result and not Input.Eof do begin
-      Input.Take(Separator[FieldIndex > 0]);
+      Input.Fetch([Separator[FieldIndex > 0]]);
       Input.Skip([Tok_LineBreak]);
 
       FieldValue := String(GetAttributeValue);
@@ -295,6 +276,23 @@ begin
 
     Result := CreateRow(RowData);
   end;
+end;
+
+
+
+
+
+{ TDBICSVDataPacketLexer }
+
+procedure TDBICSVDataPacketLexer.LexInitialise;
+begin
+  inherited LexInitialise;
+
+  // Kind: tkWhiteSpace
+  MapSymbol(LexWhiteSpace, Chr_Space, Tok_NoChange, tkWhiteSpace);
+  MapSymbol(LexWhiteSpace, Chr_HorizontalTab, Tok_NoChange, tkWhiteSpace);
+  MapSymbol(LexWhiteSpace, Chr_CarriageReturn, Tok_LineBreak, tkWhiteSpace);
+  MapSymbol(LexWhiteSpace, Chr_LineFeed, Tok_LineBreak, tkWhiteSpace);
 end;
 
 
@@ -325,9 +323,9 @@ var
 begin
   Result := '';
 
-  Input.Take(tkIdentifier); // Attribute Name
-  Input.Take(Tok_Equals);
-  Input.Take(Tok_Quotes);
+  Input.Fetch([tkIdentifier]); // Attribute Name
+  Input.Fetch([Tok_Equals]);
+  Input.Fetch([Tok_Quotes]);
 
   if Input.Token.TokenType <> Tok_Quotes then begin
     Data := TStringStream.Create('');
@@ -619,145 +617,6 @@ end;
 
 
 
-{ TDBICustomXMLDataPacketLexer }
-
-procedure TDBIXMLDataPacketLexer.LexXMLEntity;
-const
-  XMLEntityFilter = [
-    'A', 'a',  // &amp;, &apos;
-    'G', 'g',  // &gt;
-    'L', 'l',  // &lt;
-    'Q', 'q'   // &quot;
-    ];
-
-var
-  PSymbolData: PLexerSymbolData;
-
-begin
-  // Swallow Leadin Ampersand and check next character
-  if (LexerChar in XMLEntityFilter) then begin
-    PSymbolData := @(LexerCharMap[Chr_Ampersand]);
-    Token.TokenType := PSymbolData^.TokenType;
-    SetStatus(PSymbolData^.TokenStatus);
-
-    if (LexerChar in ['A', 'a']) then begin
-      GetChar;
-
-      // &amp;
-      if (LexerChar in ['M', 'm']) then begin
-        Assert(GetChar and (LexerChar in ['P', 'p']));
-        Token.AsString := Chr_Ampersand;
-      end
-
-      // &apos;
-      else if (LexerChar in ['P', 'p']) then begin
-        Assert(GetChar and (LexerChar in ['O', 'o']));
-        Assert(GetChar and (LexerChar in ['S', 's']));
-        Token.AsString := Chr_Apostrophe;
-      end;
-    end
-
-    // &gt;
-    else if (LexerChar in ['G', 'g']) and GetChar and (LexerChar in ['T', 't']) then begin
-      Token.AsString := Chr_Greater;
-    end
-
-    // &lt;
-    else if (LexerChar in ['L', 'l']) and GetChar and (LexerChar in ['T', 't']) then begin
-      Token.AsString := Chr_Smaller;
-    end
-
-    // &quot;
-    else if (LexerChar in ['Q', 'q']) and GetChar and (LexerChar in ['U', 'u']) then begin
-      Assert(GetChar and (LexerChar in ['O', 'o']));
-      Assert(GetChar and (LexerChar in ['T', 't']));
-      Token.AsString := Chr_Quotes;
-    end
-
-    else begin
-      raise Exception.Create('Unsupported XML Entity');
-    end;
-
-    Assert(GetChar and (LexerChar = ';'));
-    // Swallow terminating SemiColon
-    GetChar;
-  end
-
-  // POtherwise Undo
-  else begin
-    PutChar(Chr_Ampersand);
-
-    inherited LexSymbol;
-  end;
-end;
-
-
-procedure TDBIXMLDataPacketLexer.LexEncodedSymbol;
-var
-  PSymbolData: PLexerSymbolData;
-
-begin
-  // If Ch is numeric then we have a valid encoded symbol
-  if (LexerChar in soDigits) then begin
-    PSymbolData := @(LexerCharMap[LexerChar]);
-    Token.TokenType := PSymbolData^.TokenType;
-    Token.AsString := LexerChar;
-
-    SetStatus(PSymbolData^.TokenStatus);
-
-    while GetChar and (LexerChar in soDigits) do begin
-      Token.AddChar(LexerChar);
-    end;
-
-    // Swallow terminating SemiColon
-    Assert(LexerChar = ';');
-    GetChar;
-
-    Token.AsString := TDBIString(Chr(Token.AsInteger));
-  end
-  else begin
-    inherited LexSymbol;
-  end;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 26/05/2013 00:56:38 - Updated code.<br>
-
-  Remember to Map Single Symbols before Dual Symbols
-}
-procedure TDBIXMLDataPacketLexer.LexInitialise;
-begin
-  inherited LexInitialise;
-{$ifdef DebugInfo}
-  // String Literals - toggles State only!
-  MapSymbol(LexSymbol, Chr_Quotes, Tok_Default, tkSymbol, [tsStringLiteral, tsToggle]);
-  MapSymbol(LexSymbol, Chr_Apostrophe, Tok_Default, tkSymbol, [tsStringLiteral, tsToggle]);
-{$endif}
-  // Xml Elements - toggles State only!
-  MapSymbol(LexSymbol, Chr_Smaller, Tok_Default, tkSymbol, [tsXmlElement]);
-  MapSymbol(LexSymbol, Chr_Greater, Tok_Default, tkSymbol, [tsXmlelement, tsMask]);
-
-{$ifdef DebugInfo}
-  // State: tsComment2 - /*...*/ style comments
-  MapDualSymbol(LexNone, Chr_Slash_Star, Tok_Slash_Star, tkSymbol, [tsComment2]);
-  MapDualSymbol(LexNone, Chr_Star_Slash, Tok_Star_Slash, tkSymbol, [tsComment2, tsMask]);
-{$endif}
-
-  // Xml Elements - toggles State only!
-  MapDualSymbol(LexNone, Chr_Smaller_Slash, Tok_Smaller_Slash, tkSymbol, [tsXmlElement]);
-  MapDualSymbol(LexNone, Chr_Slash_Greater, Tok_Slash_Greater, tkSymbol, [tsXmlElement, tsMask]);
-
-  // Always Map the Single symbol before the Dual symbol with the same first char
-  MapSymbol(LexXMLEntity, Chr_Ampersand, Tok_Default, tkSymbol);
-  MapDualSymbol(LexEncodedSymbol, Chr_Ampersand_Hash, Tok_Macro, tkSymbol);
-end;
-
-
-
-
-
 { TDBIDatasetDataPacketReader }
 
 function TDBIDatasetDataPacketReader.CreateColumn(
@@ -926,12 +785,6 @@ begin
 end;
 
 
-function TDBICustomDataPacketReader.GetInput: TDBICustomXMLLexer;
-begin
-  Result := inherited GetInput as TDBICustomXMLLexer;
-end;
-
-
 procedure TDBICustomDataPacketReader.PushChar(const Character: AnsiChar);
 begin
   Input.PutBack(Input.Token.AsString);
@@ -939,52 +792,6 @@ begin
   Input.NextToken;
 end;
 
-
-
-
-
-{ TDBICustomXMLLexerr }
-
-procedure TDBICustomXMLLexer.LexInitialise;
-begin
-  inherited LexInitialise;
-
-  // Kind: tkWhiteSpace
-  MapSymbol(LexWhiteSpace, Chr_Space, Tok_NoChange, tkWhiteSpace);
-  MapSymbol(LexWhiteSpace, Chr_HorizontalTab, Tok_NoChange, tkWhiteSpace);
-  MapSymbol(LexWhiteSpace, Chr_CarriageReturn, Tok_LineBreak, tkWhiteSpace);
-  MapSymbol(LexWhiteSpace, Chr_LineFeed, Tok_LineBreak, tkWhiteSpace);
-end;
-
-
-procedure TDBICustomXMLLexer.Skip(TokenTypes: TDBITokenTypes);
-begin
-  while (Token.TokenType in TokenTypes) and not Eof do begin
-    NextToken;
-  end;
-end;
-
-
-procedure TDBICustomXMLLexer.Skip(TokenKinds: TDBITokenKinds);
-begin
-  while (Token.TokenKind in TokenKinds) and not Eof do begin
-    NextToken;
-  end;
-end;
-
-
-procedure TDBICustomXMLLexer.Take(ATokenType: TDBITokenType);
-begin
-  Assert(Token.TokenType = ATokenType, Token.AsString);
-  NextToken;
-end;
-
-
-procedure TDBICustomXMLLexer.Take(ATokenKind: TDBITokenKind);
-begin
-  Assert(Token.TokenKind = ATokenKind);
-  NextToken;
-end;
 
 
 end.

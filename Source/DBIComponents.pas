@@ -48,6 +48,7 @@ type
     procedure GetChildren(Proc: TGetChildProc; Root: TComponent); override;
     function GetCompoundName: String; virtual;
     function GetDisplayName: string; overload; virtual;
+    function FindUniqueName: String; virtual;
 
     procedure InsertChild(AComponent: TDBICompoundComponent);
     procedure ReadState(Reader: TReader); override;
@@ -732,12 +733,9 @@ begin
 
   if Assigned(AParent) then begin
     AParent.InsertChild(Self);
-
-    Name := Self.ClassName + IntToStr(ComponentIndex);
-  end
-  else begin
-    Name := Self.ClassName + IntToStr(1);
   end;
+
+  Name := FindUniqueName;
 end;
 
 
@@ -751,6 +749,25 @@ begin
   FreeAndNil(FChildren);
   
   inherited Destroy;
+end;
+
+
+function TDBICompoundComponent.FindUniqueName: String;
+var
+  ID: Integer;
+
+begin
+  ID := ComponentIndex;
+
+  if (ID < 1) then begin
+    ID := 1;
+  end;
+
+  repeat
+    Result := Copy(Self.ClassName, 2, 255) + IntToStr(ID);
+
+    Inc(ID);
+  until (Owner = nil) or (Owner.FindComponent(Result) = nil);
 end;
 
 

@@ -33,6 +33,16 @@ uses
   DBITokenizerConsts, omSendMail;
 
 type
+ TDBIPascalMacro = (
+    macroUnknown,
+
+    // Macro Directives
+    macroIfdef,
+    macroElse,
+    macroEndif
+    );
+
+type
   TDBIPascalKeyword = (
     pasUnknown,
 
@@ -149,6 +159,7 @@ const
 const
   Tokens_Comment1 = [Tok_OpenCurlyBracket, Tok_CloseCurlyBracket];
   Tokens_Comment3 = [Tok_OpenBracket_Star, Tok_CloseBracket_Star];
+  Tokens_Macro = [Tok_OpenCurlyBracket_Dollar, Tok_CloseCurlyBracket];
 
 
 type
@@ -360,6 +371,7 @@ type
 
   protected
     function GetKeyword: TDBIPascalKeyword;
+    function GetMacro: TDBIPascalMacro;
     function GetPreviousToken: TDBILexerToken;
     procedure LexControlCharacter;
     procedure LexHexadecimal;
@@ -384,27 +396,15 @@ type
     function IsKeywordScopeInterrupter: Boolean;
 
   public
-    function Check(TokenTypes: TDBITokenTypes): String; overload;
-    function Check(TokenKinds: TDBITokenKinds): String; overload;
     procedure Check(const Value: TDBIPascalKeyword); overload;
-
     function Collate(ATokenKind: TDBITokenKind): String; overload;
-
-    function Fetch(TokenTypes: TDBITokenTypes): String; overload;
-    function Fetch(TokenKinds: TDBITokenKinds): String; overload;
     function Fetch(const Value: TDBIPascalKeyword): String; overload;
-
-    function Have(TokenTypes: TDBITokenTypes): Boolean; overload;
-    function Have(TokenKinds: TDBITokenKinds): Boolean; overload;
     function Have(const Value: TDBIPascalKeyword): Boolean; overload;
-
-    function Skip(TokenTypes: TDBITokenTypes): String; overload;
-    function Skip(TokenKinds: TDBITokenKinds): String; overload;
     function Skip(const Value: TDBIPascalKeyword): String; overload;
 
+    function Upto(const Value: TDBIPascalKeyword): String; overload;
     function Upto(TokenTypes: TDBITokenTypes; const Inclusive: Boolean = False): String; overload;
     function Upto(TokenKinds: TDBITokenKinds; const Inclusive: Boolean = False): String; overload;
-    function Upto(const Value: TDBIPascalKeyword): String; overload;
 
     property Keyword: TDBIPascalKeyword read GetKeyword;
 
@@ -484,10 +484,6 @@ uses
 
 { TDBIPascalInterfaceAnalyser }
 
-// _____________________________________________________________________________
-{**
-  Jvr - 09/12/2010 10:07:44 - Initial code.<br />
-}
 function TDBIPascalInterfaceAnalyser.GetUnit: TDBIPascalUnit;
 begin
   if not Assigned(FUnit) then begin
@@ -523,11 +519,13 @@ begin
   Input.Fetch(pasOf);
 
   while not Input.Eof do begin
-    if (Input.keyword = pasEnd) then begin
+    if (Input.Token.TokenType = Tok_CloseBracket) or (Input.keyword = pasEnd) then begin
       Break;
     end;
 
-    Input.Fetch([Tok_Identifier, Tok_IntegerLiteral]);
+    repeat
+      Input.Fetch([Tok_Identifier, Tok_IntegerLiteral]);
+    until not Input.Have([Tok_Comma]);
     Input.Fetch([Tok_Colon]);
 
     // Is it a multi-part union definition
@@ -537,18 +535,19 @@ begin
           Break;
         end;
 
-        TypeNames := Local(TStringList.Create).Obj as TStrings;
-        while not Input.Eof do begin
-          TypeNames.Add(Input.Fetch([Tok_Identifier]));
-          if Input.Have([Tok_Colon]) then begin
-            Break;
-          end
-          else begin
-            Input.Fetch([Tok_Comma]);
-          end;
+        case Input.Keyword of
+          pasCase: ProcessCaseType(AScope);
+
+        else
+          TypeNames := Local(TStringList.Create).Obj as TStrings;
+          repeat
+            TypeNames.Add(Input.Fetch([Tok_Identifier]));
+          until not Input.Have([Tok_Comma]);
+          Input.Fetch([Tok_Colon]);
+
+          Result := ProcessSimpleType(AScope, TypeNames);
         end;
 
-        Result := ProcessSimpleType(AScope, TypeNames);
       end;
     end
     else begin
@@ -556,7 +555,7 @@ begin
       ProcessSimpleType(AScope, TypeName);
     end;
 
-    Input.Fetch([Tok_SemiColon]);
+    Input.Skip([Tok_SemiColon]);
   end;
 end;
 
@@ -886,7 +885,7 @@ begin
   LocalDirectives := [];
   Result := True;
 
-  Args := Local(TDBIPascalArguments.Create(nil)).Obj as TDBIPascalArguments;
+  Args := Local(TDBIPascalArguments.Create(AScope.ChildOwner, AScope)).Obj as TDBIPascalArguments;
   KindName := Input.GetTypeSpecifier(Args, LocalDirectives);
   Input.Skip([Tok_SemiColon]);
 
@@ -1052,6 +1051,9 @@ begin
   FScope.Free;
   FScope := nil;
 
+  FUnit.Free;
+  FUnit := nil;
+
   inherited Destroy;
 end;
 
@@ -1098,6 +1100,11 @@ begin
       inherited NextToken;
     end
 
+    // Macros
+    else if (tsMacro in Token.TokenStatus) or (Token.TokenType in Tokens_Macro) then begin
+      inherited NextToken;
+    end
+
     else begin
       Break;
     end;
@@ -1109,32 +1116,6 @@ end;
 
 
 { TCustomPascalLexer }
-
-// _____________________________________________________________________________
-{**
-  Jvr - 16/12/2010 13:43:43 - Initial code.<br />
-}
-function TDBICustomPascalLexer.Check(TokenTypes: TDBITokenTypes): String;
-const
-  ErrMsg = 'Unexpected Token "%s" at [ %d, %d ]';
-
-begin
-  if not (Token.TokenType in TokenTypes) then begin
-    raise ECodeAnalyserError.CreateFmt(ErrMsg, [Token.TokenString, Token.Row, Token.Column]);
-  end;
-end;
-
-
-function TDBICustomPascalLexer.Check(TokenKinds: TDBITokenKinds): String;
-const
-  ErrMsg = 'Unexpected Token "%s" at [ %d, %d ]';
-
-begin
-  if not (Token.TokenKind in TokenKinds) then begin
-    raise ECodeAnalyserError.CreateFmt(ErrMsg, [Token.TokenString, Token.Row, Token.Column]);
-  end;
-end;
-
 
 procedure TDBICustomPascalLexer.Check(const Value: TDBIPascalKeyword);
 const
@@ -1150,10 +1131,6 @@ begin
 end;
 
 
-// _____________________________________________________________________________
-{**
-  Jvr - 08/02/2005 18:10:24 - Initial code.<br>
-}
 function TDBICustomPascalLexer.Collate(ATokenKind: TDBITokenKind): String;
 begin
   Result := '';
@@ -1165,34 +1142,6 @@ begin
 end;
 
 
-// _____________________________________________________________________________
-{**
-  Jvr - 17/03/2008 21:08:51 - Initial code.<br />
-}
-function TDBICustomPascalLexer.Fetch(TokenTypes: TDBITokenTypes): String;
-begin
-  Result := Token.TokenString;
-  Check(TokenTypes);
-  NextToken;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 17/03/2008 21:09:07 - Initial code.<br />
-}
-function TDBICustomPascalLexer.Fetch(TokenKinds: TDBITokenKinds): String;
-begin
-  Result := Token.TokenString;
-  Check(TokenKinds);
-  NextToken;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 14/12/2010 18:56:47 - Initial code.<br />
-}
 function TDBICustomPascalLexer.Fetch(const Value: TDBIPascalKeyword): String;
 begin
   Result := Token.TokenString;
@@ -1369,6 +1318,22 @@ begin
 end;
 
 
+function TDBICustomPascalLexer.GetMacro: TDBIPascalMacro;
+var
+  Index: Integer;
+
+begin
+  Result := macroUnknown;
+
+  if (tsMacro in Token.TokenStatus) then begin
+    Index := GetEnumValue(TypeInfo(TDBIPascalMacro), 'macro' + Token.TokenString);
+    if (Index <> -1) then begin
+      Result := TDBIPascalMacro(Index);
+    end;
+  end;
+end;
+
+
 function TDBICustomPascalLexer.GetPreviousToken: TDBILexerToken;
 begin
   if not Assigned(FPreviousToken) then begin
@@ -1478,6 +1443,7 @@ begin
     Result := Result + Fetch(pasArray);
     Result := Result + GetDimensions;
     Result := Result + Chr_Space + Fetch(pasOf);
+    Result := Result + Skip([Tok_Caret]);
     Result := Result + Chr_Space + Fetch([Tok_Identifier, Tok_NameSpace]);
     Result := Result + GetDimensions;
   end
@@ -1563,24 +1529,6 @@ begin
   while Success do begin
     Success := not (Token.TokenType in [Tok_Greater, Tok_Eof]);
     Result := Result + Token.TokenString;
-    NextToken;
-  end;
-end;
-
-
-function TDBICustomPascalLexer.Have(TokenTypes: TDBITokenTypes): Boolean;
-begin
-  Result := (Token.TokenType in TokenTypes);
-  if Result then begin;
-    NextToken;
-  end;
-end;
-
-
-function TDBICustomPascalLexer.Have(TokenKinds: TDBITokenKinds): Boolean;
-begin
-  Result := (Token.TokenKind in TokenKinds);
-  if Result then begin
     NextToken;
   end;
 end;
@@ -1734,7 +1682,7 @@ begin
 
   // State: tsComment1 - {.....} style comments
   MapSymbol(LexSymbol, Chr_OpenCurlyBracket, Tok_OpenCurlyBracket, tkSymbol, [tsComment1]);
-  MapSymbol(LexSymbol, Chr_CloseCurlyBracket, Tok_CloseCurlyBracket, tkSymbol, [tsComment1, tsMask]);
+  MapSymbol(LexSymbol, Chr_CloseCurlyBracket, Tok_CloseCurlyBracket, tkSymbol, [tsComment1, tsMacro, tsMask]);
 
   // State: tsComment2 - //..... style comments
   MapDualSymbol(LexNone, Chr_SlashSlash, Tok_SlashSlash, tkSymbol, [tsComment2]);
@@ -1742,6 +1690,9 @@ begin
   // State: tsComment3 - (*...*) style comments
   MapDualSymbol(LexNone, Chr_OpenBracket_Star, Tok_OpenBracket_Star, tkSymbol, [tsComment3]);
   MapDualSymbol(LexNone, Chr_CloseBracket_Star, Tok_CloseBracket_Star, tkSymbol, [tsComment3, tsMask]);
+
+  // $ Dollar Macros
+  MapDualSymbol(LexNone, Chr_OpenCurlyBracket_Dollar, Tok_OpenCurlyBracket_Dollar, tkSymbol, [tsMacro]);
 
   // Common Pascal Symbols
   MapDualSymbol(LexNone, Chr_DotDot, Tok_DotDot);
@@ -1793,40 +1744,47 @@ begin
 end;
 
 
-// _____________________________________________________________________________
-{**
-  Jvr - 14/10/2009 12:09:08 - Initial code.<br />
-}
-function TDBICustomPascalLexer.Skip(TokenTypes: TDBITokenTypes): String;
-begin
-  Result := '';
-  while (Token.TokenType in TokenTypes) and not Eof do begin
-    Result := Result + Token.TokenString;
-    NextToken;
-  end;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 17/03/2008 20:50:03 - Initial code.<br />
-}
-function TDBICustomPascalLexer.Skip(TokenKinds: TDBITokenKinds): String;
-begin
-  Result := '';
-  while (Token.TokenKind in TokenKinds) and not Eof do begin
-    Result := Result + Token.TokenString;
-    NextToken;
-  end;
-end;
-
-
 function TDBICustomPascalLexer.Skip(const Value: TDBIPascalKeyword): String;
 begin
   Result := '';
   while (Keyword = Value) and not Eof do begin
     Result := Result + Token.TokenString;
     NextToken;
+  end;
+end;
+
+
+procedure TDBICustomPascalLexer.UndoToken(const Value: AnsiString);
+var
+  Data: AnsiString;
+
+begin
+  if not Eof then begin
+    PutChar(LexerChar);
+  end;
+
+  PutChar(Chr_Space);
+  Data := Token.AsString;
+  PutStr(Data);
+  PutChar(Chr_Space);
+  PutStr(Value);
+
+  GetChar;
+  NextToken;
+end;
+
+
+function TDBICustomPascalLexer.Upto(const Value: TDBIPascalKeyword): String;
+begin
+  Result := '';
+
+  while not Eof do begin
+    if (not (tsStringLiteral in Token.TokenStatus)) and (Keyword = Value) then begin
+      Break;
+    end;
+
+    Result := Result + Token.TokenString;
+    UptoToken;
   end;
 end;
 
@@ -1860,41 +1818,6 @@ begin
         Result := Result + Token.TokenString;
         inherited NextToken;
       end;
-      Break;
-    end;
-
-    Result := Result + Token.TokenString;
-    UptoToken;
-  end;
-end;
-
-
-procedure TDBICustomPascalLexer.UndoToken(const Value: AnsiString);
-var
-  Data: AnsiString;
-
-begin
-  if not Eof then begin
-    PutChar(LexerChar);
-  end;
-
-  PutChar(Chr_Space);
-  Data := Token.AsString;
-  PutStr(Data);
-  PutChar(Chr_Space);
-  PutStr(Value);
-
-  GetChar;
-  NextToken;
-end;
-
-
-function TDBICustomPascalLexer.Upto(const Value: TDBIPascalKeyword): String;
-begin
-  Result := '';
-
-  while not Eof do begin
-    if (not (tsStringLiteral in Token.TokenStatus)) and (Keyword = Value) then begin
       Break;
     end;
 
@@ -2361,54 +2284,6 @@ end;
 
 
 
-{ TDBIPascalNode }
-
-// _____________________________________________________________________________
-{**
-  Jvr - 09/12/2010 14:21:37 - Initial code.<br />
-}
-function TDBIPascalNode.ChildOwner: TComponent;
-begin
-  if Assigned(Owner) then begin
-    Result := Owner;
-  end
-  else begin
-    Result := Self;
-  end;
-
-  Assert(Assigned(Result));
-end;
-
-
-procedure TDBIPascalNode.DirectiveInclude(const ADirective: TDBIPascalKeyword);
-begin
-  Include(FDirectives, ADirective);
-end;
-
-
-procedure TDBIPascalNode.DirectivesInclude(const ADirectives: TDBIPascalKeywords);
-begin
-  FDirectives := FDirectives + ADirectives;
-end;
-
-
-function TDBIPascalNode.GetClassKindName: String;
-const
-  KindOffset = 11; // length('TDBIPascal') + 1;
-begin
-  Result := LowerCase(Copy(Self.ClassName, KindOffset, 128));
-end;
-
-
-procedure TDBIPascalNode.SetClassKindName(const Value: String);
-begin
-  raise EPropertyError.Create('Property "ClassKindName" is read only');
-end;
-
-
-
-
-
 { TDBIPascalType }
 
 function TDBIPascalType.GetDisplayName: String;
@@ -2493,6 +2368,54 @@ begin
     Argument.Directives := Item.Directives;
     Argument.Position := Item.Position;
   end;
+end;
+
+
+
+
+
+{ TDBIPascalNode }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 09/12/2010 14:21:37 - Initial code.<br />
+}
+function TDBIPascalNode.ChildOwner: TComponent;
+begin
+  if Assigned(Owner) then begin
+    Result := Owner;
+  end
+  else begin
+    Result := Self;
+  end;
+
+  Assert(Assigned(Result));
+end;
+
+
+procedure TDBIPascalNode.DirectiveInclude(const ADirective: TDBIPascalKeyword);
+begin
+  Include(FDirectives, ADirective);
+end;
+
+
+procedure TDBIPascalNode.DirectivesInclude(const ADirectives: TDBIPascalKeywords);
+begin
+  FDirectives := FDirectives + ADirectives;
+end;
+
+
+function TDBIPascalNode.GetClassKindName: String;
+const
+  KindOffset = 11; // length('TDBIPascal') + 1;
+begin
+  Result := LowerCase(Copy(Self.ClassName, KindOffset, 128));
+end;
+
+
+procedure TDBIPascalNode.SetClassKindName(const Value: String);
+begin
+  raise EPropertyError.Create('Property "ClassKindName" is read only');
 end;
 
 

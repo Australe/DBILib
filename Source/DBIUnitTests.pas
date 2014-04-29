@@ -3013,6 +3013,8 @@ begin
   ADataset.First;
 
   Assert(ADataset.RecordCount > 0);
+  Assert(ADataset.RecordCount = GetRecordCount);
+  
   while not ADataset.Eof do begin
     CheckValues(ADataset, Index);
     Inc(Index);
@@ -3431,6 +3433,8 @@ var
   Index: Integer;
 //}
 begin
+  Assert(ADataset.FieldCount = Count, Format('Field Count %d <> Expected Count %d', [ADataset.FieldCount, Count]));
+
   if ADataset is TDBIObjectListDataset then begin
     FieldProps(ADataset as TDBIObjectListDataset, PFieldData, Count);
   end

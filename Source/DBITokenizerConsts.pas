@@ -86,6 +86,7 @@ const
   Chr_AssignXor              = '^=';
   Chr_Decrement              = '--';
   Chr_DotDot                 = '..';
+  Chr_ColonColon             = '::';
   Chr_GreaterEqual           = '>=';
   Chr_Equality               = '==';
   Chr_Increment              = '++';
@@ -157,9 +158,10 @@ type
     tsMask,              // Mask to detect if TokenState is Mask
     tsStringLiteral,
     tsXmlElement,
-    tsComment1,
-    tsComment2,
-    tsComment3,
+    tsComment1,          // State: tsComment1 - {.....} style comments
+    tsComment2,          // State: tsComment2 - //..... style comments
+    tsComment3,          // State: tsComment3 - (*...*) style comments - /*...*/ as well
+    tsMacro,
     tsUnknown
     );
   TDBITokenStatus = set of TDBILexerState;
@@ -258,6 +260,7 @@ type
     Tok_AssignXor,                     // '^='
     Tok_Decrement,                     // '--'
     Tok_DotDot,                        // '..'
+    Tok_ColonColon,                    // '::'
     Tok_GreaterEqual,                  // '>='
     Tok_Equality,                      // '=='
     Tok_Increment,                     // '++'
@@ -269,6 +272,7 @@ type
     Tok_CloseBracket_Star,             // '*)'
     Tok_OpenCurlyBracket_Star,         // '{*'
     Tok_CloseCurlyBracket_Star,        // '*}'
+    Tok_OpenCurlyBracket_Dollar,       // '{$'
     Tok_OpenCurlyBracket_Hash,         // '{#'
     Tok_CloseCurlyBracket_Hash,        // '#}'
     Tok_Pointer,                       // '->'

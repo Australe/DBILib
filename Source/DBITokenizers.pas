@@ -80,6 +80,7 @@ type
 
   end;
 
+
 type
   TDBIAbstractLexer = class(TDBICustomStreamAdapter)
   private
@@ -99,7 +100,7 @@ type
 
   protected
     function GetBufferIndex: Integer;
-    function GetToken: TDBILexerToken;
+    function GetLexerToken: TDBILexerToken;
     function GetTokenType: TDBITokenType;
 
     procedure LexInitialise; virtual;
@@ -128,13 +129,15 @@ type
     property LexerCharMap: TDBILexerCharacterMap read FLexerCharMap;
     property LexerStatus: TDBITokenStatus read FLexerStatus;
     property LexerTokenType: TDBITokenType read GetTokenType;
-    property Token: TDBILexerToken read GetToken;
+    property Token: TDBILexerToken read GetLexerToken;
 
   public
     constructor Create(AStream: TStream = nil); override;
     destructor Destroy; override;
 
     function GetChar: Boolean; virtual;
+    function GetToken: TDBILexerToken;
+
     procedure PutChar(const Value: TDBIChar); virtual;
     procedure PutStr(const Value: AnsiString);
 
@@ -149,6 +152,8 @@ type
 
   end;
 
+
+type
   TDBICustomAsciiLexer = class(TDBIAbstractLexer)
   private
     FLexerSymbolMap: TDBILexerSymbolMap;
@@ -178,6 +183,19 @@ type
       );
 
   public
+    function Check(TokenTypes: TDBITokenTypes): String; overload;
+    function Check(TokenKinds: TDBITokenKinds): String; overload;
+
+    function Fetch(TokenTypes: TDBITokenTypes): String; overload;
+    function Fetch(TokenKinds: TDBITokenKinds): String; overload;
+
+    function Have(TokenTypes: TDBITokenTypes): Boolean; overload;
+    function Have(TokenKinds: TDBITokenKinds): Boolean; overload;
+
+    function Skip(TokenTypes: TDBITokenTypes): String; overload;
+    function Skip(TokenKinds: TDBITokenKinds): String; overload;
+
+  public
     function GetChar: Boolean; override;
     procedure PutChar(const Value: TDBIChar); override;
 
@@ -186,8 +204,27 @@ type
     property Token;
 
   end;
-
   TDBICustomAsciiLexerClass = class of TDBICustomAsciiLexer;
+
+
+type
+  TDBICustomXMLLexer = class(TDBICustomAsciiLexer)
+  protected
+    procedure LexXMLEntity;
+    procedure LexEncodedSymbol;
+    procedure LexInitialise; override;
+
+  end;
+
+
+type
+  TDBICustomMacroLexer = class(TDBICustomAsciiLexer)
+  protected
+    procedure LexInitialise; override;
+    procedure LexMacro;
+
+  end;
+
 
 type
   TDBICustomParser = class(TPersistent)
@@ -217,15 +254,6 @@ type
 
 
 type
-  TDBICustomMacroLexer = class(TDBICustomAsciiLexer)
-  protected
-    procedure LexInitialise; override;
-    procedure LexMacro;
-
-  end;
-
-
-type
   TDBIGetParam = function(
       Sender: TObject; const ParamName: String; var ParamValue: Variant
       ): Boolean of object;
@@ -250,6 +278,7 @@ type
   end;
 
 
+type
   TDBIReflectionMacroProcessor = class(TDBICustomMacroProcessor)
   private
     FProperties: TDBIProperties;
@@ -277,23 +306,31 @@ uses
   TypInfo, DBIUtils;
 
 
+type
+  EAnalyserError = class(Exception);
+
+
 function Macro(const Format: String; const Args: array of const): String;
 var
   Processor: TDBIReflectionMacroProcessor;
   Index: Integer;
 
 begin
-  Processor := Local(TDBIReflectionMacroProcessor.Create).Obj as TDBIReflectionMacroProcessor;
-  Processor.Input.Text := Format;
+  Result := '';
 
-  for Index := Low(Args) to High(Args) do begin
-    if (Args[Index].VType = vtObject) and (Args[Index].VObject is TPersistent) then begin
-      TDBIProperties.GetProperties(TPersistent(Args[Index].VObject), Processor.Properties);
+  if (Format <> '') then begin
+    Processor := Local(TDBIReflectionMacroProcessor.Create).Obj as TDBIReflectionMacroProcessor;
+    Processor.Input.Text := Format;
+
+    for Index := Low(Args) to High(Args) do begin
+      if (Args[Index].VType = vtObject) and (Args[Index].VObject is TPersistent) then begin
+        TDBIProperties.GetProperties(TPersistent(Args[Index].VObject), Processor.Properties);
+      end;
     end;
-  end;
 
-  Processor.Process;
-  Result := Processor.Output.Text;
+    Processor.Process;
+    Result := Processor.Output.Text;
+  end;
 end;
 
 
@@ -318,7 +355,12 @@ begin
   Result := Properties.IndexOfName(ParamName) > -1;
   if Result then begin
     ParamValue := Properties.Values[ParamName];
+  end
+  else begin
+    Paramvalue := '';
   end;
+
+  Result := True;
 end;
 
 
@@ -390,91 +432,6 @@ begin
       Output.WriteStr(Input.Token.AsString);
       Input.NextToken;
     end;
-  end;
-end;
-
-
-
-{ TDBICustomMacroLexer }
-
-procedure TDBICustomMacroLexer.LexInitialise;
-begin
-  inherited LexInitialise;
-
-  // ${Macros}
-  MapSymbol(LexMacro, Chr_Dollar);
-
-  // String Literals toggles State only!
-  MapSymbol(LexSymbol, Chr_Quotes, Tok_Default, tkSymbol, [tsStringLiteral, tsToggle]);
-  MapSymbol(LexSymbol, Chr_Apostrophe, Tok_Default, tkSymbol, [tsStringLiteral, tsToggle]);
-
-  // Kind: tkWhiteSpace
-  MapSymbol(LexWhiteSpace, Chr_Space, Tok_NoChange, tkWhiteSpace);
-  MapSymbol(LexWhiteSpace, Chr_HorizontalTab, Tok_NoChange, tkWhiteSpace);
-  MapSymbol(LexWhiteSpace, Chr_CarriageReturn, Tok_LineBreak, tkWhiteSpace);
-  MapSymbol(LexWhiteSpace, Chr_LineFeed, Tok_LineBreak, tkWhiteSpace);
-end;
-
-
-procedure TDBICustomMacroLexer.LexMacro;
-var
-  Leadin: TDBIChar;
-  HasDelimiter: Boolean;
-
-  function IsValidMacroChar(const AChar: TDBIChar): Boolean;
-  begin
-    if HasDelimiter then begin
-      Result := (AChar <> Chr_CloseCurlyBracket);
-    end
-    else begin
-      Result := AChar in soAlphaNumericObject;
-    end;
-  end;
-
-begin
-  Leadin := LexerChar;
-  GetChar;
-
-  HasDelimiter := LexerChar = Chr_OpenCurlyBracket;
-  if HasDelimiter then begin
-    GetChar;
-  end;
-
-  // If Ch is alphanumeric then we have an identifier
-  if (LexerChar in soAlphaNumeric) then begin
-    Token.TokenKind := tkMacro;
-    Token.AsChar := LexerChar;
-    while GetChar do begin
-      if IsValidMacroChar(LexerChar) then begin
-        Token.AsString := Token.AsString + LexerChar;
-      end
-      else begin
-        Break;
-      end;
-    end;
-
-    // Swallow terminating CloseCurlyBracket
-    if HasDelimiter then begin
-      GetChar;
-    end;
-
-    Token.TokenType := Tok_Macro;
-    Token.TokenKind := tkMacro;
-  end
-
-  // Otherwise it is an orphan Dollar symbol
-  else begin
-    // Push it all back
-    PutChar(LexerChar);
-    if HasDelimiter then begin
-      PutChar(Chr_OpenCurlyBracket);
-    end;
-    PutChar(Leadin);
-
-    // Now get the next character
-    GetChar;
-
-    inherited LexSymbol;
   end;
 end;
 
@@ -578,384 +535,290 @@ end;
 
 
 
-{ TDBIAbstractLexer }
+{ TDBICustomMacroLexer }
 
-// _____________________________________________________________________________
-{**
-  Jvr - 07/02/2005 17:18:36 - Updated code.<br>
-}
-constructor TDBIAbstractLexer.Create(AStream: TStream = nil);
+procedure TDBICustomMacroLexer.LexInitialise;
 begin
-  inherited Create(AStream);
+  inherited LexInitialise;
 
-  Reset;
-  LexInitialise;
+  // ${Macros}
+  MapSymbol(LexMacro, Chr_Dollar);
+
+  // String Literals toggles State only!
+  MapSymbol(LexSymbol, Chr_Quotes, Tok_Default, tkSymbol, [tsStringLiteral, tsToggle]);
+  MapSymbol(LexSymbol, Chr_Apostrophe, Tok_Default, tkSymbol, [tsStringLiteral, tsToggle]);
+
+  // Kind: tkWhiteSpace
+  MapSymbol(LexWhiteSpace, Chr_Space, Tok_NoChange, tkWhiteSpace);
+  MapSymbol(LexWhiteSpace, Chr_HorizontalTab, Tok_NoChange, tkWhiteSpace);
+  MapSymbol(LexWhiteSpace, Chr_CarriageReturn, Tok_LineBreak, tkWhiteSpace);
+  MapSymbol(LexWhiteSpace, Chr_LineFeed, Tok_LineBreak, tkWhiteSpace);
 end;
 
 
-// _____________________________________________________________________________
-{**
-  Jvr - 07/02/2005 18:21:56 - Updated code.<br>
-}
-destructor TDBIAbstractLexer.Destroy;
-begin
-  Clear;
-
-  inherited Destroy;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 24/04/2008 15:47:42 - Initial code. - DEBUGGING PURPOSES <br />
-}
-function TDBIAbstractLexer.GetBufferIndex: Integer;
-begin
-  Result := FBufferIndex;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 08/02/2005 11:38:57 - Updated code.<br>
-}
-function TDBIAbstractLexer.GetChar: Boolean;
-begin
-  FPriorChar := FLexerChar;
-
-  if (BufferIndex > 0) then begin
-    FLexerChar := FPutbackBuffer[BufferIndex];
-    BufferIndex := BufferIndex-1;
-    Result := True;
-  end
-  else begin
-    FInternalPosition := ReadChar(FLexerChar);
-    Result := FInternalPosition > 0;
-  end;
-
-  Eof := not Result;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 11/03/2005 14:55:26 - Initial code.<br>
-}
-function TDBIAbstractLexer.GetToken: TDBILexerToken;
-begin
-  if not Assigned(FLexerToken) then begin
-    FLexerToken := TDBILexerToken.Create;
-  end;
-  Result := FLexerToken;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 03/11/2008 09:02:21 - Initial code.<br>
-}
-function TDBIAbstractLexer.GetTokenType: TDBITokenType;
-begin
-  Result := FLexerCharMap[LexerChar].TokenType;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 07/02/2005 18:41:12 - Updated code.<br>
-}
-procedure TDBIAbstractLexer.LexEof;
-begin
-  Token.AsString := '';
-  Token.TokenKind := tkSymbol;
-  Token.TokenType := Tok_Eof;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 24/02/2005 19:34:37 - Initial code.<br>
-}
-procedure TDBIAbstractLexer.LexInitialise;
+procedure TDBICustomMacroLexer.LexMacro;
 var
-  Character: TDBIChar;
+  Leadin: TDBIChar;
+  HasDelimiter: Boolean;
 
-begin
-  for Character := Low(FLexerCharMap) to High(FLexerCharMap) do begin
-    MapSymbol(LexSymbol, Character);
-  end;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 08/08/2006 16:44:35 - Initial code.<br>
-}
-procedure TDBIAbstractLexer.LexNop;
-begin
-  // NOP
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 24/02/2005 20:17:02 - Initial code.<br>
-}
-procedure TDBIAbstractLexer.LexSymbol;
-var
-  PSymbolData: PLexerSymbolData;
-
-begin
-  Token.AsChar := LexerChar;
-  PSymbolData := @(FLexerCharMap[LexerChar]);
-  Token.TokenType := PSymbolData^.TokenType;
-
-  UpdateStatus(PSymbolData^.TokenStatus);
-  GetChar;
-end;
-
-
-procedure TDBIAbstractLexer.LexSymbol(AChar: TDBIChar);
-var
-  PSymbolData: PLexerSymbolData;
-
-begin
-  Token.AsChar := AChar;
-  PSymbolData := @(FLexerCharMap[AChar]);
-  Token.TokenType := PSymbolData^.TokenType;
-
-  UpdateStatus(PSymbolData^.TokenStatus);
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 03/03/2005 18:36:13 - Initial code.<br>
-}
-procedure TDBIAbstractLexer.MapSymbol(
-  const ALexerProc: TDBILexerProcedure;
-  const ASymbol: TDBIChar;
-  const ATokenType: TDBITokenType = Tok_Default;
-  const ATokenKind: TDBITokenKind = tkSymbol;
-  const ATokenStatus: TDBITokenStatus = tsNoChange
-  );
-var
-  PSymbolData: PLexerSymbolData;
-
-begin
-  Assert(Assigned(AlexerProc), 'Lexer procedure is required!');
-  PSymbolData := @(FLexerCharMap[ASymbol]);
-
-  // if Tok_Default then set to predefined mapped type
-  if (ATokenType = Tok_Default) then begin
-    if (ASymbol > Chr_Tilde) then begin
-      PSymbolData^.TokenType := Tok_Binary;
+  function IsValidMacroChar(const AChar: TDBIChar): Boolean;
+  begin
+    if HasDelimiter then begin
+      Result := (AChar <> Chr_CloseCurlyBracket);
     end
     else begin
-      PSymbolData^.TokenType := TokenCharacterMap[ASymbol];
+      Result := AChar in soAlphaNumericObject;
     end;
-  end
-
-  // Otherwise if not Tok_NoChange then set to specified TokenType;
-  else if (ATokenType <> Tok_NoChange) then begin
-    PSymbolData^.TokenType := ATokenType;
   end;
 
-  PSymbolData^.TokenKind := ATokenKind;
-  PSymbolData^.TokenStatus := ATokenStatus;
-  PSymbolData^.LexerProc := ALexerProc;
+begin
+  Leadin := LexerChar;
+  GetChar;
+
+  HasDelimiter := LexerChar = Chr_OpenCurlyBracket;
+  if HasDelimiter then begin
+    GetChar;
+  end;
+
+  // If Ch is alphanumeric then we have an identifier
+  if (LexerChar in soAlphaNumeric) then begin
+    Token.TokenKind := tkMacro;
+    Token.AsChar := LexerChar;
+    while GetChar do begin
+      if IsValidMacroChar(LexerChar) then begin
+        Token.AsString := Token.AsString + LexerChar;
+      end
+      else begin
+        Break;
+      end;
+    end;
+
+    // Swallow terminating CloseCurlyBracket
+    if HasDelimiter then begin
+      GetChar;
+    end;
+
+    Token.TokenType := Tok_Macro;
+    Token.TokenKind := tkMacro;
+  end
+
+  // Otherwise it is an orphan Dollar symbol
+  else begin
+    // Push it all back
+    PutChar(LexerChar);
+    if HasDelimiter then begin
+      PutChar(Chr_OpenCurlyBracket);
+    end;
+    PutChar(Leadin);
+
+    // Now get the next character
+    GetChar;
+
+    inherited LexSymbol;
+  end;
 end;
 
 
-// _____________________________________________________________________________
-{**
-  Jvr - 07/02/2005 12:35:41 - Updated code.<br>
-}
-procedure TDBIAbstractLexer.NextToken;
+
+
+
+{ TDBICustomXMLLexerr }
+
+procedure TDBICustomXMLLexer.LexXMLEntity;
+const
+  XMLEntityFilter = [
+    'A', 'a',  // &amp;, &apos;
+    'G', 'g',  // &gt;
+    'L', 'l',  // &lt;
+    'Q', 'q'   // &quot;
+    ];
+
 var
   PSymbolData: PLexerSymbolData;
 
 begin
-  // Update Token Position
-  Token.Position := FInternalPosition;
-  Token.Column := FInternalColumn;
-  Token.Row := FInternalRow;
+  // Swallow Leadin Ampersand and check next character
+  if (LexerChar in XMLEntityFilter) then begin
+    PSymbolData := @(LexerCharMap[Chr_Ampersand]);
+    Token.TokenType := PSymbolData^.TokenType;
+    SetStatus(PSymbolData^.TokenStatus);
 
-  PSymbolData := @(FLexerCharMap[LexerChar]);
-  Token.TokenKind := PSymbolData.TokenKind;
-  Token.TokenStatus := LexerStatus;
-  Token.TokenType := PSymbolData.TokenType;
+    if (LexerChar in ['A', 'a']) then begin
+      GetChar;
 
-  if Eof then begin
-    LexEof;
+      // &amp;
+      if (LexerChar in ['M', 'm']) then begin
+        Assert(GetChar and (LexerChar in ['P', 'p']));
+        Token.AsString := Chr_Ampersand;
+      end
+
+      // &apos;
+      else if (LexerChar in ['P', 'p']) then begin
+        Assert(GetChar and (LexerChar in ['O', 'o']));
+        Assert(GetChar and (LexerChar in ['S', 's']));
+        Token.AsString := Chr_Apostrophe;
+      end;
+    end
+
+    // &gt;
+    else if (LexerChar in ['G', 'g']) and GetChar and (LexerChar in ['T', 't']) then begin
+      Token.AsString := Chr_Greater;
+    end
+
+    // &lt;
+    else if (LexerChar in ['L', 'l']) and GetChar and (LexerChar in ['T', 't']) then begin
+      Token.AsString := Chr_Smaller;
+    end
+
+    // &quot;
+    else if (LexerChar in ['Q', 'q']) and GetChar and (LexerChar in ['U', 'u']) then begin
+      Assert(GetChar and (LexerChar in ['O', 'o']));
+      Assert(GetChar and (LexerChar in ['T', 't']));
+      Token.AsString := Chr_Quotes;
+    end
+
+    else begin
+      raise Exception.Create('Unsupported XML Entity');
+    end;
+
+    Assert(GetChar and (LexerChar = ';'));
+    // Swallow terminating SemiColon
+    GetChar;
+  end
+
+  // POtherwise Undo
+  else begin
+    PutChar(Chr_Ampersand);
+
+    inherited LexSymbol;
+  end;
+end;
+
+
+procedure TDBICustomXMLLexer.LexEncodedSymbol;
+var
+  PSymbolData: PLexerSymbolData;
+
+begin
+  // If Ch is numeric then we have a valid encoded symbol
+  if (LexerChar in soDigits) then begin
+    PSymbolData := @(LexerCharMap[LexerChar]);
+    Token.TokenType := PSymbolData^.TokenType;
+    Token.AsString := LexerChar;
+
+    SetStatus(PSymbolData^.TokenStatus);
+
+    while GetChar and (LexerChar in soDigits) do begin
+      Token.AddChar(LexerChar);
+    end;
+
+    // Swallow terminating SemiColon
+    Assert(LexerChar = ';');
+    GetChar;
+
+    Token.AsString := TDBIString(Chr(Token.AsInteger));
   end
   else begin
-    PSymbolData^.LexerProc;
+    inherited LexSymbol;
   end;
 end;
 
 
 // _____________________________________________________________________________
 {**
-  Jvr - 28/02/2005 16:52:20 - Initial code.<br>
-  Jvr - 12/10/2006 15:14:17 - Now Checks for empty values.<br>
+  Jvr - 26/05/2013 00:56:38 - Updated code.<br>
+
+  Remember to Map Single Symbols before Dual Symbols
 }
-procedure TDBIAbstractLexer.PutBack(const Value: AnsiString);
-var
-  Index: Integer;
-
+procedure TDBICustomXMLLexer.LexInitialise;
 begin
-  if (Value <> '') then begin
-    if not Eof then begin
-      PutChar(LexerChar);
-    end;
+  inherited LexInitialise;
 
-    for Index := Length(Value) downto 1 do begin
-      PutChar(Value[Index]);
-    end;
+  // Kind: tkWhiteSpace
+  MapSymbol(LexWhiteSpace, Chr_Space, Tok_NoChange, tkWhiteSpace);
+  MapSymbol(LexWhiteSpace, Chr_HorizontalTab, Tok_NoChange, tkWhiteSpace);
+  MapSymbol(LexWhiteSpace, Chr_CarriageReturn, Tok_LineBreak, tkWhiteSpace);
+  MapSymbol(LexWhiteSpace, Chr_LineFeed, Tok_LineBreak, tkWhiteSpace);
 
-    GetChar;
-  end;
-end;
-
-{$ifdef Delphi2009}
-procedure TDBIAbstractLexer.PutBack(const Value: WideString);
-begin
-  PutBack(AnsiString(Value));
-end;
+{$ifdef DebugInfo}
+  // String Literals - toggles State only!
+  MapSymbol(LexSymbol, Chr_Quotes, Tok_Default, tkSymbol, [tsStringLiteral, tsToggle]);
+  MapSymbol(LexSymbol, Chr_Apostrophe, Tok_Default, tkSymbol, [tsStringLiteral, tsToggle]);
 {$endif}
 
+  // Xml Elements - toggles State only!
+  MapSymbol(LexSymbol, Chr_Smaller, Tok_Default, tkSymbol, [tsXmlElement]);
+  MapSymbol(LexSymbol, Chr_Greater, Tok_Default, tkSymbol, [tsXmlelement, tsMask]);
 
-// _____________________________________________________________________________
-{**
-  Jvr - 08/02/2005 11:38:25 - Updated code.<br>
-}
-procedure TDBIAbstractLexer.PutChar(const Value: TDBIChar);
-begin
-  BufferIndex := BufferIndex + 1;
-  Assert(BufferIndex < SizeOf(FPutbackBuffer));
-  FPutbackBuffer[BufferIndex] := Value;
+{$ifdef DebugInfo}
+  // State: tsComment3 - /*...*/ style comments
+  MapDualSymbol(LexNone, Chr_Slash_Star, Tok_Slash_Star, tkSymbol, [tsComment3]);
+  MapDualSymbol(LexNone, Chr_Star_Slash, Tok_Star_Slash, tkSymbol, [tsComment3, tsMask]);
+{$endif}
+
+  // Xml Elements - toggles State only!
+  MapDualSymbol(LexNone, Chr_Smaller_Slash, Tok_Smaller_Slash, tkSymbol, [tsXmlElement]);
+  MapDualSymbol(LexNone, Chr_Slash_Greater, Tok_Slash_Greater, tkSymbol, [tsXmlElement, tsMask]);
+
+  // Always Map the Single symbol before the Dual symbol with the same first char
+  MapSymbol(LexXMLEntity, Chr_Ampersand, Tok_Default, tkSymbol);
+  MapDualSymbol(LexEncodedSymbol, Chr_Ampersand_Hash, Tok_Macro, tkSymbol);
 end;
-
-
-procedure TDBIAbstractLexer.PutStr(const Value: AnsiString);
-var
-  Index: Integer;
-
-begin
-  if (Value <> '') then begin
-    for Index := Length(Value) downto 1 do begin
-      PutChar(Value[Index]);
-    end;
-  end;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 07/08/2006 18:52:22 - Initial code.<br>
-}
-procedure TDBIAbstractLexer.Reset;
-begin
-  FBufferIndex := 0;
-
-  FLexerChar := #0;
-  FLexerEof := False;
-  FLexerStatus := tsNone;
-
-  FreeAndNil(FLexerToken);
-
-  FInternalColumn := 0;
-  FInternalPosition := -1;
-  FInternalRow := 1;
-
-  GetChar;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 24/04/2008 15:48:36 - Initial code. - DEBUGGING PURPOSES <br />
-}
-procedure TDBIAbstractLexer.SetBufferIndex(const Value: Integer);
-begin
-  FBufferIndex := Value;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 07/06/2007 12:52:58 - Initial code.<br>
-}
-procedure TDBIAbstractLexer.SetEof(const Value: Boolean);
-begin
-  FLexerEof := Value;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 04/03/2005 15:37:45 - Initial code.<br/>
-}
-procedure TDBIAbstractLexer.SetStatus(Value: TDBITokenStatus);
-var
-  LexerState: TDBILexerState;
-
-begin
-  // Exclude Comments when in a String Literal
-  if (tsStringLiteral in FLexerStatus) then begin
-    Value := Value - [tsComment1, tsComment2, tsComment3];
-  end
-
-  // Exclude String Literal from Comments
-  else if (tsComment1 in FLexerStatus) or (tsComment2 in FLexerStatus) or  (tsComment3 in FLexerStatus) then begin
-    Value := Value - [tsStringLiteral];
-  end;
-
-  // Mask - may need to change the order of this to first
-  if (tsMask in Value) then begin
-    FLexerStatus := FLexerStatus - Value;
-  end
-
-  // Toggle
-  else if (tsToggle in Value) then begin
-    Value := Value - [tsToggle];
-    for LexerState := Low(TDBILexerState) to High(TDBILexerState) do begin
-      if (LexerState in Value) then begin
-        if (LexerState in FLexerStatus) then begin
-          FLexerStatus := FLexerStatus - [LexerState];
-        end
-        else begin
-          FLexerStatus := FLexerStatus + [LexerState];
-        end;
-      end;
-    end;
-  end
-
-  // Include
-  else begin
-    FLexerStatus := FLexerStatus + Value;
-  end;
-end;
-
-
-procedure TDBIAbstractLexer.UpdateStatus(Value: TDBITokenStatus);
-begin
-  // Change state according to the state array
-  if (Value <> tsNoChange) then begin
-    SetStatus(Value);
-
-    // if we are clearing a state then assign state "Before"
-    if (tsMask in Value) then begin
-      Token.TokenStatus := LexerStatus;
-    end;
-  end;
-end;
-
-
-
-
 { TDBICustomAsciiLexer }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 16/12/2010 13:43:43 - Initial code.<br />
+}
+function TDBICustomAsciiLexer.Check(TokenTypes: TDBITokenTypes): String;
+const
+  ErrMsg = 'Unexpected Token "%s" at [ %d, %d ]';
+
+begin
+  if not (Token.TokenType in TokenTypes) then begin
+    raise EAnalyserError.CreateFmt(ErrMsg, [Token.TokenString, Token.Row, Token.Column]);
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 14/12/2010 18:56:47 - Initial code.<br />
+}
+function TDBICustomAsciiLexer.Check(TokenKinds: TDBITokenKinds): String;
+const
+  ErrMsg = 'Unexpected Token "%s" at [ %d, %d ]';
+
+begin
+  if not (Token.TokenKind in TokenKinds) then begin
+    raise EAnalyserError.CreateFmt(ErrMsg, [Token.TokenString, Token.Row, Token.Column]);
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 17/03/2008 21:08:51 - Initial code.<br />
+}
+function TDBICustomAsciiLexer.Fetch(TokenTypes: TDBITokenTypes): String;
+begin
+  Result := Token.TokenString;
+  Check(TokenTypes);
+  NextToken;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 17/03/2008 21:09:07 - Initial code.<br />
+}
+function TDBICustomAsciiLexer.Fetch(TokenKinds: TDBITokenKinds): String;
+begin
+  Result := Token.TokenString;
+  Check(TokenKinds);
+  NextToken;
+end;
+
 
 // _____________________________________________________________________________
 {**
@@ -979,6 +842,32 @@ begin
   end
   else begin
     FInternalColumn := FInternalColumn + 1;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 09/12/2010 10:07:44 - Initial code.<br />
+}
+function TDBICustomAsciiLexer.Have(TokenTypes: TDBITokenTypes): Boolean;
+begin
+  Result := (Token.TokenType in TokenTypes);
+  if Result then begin;
+    NextToken;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 08/02/2005 18:10:24 - Initial code.<br>
+}
+function TDBICustomAsciiLexer.Have(TokenKinds: TDBITokenKinds): Boolean;
+begin
+  Result := (Token.TokenKind in TokenKinds);
+  if Result then begin
+    NextToken;
   end;
 end;
 
@@ -1261,6 +1150,424 @@ begin
   end;
 end;
 
+
+// _____________________________________________________________________________
+{**
+  Jvr - 14/10/2009 12:09:08 - Initial code.<br />
+}
+function TDBICustomAsciiLexer.Skip(TokenTypes: TDBITokenTypes): String;
+begin
+  Result := '';
+  while (Token.TokenType in TokenTypes) and not Eof do begin
+    Result := Result + Token.TokenString;
+    NextToken;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 17/03/2008 20:50:03 - Initial code.<br />
+}
+function TDBICustomAsciiLexer.Skip(TokenKinds: TDBITokenKinds): String;
+begin
+  Result := '';
+  while (Token.TokenKind in TokenKinds) and not Eof do begin
+    Result := Result + Token.TokenString;
+    NextToken;
+  end;
+end;
+
+
+
+
+
+
+
+
+
+
+{ TDBIAbstractLexer }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 07/02/2005 17:18:36 - Updated code.<br>
+}
+constructor TDBIAbstractLexer.Create(AStream: TStream = nil);
+begin
+  inherited Create(AStream);
+
+  Reset;
+  LexInitialise;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 07/02/2005 18:21:56 - Updated code.<br>
+}
+destructor TDBIAbstractLexer.Destroy;
+begin
+  Clear;
+
+  inherited Destroy;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 24/04/2008 15:47:42 - Initial code. - DEBUGGING PURPOSES <br />
+}
+function TDBIAbstractLexer.GetBufferIndex: Integer;
+begin
+  Result := FBufferIndex;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 08/02/2005 11:38:57 - Updated code.<br>
+}
+function TDBIAbstractLexer.GetChar: Boolean;
+begin
+  FPriorChar := FLexerChar;
+
+  if (BufferIndex > 0) then begin
+    FLexerChar := FPutbackBuffer[BufferIndex];
+    BufferIndex := BufferIndex-1;
+    Result := True;
+  end
+  else begin
+    FInternalPosition := ReadChar(FLexerChar);
+    Result := FInternalPosition > 0;
+  end;
+
+  Eof := not Result;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 11/03/2005 14:55:26 - Initial code.<br>
+}
+function TDBIAbstractLexer.GetLexerToken: TDBILexerToken;
+begin
+  if not Assigned(FLexerToken) then begin
+    FLexerToken := TDBILexerToken.Create;
+  end;
+  Result := FLexerToken;
+end;
+
+
+function TDBIAbstractLexer.GetToken: TDBILexerToken;
+var
+  PSymbolData: PLexerSymbolData;
+
+begin
+  // Update Token Position
+  Token.Position := FInternalPosition;
+  Token.Column := FInternalColumn;
+  Token.Row := FInternalRow;
+
+  PSymbolData := @(FLexerCharMap[LexerChar]);
+  Token.TokenKind := PSymbolData.TokenKind;
+  Token.TokenStatus := LexerStatus;
+  Token.TokenType := PSymbolData.TokenType;
+
+  if Eof then begin
+    LexEof;
+  end
+  else begin
+    PSymbolData^.LexerProc;
+  end;
+
+  Result := Token;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 03/11/2008 09:02:21 - Initial code.<br>
+}
+function TDBIAbstractLexer.GetTokenType: TDBITokenType;
+begin
+  Result := FLexerCharMap[LexerChar].TokenType;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 07/02/2005 18:41:12 - Updated code.<br>
+}
+procedure TDBIAbstractLexer.LexEof;
+begin
+  Token.AsString := '';
+  Token.TokenKind := tkSymbol;
+  Token.TokenType := Tok_Eof;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 24/02/2005 19:34:37 - Initial code.<br>
+}
+procedure TDBIAbstractLexer.LexInitialise;
+var
+  Character: TDBIChar;
+
+begin
+  for Character := Low(FLexerCharMap) to High(FLexerCharMap) do begin
+    MapSymbol(LexSymbol, Character);
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 08/08/2006 16:44:35 - Initial code.<br>
+}
+procedure TDBIAbstractLexer.LexNop;
+begin
+  // NOP
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 24/02/2005 20:17:02 - Initial code.<br>
+}
+procedure TDBIAbstractLexer.LexSymbol;
+var
+  PSymbolData: PLexerSymbolData;
+
+begin
+  Token.AsChar := LexerChar;
+  PSymbolData := @(FLexerCharMap[LexerChar]);
+  Token.TokenType := PSymbolData^.TokenType;
+
+  UpdateStatus(PSymbolData^.TokenStatus);
+  GetChar;
+end;
+
+
+procedure TDBIAbstractLexer.LexSymbol(AChar: TDBIChar);
+var
+  PSymbolData: PLexerSymbolData;
+
+begin
+  Token.AsChar := AChar;
+  PSymbolData := @(FLexerCharMap[AChar]);
+  Token.TokenType := PSymbolData^.TokenType;
+
+  UpdateStatus(PSymbolData^.TokenStatus);
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 03/03/2005 18:36:13 - Initial code.<br>
+}
+procedure TDBIAbstractLexer.MapSymbol(
+  const ALexerProc: TDBILexerProcedure;
+  const ASymbol: TDBIChar;
+  const ATokenType: TDBITokenType = Tok_Default;
+  const ATokenKind: TDBITokenKind = tkSymbol;
+  const ATokenStatus: TDBITokenStatus = tsNoChange
+  );
+var
+  PSymbolData: PLexerSymbolData;
+
+begin
+  Assert(Assigned(AlexerProc), 'Lexer procedure is required!');
+  PSymbolData := @(FLexerCharMap[ASymbol]);
+
+  // if Tok_Default then set to predefined mapped type
+  if (ATokenType = Tok_Default) then begin
+    if (ASymbol > Chr_Tilde) then begin
+      PSymbolData^.TokenType := Tok_Binary;
+    end
+    else begin
+      PSymbolData^.TokenType := TokenCharacterMap[ASymbol];
+    end;
+  end
+
+  // Otherwise if not Tok_NoChange then set to specified TokenType;
+  else if (ATokenType <> Tok_NoChange) then begin
+    PSymbolData^.TokenType := ATokenType;
+  end;
+
+  PSymbolData^.TokenKind := ATokenKind;
+  PSymbolData^.TokenStatus := ATokenStatus;
+  PSymbolData^.LexerProc := ALexerProc;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 07/02/2005 12:35:41 - Updated code.<br>
+}
+procedure TDBIAbstractLexer.NextToken;
+begin
+  GetToken;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 28/02/2005 16:52:20 - Initial code.<br>
+  Jvr - 12/10/2006 15:14:17 - Now Checks for empty values.<br>
+}
+procedure TDBIAbstractLexer.PutBack(const Value: AnsiString);
+var
+  Index: Integer;
+
+begin
+  if (Value <> '') then begin
+    if not Eof then begin
+      PutChar(LexerChar);
+    end;
+
+    for Index := Length(Value) downto 1 do begin
+      PutChar(Value[Index]);
+    end;
+
+    GetChar;
+  end;
+end;
+
+{$ifdef Delphi2009}
+procedure TDBIAbstractLexer.PutBack(const Value: WideString);
+begin
+  PutBack(AnsiString(Value));
+end;
+{$endif}
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 08/02/2005 11:38:25 - Updated code.<br>
+}
+procedure TDBIAbstractLexer.PutChar(const Value: TDBIChar);
+begin
+  BufferIndex := BufferIndex + 1;
+  Assert(BufferIndex < SizeOf(FPutbackBuffer));
+  FPutbackBuffer[BufferIndex] := Value;
+end;
+
+
+procedure TDBIAbstractLexer.PutStr(const Value: AnsiString);
+var
+  Index: Integer;
+
+begin
+  if (Value <> '') then begin
+    for Index := Length(Value) downto 1 do begin
+      PutChar(Value[Index]);
+    end;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 07/08/2006 18:52:22 - Initial code.<br>
+}
+procedure TDBIAbstractLexer.Reset;
+begin
+  FBufferIndex := 0;
+
+  FLexerChar := #0;
+  FLexerEof := False;
+  FLexerStatus := tsNone;
+
+  FreeAndNil(FLexerToken);
+
+  FInternalColumn := 0;
+  FInternalPosition := -1;
+  FInternalRow := 1;
+
+  GetChar;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 24/04/2008 15:48:36 - Initial code. - DEBUGGING PURPOSES <br />
+}
+procedure TDBIAbstractLexer.SetBufferIndex(const Value: Integer);
+begin
+  FBufferIndex := Value;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 07/06/2007 12:52:58 - Initial code.<br>
+}
+procedure TDBIAbstractLexer.SetEof(const Value: Boolean);
+begin
+  FLexerEof := Value;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 04/03/2005 15:37:45 - Initial code.<br/>
+}
+procedure TDBIAbstractLexer.SetStatus(Value: TDBITokenStatus);
+var
+  LexerState: TDBILexerState;
+
+begin
+  // Exclude Comments when in a String Literal
+  if (tsStringLiteral in FLexerStatus) then begin
+    Value := Value - [tsComment1, tsComment2, tsComment3];
+  end
+
+  // Exclude String Literal from Comments
+  else if (tsComment1 in FLexerStatus) or (tsComment2 in FLexerStatus) or  (tsComment3 in FLexerStatus) then begin
+    Value := Value - [tsStringLiteral];
+  end;
+
+  // Mask - may need to change the order of this to first
+  if (tsMask in Value) then begin
+    FLexerStatus := FLexerStatus - Value;
+  end
+
+  // Toggle
+  else if (tsToggle in Value) then begin
+    Value := Value - [tsToggle];
+    for LexerState := Low(TDBILexerState) to High(TDBILexerState) do begin
+      if (LexerState in Value) then begin
+        if (LexerState in FLexerStatus) then begin
+          FLexerStatus := FLexerStatus - [LexerState];
+        end
+        else begin
+          FLexerStatus := FLexerStatus + [LexerState];
+        end;
+      end;
+    end;
+  end
+
+  // Include
+  else begin
+    FLexerStatus := FLexerStatus + Value;
+  end;
+end;
+
+
+procedure TDBIAbstractLexer.UpdateStatus(Value: TDBITokenStatus);
+begin
+  // Change state according to the state array
+  if (Value <> tsNoChange) then begin
+    SetStatus(Value);
+
+    // if we are clearing a state then assign state "Before"
+    if (tsMask in Value) then begin
+      Token.TokenStatus := LexerStatus;
+    end;
+  end;
+end;
 
 
 
