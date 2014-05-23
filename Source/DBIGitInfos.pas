@@ -38,7 +38,7 @@ type
   EGitStatusError = class(EGitCustomError);
 
 type
-  TDBIGitFileStatus = (gfsStaged, gfsUnstaged, gfsUntracked);
+  TDBIGitFileStatus = (gfsCommitted, gfsStaged, gfsUnstaged, gfsUntracked);
   TDBIPathType = ( ptCmd, ptCmdWOW64, ptGit, ptGrep, ptXE3, ptD2006, ptSource, pt3rdParty );
 
 const
@@ -186,6 +186,21 @@ type
     property FileName2: TFileName read FFileName2 write FFileName2;
     property Options;
     property Visible;
+
+  end;
+
+
+type
+  TDBIGitBranchInfo = class(TDBIGitCustomCommandProcessor)
+  protected
+    function GetItemIndex: Integer;
+    function GetParameters: String; override;
+
+  public
+    property ItemIndex: Integer read GetItemIndex;
+    property Output;
+    property SourceName;
+    property Stream;
 
   end;
 
@@ -639,6 +654,28 @@ begin
     inherited ProcessOutputLine(Line);
   end;
 end;
+
+
+
+
+
+{ TDBIGitBranchInfo }
+
+function TDBIGitBranchInfo.GetItemIndex: Integer;
+begin
+  for Result := Output.Count-1 downto 0 do begin
+    if Pos('*', Output.Strings[Result]) > 0 then begin
+      Break;
+    end;
+  end;
+end;
+
+
+function TDBIGitBranchInfo.GetParameters: String;
+begin
+  Result := 'branch';
+end;
+
 
 
 

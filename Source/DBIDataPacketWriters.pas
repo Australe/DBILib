@@ -180,7 +180,7 @@ begin
   while not Dataset.Eof do begin
     for Index := 0 to Dataset.Fields.Count-1 do begin
       // if the field is unnamed then I can't save it, so skip it
-      // Yay, now it's a feaure - prevent specific fields from saving
+      // Yay, now it's a feature - prevent specific fields from saving
       if (db.faUnNamed in Dataset.FieldDefs[Index].Attributes) then begin
         Continue;
       end;

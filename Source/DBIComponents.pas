@@ -167,7 +167,10 @@ type
 implementation
 
 uses
-  Consts, RtlConsts, IniFiles, Types, TypInfo, DBITypInfo, DBIUtils;
+{$ifdef Delphi2009}
+  RtlConsts, Types,
+{$endif}
+  Consts, IniFiles, TypInfo, DBITypInfo, DBIUtils;
 
 
 { TDBIIniFile }
