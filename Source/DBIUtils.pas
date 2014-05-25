@@ -174,7 +174,6 @@ function Local(Instance: TObject): TInstanceRecord;
 // General Helper routines
 procedure Check(Status: DBIResult);
 
-function DBIDebugOutput(Sender: TObject; Msg: String; Args: array of const): String;
 procedure DBIDebug(
   Self: TObject;
   const Caller: String;
@@ -183,7 +182,6 @@ procedure DBIDebug(
   );
 
 function DBIForceDirectories(Dir: string): Boolean;
-function DBIGetComputerName: String;
 function DBIGetUserName: WideString;
 function DBILocalHostName: String;
 function DBIModuleName: String;
@@ -751,19 +749,6 @@ begin
 end;  { Check }
 
 
-function DBIDebugOutput(Sender: TObject; Msg: String; Args: array of const): String;
-begin
-  Result := SysUtils.Format(' [ %d ]-   ', [Windows.GetCurrentThreadId]);
-
-  if Assigned(Sender) then begin
-    Result := Result + SysUtils.Format(' ( Sender = %s ) ', [Sender.ClassName]);
-  end;
-
-  Result := Result + SysUtils.Format(Msg, Args);
-  Windows.OutputDebugString(PChar(Result));
-end;
-
-
 // _____________________________________________________________________________
 {**
   Jvr - 21/02/2013 14:11:09 - Moved from DBIConst<P>
@@ -786,6 +771,7 @@ begin
 begin
 {$endif}
 end;
+
 
 
 // _____________________________________________________________________________
@@ -824,24 +810,6 @@ begin
   Result := DBIForceDirectories(ExtractFilePath(Dir)) and CreateDir(Dir);
 end;
 {$endif}
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 26/07/2005 17:20:20 - Initial code.<br>
-}
-function DBIGetComputerName: String;
-var
-  Buffer: array[0..255] of Char;
-  Size: LongWord;
-
-begin
-  Size := SizeOf(Buffer);
-{$Warnings Off}
-  Win32Check(Windows.GetComputerName(@Buffer[0], Size));
-{$Warnings On}
-  Result := string(Buffer);
-end;  { GetMachineName }
 
 
 // _____________________________________________________________________________

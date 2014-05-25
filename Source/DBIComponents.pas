@@ -167,10 +167,7 @@ type
 implementation
 
 uses
-{$ifdef Delphi2009}
-  RtlConsts, Types,
-{$endif}
-  Consts, IniFiles, TypInfo, DBITypInfo, DBIUtils;
+  Consts, RtlConsts, IniFiles, Types, TypInfo, DBITypInfo, DBIUtils;
 
 
 { TDBIIniFile }
