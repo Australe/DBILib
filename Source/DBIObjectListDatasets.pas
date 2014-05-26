@@ -22,6 +22,8 @@
   ______________________________________________________________________________
 }
 
+{#omcodecop off : jvr : dbilib code}
+
 unit DBIObjectListDatasets;
 
 {$I DBICompilers.inc}
