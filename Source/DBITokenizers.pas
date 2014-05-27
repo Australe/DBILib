@@ -396,7 +396,7 @@ end;
 
 function TDBICustomMacroProcessor.MacroExpand: Boolean;
 const
-  ErrMsg = 'Unable to subsitute macro value, SQL Parameter "%s" not found!';
+  ErrMsg = 'Unable to subsitute macro value for parameter "%s", '#13#13'%s';
 
 var
   ParamValue: Variant;
@@ -406,14 +406,20 @@ begin
   // Deal with the $Macros, and ${Macros}
   Result := Input.Token.TokenType = Tok_Macro;
   if Result then begin
-    ParamValue := varNull;
-    if GetParam(Self, Input.Token.TokenString, ParamValue) then begin
-      ParamString := ParamValue;
+    try
+      ParamValue := varNull;
+      if GetParam(Self, Input.Token.TokenString, ParamValue) then begin
+        ParamString := ParamValue;
 
-      Input.PutBack(ParamString);
-    end
-    else begin
-      Output.WriteStr('$' + Input.Token.AsString);
+        Input.PutBack(ParamString);
+      end
+      else begin
+        Output.WriteStr('$' + Input.Token.AsString);
+      end;
+
+    except
+      on E: Exception do
+        raise Exception.CreateFmt(ErrMsg, [Input.Token.TokenString, E.Message]);
     end;
 
     // Get the first token from the expanded input
