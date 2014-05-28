@@ -75,7 +75,6 @@ type
     function AppendObject(DataObject: TObject): Integer;
     function RemoveObject(DataObject: TObject): Integer;
     function UpdateObject(DataObject: TObject): Integer;
-//##JVR    procedure CreateDataset; override;
 
     procedure NotifyDataEvent(
       DataObject: TObject;
@@ -121,12 +120,9 @@ type
     property ReadOnly;
     property StringFieldSize;
 
-
-    // Wip
     property MasterFields;
     property MasterSource;
 
-//##JVR    property Filter;
     property Filtered;
     property FilterOptions;
     property Options;
@@ -191,9 +187,6 @@ type
     property ReadOnly;
     property StringFieldSize;
 
-
-    // Wip
-//##JVR    property Filter;
     property Filtered;
     property FilterOptions;
     property Options;
@@ -230,6 +223,125 @@ type
 
 
 
+  TDBICustomCollectionDataset = class(TDBICustomListDataset)
+  protected
+    function GetCollection: TCollection;
+    function GetData: TObject;
+    procedure SetCollection(Value: TCollection);
+
+  public
+    constructor Create(AOwner: TComponent); override;
+
+    property Collection: TCollection read GetCollection write SetCollection;
+    property Data: TObject read GetData;
+
+  end;  { TDBICustomCollectionDataset }
+
+
+  TCollectionDataset = class(TDBICustomCollectionDataset)
+  published
+    property Active;
+    property Mode;
+    property ObjectValidationProc;
+    property ObjectView default True;
+    property ReadOnly;
+    property StringFieldSize;
+
+    property Filtered;
+    property FilterOptions;
+    property Options;
+
+    // Events
+    property BeforeOpen;
+    property AfterOpen;
+    property BeforeClose;
+    property AfterClose;
+    property BeforeInsert;
+    property AfterInsert;
+    property BeforeEdit;
+    property AfterEdit;
+    property BeforePost;
+    property AfterPost;
+    property BeforeCancel;
+    property AfterCancel;
+    property BeforeDelete;
+    property AfterDelete;
+    property BeforeScroll;
+    property AfterScroll;
+    property BeforeRefresh;
+    property AfterRefresh;
+    property OnCalcFields;
+    property OnDeleteError;
+    property OnEditError;
+    property OnFilterRecord;
+    property OnNewRecord;
+    property OnPostError;
+
+    // Added to CustomListDataset
+    property OnCreateObject;
+  end;  { TCollectionDataset }
+
+
+  TDBICustomComponentDataset = class(TDBICustomListDataset)
+  protected
+    function GetComponent: TComponent;
+    function GetData: TObject;
+    procedure SetComponent(Value: TComponent);
+
+  public
+    constructor Create(AOwner: TComponent); override;
+
+    property Component: TComponent read GetComponent write SetComponent;
+    property Data: TObject read GetData;
+
+  end;  { TDBICustomComponentDataset }
+
+
+  TComponentDataset = class(TDBICustomComponentDataset)
+  published
+    property Active;
+    property ClassTypeName;
+    property Mode;
+    property ObjectValidationProc;
+    property ObjectView default True;
+    property ReadOnly;
+    property StringFieldSize;
+
+    property Filtered;
+    property FilterOptions;
+    property Options;
+
+    // Events
+    property BeforeOpen;
+    property AfterOpen;
+    property BeforeClose;
+    property AfterClose;
+    property BeforeInsert;
+    property AfterInsert;
+    property BeforeEdit;
+    property AfterEdit;
+    property BeforePost;
+    property AfterPost;
+    property BeforeCancel;
+    property AfterCancel;
+    property BeforeDelete;
+    property AfterDelete;
+    property BeforeScroll;
+    property AfterScroll;
+    property BeforeRefresh;
+    property AfterRefresh;
+    property OnCalcFields;
+    property OnDeleteError;
+    property OnEditError;
+    property OnFilterRecord;
+    property OnNewRecord;
+    property OnPostError;
+
+    // Added to CustomListDataset
+    property OnCreateObject;
+  end;  { TComponentDataset }
+
+
 implementation
 
 uses
@@ -242,6 +354,8 @@ uses
   SysUtils,
   TypInfo,
   DBIUtils,
+  DBIComponentDataConnections,
+  DBICollectionDataConnections,
   DBIObjectListDataConnections,
   DBIStringsDataConnections;
 
@@ -587,7 +701,7 @@ begin
 //##JVR
   try
     if (State = dsBrowse) then begin
-ClearBuffers;
+      ClearBuffers;
       UpdateCursorPos;
       Resync([]);
     end;
@@ -681,6 +795,116 @@ begin
 
   CloneCursor(Dataset, False, False);
 end;
+
+
+
+
+
+{ TDBICustomCollectionDataset }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 27/10/2000 17:35:34<P>
+}
+constructor TDBICustomCollectionDataset.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+
+  SetDataConnection(TDBICollectionDataConnection.Create(Self));
+end;  { Create }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 07/01/2002 15:35:02.<P>
+}
+function TDBICustomCollectionDataset.GetCollection: TCollection;
+begin
+  Result := (DataConnection as TDBICollectionDataConnection).Collection;
+end;  { GetCollection }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 14/10/2009 09:57:52 - Initial code.<br />
+}
+function TDBICustomCollectionDataset.GetData: TObject;
+var
+  RecInfo: PRecInfo;
+
+begin
+  Result := nil;
+  if GetActiveRecInfo(RecInfo) then begin
+    Result := RecInfo^.Data;
+  end;
+end;  { GetData }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 07/01/2002 15:36:00.<P>
+}
+procedure TDBICustomCollectionDataset.SetCollection(Value: TCollection);
+begin
+  (DataConnection as TDBICollectionDataConnection).Collection := Value;
+
+  NotifyCallback;
+end;  { SetCollection }
+
+
+
+
+
+{ TDBICustomComponentDataset }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 21/07/2010 09:06:37 - Initial code.<br />
+}
+constructor TDBICustomComponentDataset.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+
+  SetDataConnection(TDBIComponentDataConnection.Create(Self));
+end;  { Create }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 21/07/2010 09:07:02 - Initial code.<br />
+}
+function TDBICustomComponentDataset.GetComponent: TComponent;
+begin
+  Result := (DataConnection as TDBIComponentDataConnection).Component;
+end;  { GetComponent }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 21/07/2010 09:08:16 - Initial code.<br />
+}
+function TDBICustomComponentDataset.GetData: TObject;
+var
+  RecInfo: PRecInfo;
+
+begin
+  Result := nil;
+  if GetActiveRecInfo(RecInfo) then begin
+    Result := RecInfo^.Data;
+  end;
+end;  { GetData }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 21/07/2010 09:09:29 - Initial code.<br />
+}
+procedure TDBICustomComponentDataset.SetComponent(Value: TComponent);
+begin
+  (DataConnection as TDBIComponentDataConnection).Component := Value;
+
+  NotifyCallback;
+end;  { SetComponent }
 
 
 

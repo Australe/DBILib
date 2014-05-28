@@ -182,6 +182,7 @@ procedure DBIDebug(
   );
 
 function DBIForceDirectories(Dir: string): Boolean;
+function DBIGetComputerName: String;
 function DBIGetUserName: WideString;
 function DBILocalHostName: String;
 function DBIModuleName: String;
@@ -810,6 +811,24 @@ begin
   Result := DBIForceDirectories(ExtractFilePath(Dir)) and CreateDir(Dir);
 end;
 {$endif}
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 26/07/2005 17:20:20 - Initial code.<br>
+}
+function DBIGetComputerName: String;
+var
+  Buffer: array[0..255] of Char;
+  Size: LongWord;
+
+begin
+  Size := SizeOf(Buffer);
+{$Warnings Off}
+  Win32Check(Windows.GetComputerName(@Buffer[0], Size));
+{$Warnings On}
+  Result := string(Buffer);
+end;  { GetMachineName }
 
 
 // _____________________________________________________________________________
