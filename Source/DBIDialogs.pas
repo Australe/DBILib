@@ -733,15 +733,17 @@ begin
   end;
 
   // Find the final offset using "InValidChars" as separators
-  EndPos := InitPos+1;
+  Inc(InitPos);
+  EndPos := InitPos;
   while (EndPos <= Length(Line)) and not (AnsiChar(Line[EndPos]) in InValidChars) do begin
     Inc(EndPos);
   end;
 
   // Assign the text
-  FHighLightedText := Trim(Copy(Line, InitPos, EndPos - InitPos));
+  FHighLightedText := Copy(Line, InitPos, EndPos - InitPos);
 
   // Highlight the text in the Memo
+  Dec(InitPos);
   if ValidateSelection(FHighLightedText) then begin
     FStartIndex := Perform(EM_LINEINDEX, Row, 0) + InitPos;
     FEndIndex := FStartIndex + Length(FHighLightedText);

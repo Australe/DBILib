@@ -136,7 +136,7 @@ const
 
 type
   TDBITokenKind = (
-    tkUnAssigned,
+    tkUnassigned,
     tkWhitespace,
     tkSymbol,
     tkNumber,
@@ -285,11 +285,10 @@ type
     Tok_SmallerEqual,                  // '<='
     Tok_Smaller_Slash,                 // '</'
 
-{##JVR
     Tok_EscapeAtSign,                  // '\@'
     Tok_EscapeDollar,                  // '\$'
     Tok_EscapeTab,                     // '\~'
-//}
+
     { Special Tokens }
     Tok_None,                          // Nothing / Unassigned
     Tok_NoChange,                      // Used as parameter, indicates no change
@@ -308,9 +307,27 @@ type
     );
 
   TDBITokenTypes = set of TDBITokenType;
-//##JVR  TDBITokenSet = set of TDBITokenType;
 
 
+const
+  // Aliases
+  Tok_Asterisk = Tok_Multiply;
+  Tok_SingleQuote = Tok_Apostrophe;
+  Tok_DoubleQuote = Tok_Quotes;
+  Tok_Slash = Tok_Divide;
+
+  // Special sets
+  Tok_Comparision = [
+    Tok_Smaller,
+    Tok_Greater,
+    Tok_GreaterEqual,
+    Tok_Equality,
+    Tok_InEquality,
+    Tok_NotEqual,
+    Tok_SmallerEqual
+    ];
+
+    
 const
   // Map characters to tokens
   TokenCharacterMap: array[#0..#127] of TDBITokenType = (

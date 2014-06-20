@@ -101,6 +101,7 @@ type
 	
   public
     constructor Create(AStream: TStream = nil); override;
+    destructor Destroy; override;
 
     procedure WriteStr(const Str: AnsiString); overload;
 {$ifdef Delphi2009}
@@ -154,6 +155,14 @@ begin
   inherited Create(AStream);
 
   FEnabled := True;
+end;
+
+
+destructor TDBICustomStreamFormatter.Destroy;
+begin
+  FEnabledCallback := nil;
+
+  inherited Destroy;
 end;
 
 

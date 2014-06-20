@@ -62,7 +62,7 @@ type
     procedure AddChar(const Value: TDBIChar);
     procedure Clear;
     procedure ClearString;
-    
+
     property AsChar: TDBIChar read GetTokenChar write SetTokenChar;
     property AsInteger: Integer read GetTokenInteger;
     property AsString: TDBIString read FTokenString write FTokenString;
@@ -78,6 +78,52 @@ type
     property TokenString: String read GetTokenString;
     property TokenType: TDBITokenType read FTokenType write FTokenType;
 
+  end;
+
+
+type
+  TDBICustomScope = class;
+  TDBICustomScopeClass = class of TDBICustomScope;
+  TDBICustomScopeCallback = procedure(AScope: TDBICustomScope) of object;
+
+  TDBICustomScope = class(TDBILexerToken)
+  private
+    FCallBack: TDBICustomScopeCallback;
+    FData: TObject;
+    FParent: TDBICustomScope;
+
+  protected
+    function GetEnabled: Boolean; virtual;
+
+  public
+    function CheckType(AClassType: TDBICustomScopeClass): Boolean;
+
+    property CallBack: TDBICustomScopeCallback read FCallback write FCallback;
+    property Data: TObject read FData write FData;
+    property Enabled: Boolean read GetEnabled;
+    property Parent: TDBICustomScope read FParent write FParent;
+
+  end;
+
+
+type
+  TDBIScopeStack = class(TPersistent)
+  private
+    FItems: TList;
+
+  protected
+    function GetItems: TList;
+    function GetTop: TDBICustomScope;
+
+    property Items: TList read GetItems;
+
+  public
+    destructor Destroy; override;
+
+    function Push(Item: TDBICustomScope): TDBICustomScope;
+    function Pop: TDBICustomScope;
+
+    property Top: TDBICustomScope read GetTop;
   end;
 
 
@@ -149,6 +195,7 @@ type
 {$endif}
 
     procedure Reset; override;
+    procedure Restore(AToken: TDBILexerToken);
 
   end;
 
@@ -231,17 +278,23 @@ type
   private
     FInput: TDBIAbstractLexer;
     FOutput: TDBIStreamFormatter;
+    FScope: TDBIScopeStack;
 
   protected
+    procedure EnabledHandler(Sender: TObject; var Enabled: Boolean);
+
     function GetInput: TDBICustomAsciiLexer;
     function GetLexerClassType: TDBICustomAsciiLexerClass; virtual; abstract;
     function GetOutput: TDBIStreamFormatter;
+    function GetScope: TDBIScopeStack; virtual;
 
     procedure SyntaxError(
       const Caller: String;
       const ErrMsg: String;
       Args: array of const
       ); virtual;
+
+    property Scope: TDBIScopeStack read GetScope;
 
   public
     constructor Create; virtual;
@@ -303,7 +356,7 @@ function Macro(const Format: String; const Args: array of const): String;
 implementation
 
 uses
-  TypInfo, DBIUtils;
+  Types, TypInfo, DBIUtils;
 
 
 type
@@ -461,10 +514,23 @@ end;
 }
 destructor TDBICustomParser.Destroy;
 begin
+  FreeAndNil(FScope);
   FreeAndNil(FOutput);
   FreeAndNil(FInput);
 
   inherited Destroy;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 07/01/2011 12:28:05 - Initial code.<br />
+}
+procedure TDBICustomParser.EnabledHandler(Sender: TObject; var Enabled: Boolean);
+begin
+  if Enabled and Assigned(Scope.Top) then begin
+    Enabled := Scope.Top.Enabled;
+  end;
 end;
 
 
@@ -491,6 +557,26 @@ begin
     FOutput := TDBIStreamFormatter.Create;
   end;
   Result := FOutput;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 04/04/2011 09:14:12 - Initial code.<br />
+}
+type
+  TDBIProtectedStreamFormatter = class(TDBICustomStreamFormatter);
+
+function TDBICustomParser.GetScope: TDBIScopeStack;
+begin
+  if not Assigned(FScope) then begin
+    FScope := TDBIScopeStack.Create;
+
+    // Register Callback to ensure that the output.enabled property
+    // correctly reflects the scope.enabled;
+    TDBIProtectedStreamFormatter(Output).EnabledCallback := EnabledHandler;
+  end;
+  Result := FScope;
 end;
 
 
@@ -562,6 +648,11 @@ begin
 end;
 
 
+// _____________________________________________________________________________
+{**
+  Jvr - 28/02/2005 14:31:17 - Initial code.<br>
+  Jvr - 07/06/2007 14:56:14 - Added allowance for dot notation (objects).<br>
+}
 procedure TDBICustomMacroLexer.LexMacro;
 var
   Leadin: TDBIChar;
@@ -935,7 +1026,7 @@ begin
 
   // Call the mapped lexer function if it is assigned and not Eof
   if Assigned(PSymbolData^.LexerProc) and not Eof then begin
-    PSymbolData.LexerProc;
+    PSymbolData^.LexerProc;
   end;
 end;
 
@@ -1074,16 +1165,18 @@ procedure TDBICustomAsciiLexer.MapDualSymbol(
   );
 var
   LexerProc: TDBILexerProcedure;
+  PSymbolData: PLexerSymbolData;
 
 begin
   // This Dual symbol data is for Single Char Symbols
-  // It only needs to be initialised once!
-  if not Assigned (FLexerSymbolMap[TokenCharacterMap[Symbols[0]], Tok_Unassigned].LexerProc) then begin
+  // Check carefully - It should only be initialised once!
+  PSymbolData := @(FLexerSymbolMap[TokenCharacterMap[Symbols[0]], Tok_Unassigned]);
+  if (PSymbolData^.TokenType = Tok_Unassigned) and (PSymbolData^.TokenKind = tkUnassigned) then begin
     // Assign FLexerCharMap[Char].LexerProc to [Token1, Tok_UnAssigned]
     // If the LexecProc is LexSymbol, then assign nil,
     // because the LexDualSymbol has allready performed the LexSymbol task
     //
-    // The LexecProc in this case is the Lexer procedure to be called from LexDualSymbol,
+    // The LexerProc in this case is the Lexer procedure to be called from LexDualSymbol,
     // to post process the datastream after the detected Lead-in symbol(s)
     LexerProc := LexSymbol;
     if TMethod(LexerProc).Code <> TMethod(FLexerCharMap[Symbols[0]].LexerProc).Code then begin
@@ -1135,10 +1228,10 @@ var
 
 begin
   PSymbolData := @(FLexerSymbolMap[Symbol1, Symbol2]);
-  PSymbolData.TokenType := ATokenType;
-  PSymbolData.TokenKind := ATokenKind;
-  PSymbolData.TokenStatus := ATokenStatus;
-  PSymbolData.LexerProc := ALexerProc;
+  PSymbolData^.TokenType := ATokenType;
+  PSymbolData^.TokenKind := ATokenKind;
+  PSymbolData^.TokenStatus := ATokenStatus;
+  PSymbolData^.LexerProc := ALexerProc;
 end;
 
 
@@ -1276,9 +1369,9 @@ begin
   Token.Row := FInternalRow;
 
   PSymbolData := @(FLexerCharMap[LexerChar]);
-  Token.TokenKind := PSymbolData.TokenKind;
+  Token.TokenKind := PSymbolData^.TokenKind;
   Token.TokenStatus := LexerStatus;
-  Token.TokenType := PSymbolData.TokenType;
+  Token.TokenType := PSymbolData^.TokenType;
 
   if Eof then begin
     LexEof;
@@ -1498,6 +1591,30 @@ end;
 
 // _____________________________________________________________________________
 {**
+  Jvr - 13/10/2009 09:04:29 - Initial code.<br />
+}
+procedure TDBIAbstractLexer.Restore(AToken: TDBILexerToken);
+begin
+  // Restore Lexer Position
+  Stream.Position := AToken.Position;
+
+  // Restore Lexer State
+  Token.Assign(AToken);
+
+  FLexerEof := False;
+  FLexerStatus := AToken.TokenStatus;
+
+  FInternalColumn := AToken.Column;
+  FInternalPosition := AToken.Position;
+  FInternalRow := AToken.Row;
+
+  GetChar;
+end;
+
+
+
+// _____________________________________________________________________________
+{**
   Jvr - 24/04/2008 15:48:36 - Initial code. - DEBUGGING PURPOSES <br />
 }
 procedure TDBIAbstractLexer.SetBufferIndex(const Value: Integer);
@@ -1574,6 +1691,124 @@ begin
     end;
   end;
 end;
+
+
+
+
+
+{ TDBIScopeStack }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 04/04/2011 09:21:51 - Initial code.<br />
+}
+destructor TDBIScopeStack.Destroy;
+begin
+  { TODO -ovip -cTDBIScopeStack.Destroy() : ##TPL - Check Stack is empty }
+  if Assigned(FItems) then begin
+    Assert(FItems.Count = 0);
+    FItems.Free;
+    FItems := nil;
+  end;
+
+  inherited Destroy;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 04/04/2011 09:22:04 - Initial code.<br />
+}
+function TDBIScopeStack.GetItems: TList;
+begin
+  if not Assigned(FItems) then begin
+    FItems := TList.Create;
+  end;
+  Result := FItems;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 04/04/2011 09:23:41 - Initial code.<br />
+}
+function TDBIScopeStack.GetTop: TDBICustomScope;
+begin
+  Result := nil;
+  if Items.Count > 0 then begin
+    Result := Items[Items.Count-1];
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 04/04/2011 09:24:32 - Initial code.<br />
+}
+function TDBIScopeStack.Pop: TDBICustomScope;
+begin
+  { TODO -ovip -cTDBIScopeStack.Pop() : ##TPL - Pop Scope from the stack }
+  Result := Items[Items.Count-1];
+  Items.Remove(Result);
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 04/04/2011 09:25:57 - Initial code.<br />
+}
+function TDBIScopeStack.Push(Item: TDBICustomScope): TDBICustomScope;
+begin
+  { TODO -ovip -cTDBIScopeStack.Push() : ##TPL - Push Scope on to the stack }
+  Result := Item;
+  if Assigned(Result) then begin
+    Result.Parent := Top;
+    Items.Add(Result);
+  end;
+end;
+
+
+
+
+
+{ TDBICustomScope }
+
+function TDBICustomScope.CheckType(AClassType: TDBICustomScopeClass): Boolean;
+const
+  Caller = 'CheckType';
+
+var
+  ScopeName: String;
+
+begin
+  Result := Self is AClassType;
+
+  if not Result then begin
+    if Assigned(Self) then begin
+      ScopeName := Self.ClassName;
+    end
+    else begin
+      ScopeName := '<nil>, probably a syntax error!';
+    end;
+
+//##JVR    TDBICustomScope.Error(nil, Caller, '1995',
+    raise Exception.CreateFmt(
+      'Expected Scope of type "%s", actual scope is %s',
+      [AClassType.ClassName, ScopeName]
+      );
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 31/03/2011 12:44:04 - Initial code.<br />
+}
+function TDBICustomScope.GetEnabled: Boolean;
+begin
+  Result := Assigned(FData) and Assigned(FCallBack);
+end;
+
 
 
 

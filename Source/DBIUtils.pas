@@ -190,6 +190,7 @@ function DBIModuleDateTime(AModuleName: String = ''): TDateTime;
 function DBIStrDateStampToDateTime(PDateStamp: PAnsiChar): TDateTime;
 function DBIStrTimeStampToDateTime(PTimeStamp: PAnsiChar; const MilliSeconds: Boolean = True): TDateTime;
 function DBITempFolder: String;
+function DBIVerifyExtensionRegistered(const Extension: String): Boolean;
 
 
 {$ifndef DELPHI6}
@@ -218,7 +219,7 @@ var                           { Taken from Delphi System.pas }
 implementation
 
 uses
-  WinSock, Controls, Dialogs, Contnrs, DBIFileStreams, DBIXbaseConsts;
+  WinSock, Controls, Dialogs, Contnrs, Registry, DBIFileStreams, DBIXbaseConsts;
 
 
 { ILocalInstance }
@@ -398,6 +399,50 @@ begin
   end;
 end;
 
+(*
+In several Delphi PC Magazine utilities, Neil Rubenking uses a different approach.  Here's how Neil
+prevented two instances of his recent KeyClick utility from running:
+
+type
+  THandles = Record
+    AppHandle: HWnd;
+    WinHandle: HWnd;
+  end;
+
+var
+  hMap: THandle;
+  PH: ^THandles;
+
+begin
+  hMap := OpenFileMapping(FILE_MAP_ALL_ACCESS, False, MainMapName);
+
+  // first instance
+  if hMap = 0 then begin
+    hMap := CreateFileMapping($FFFFFFFF, NIL, PAGE_READWRITE, 0, SizeOf(THandles), MainMapName);
+    PH := MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, 0, 0, 0);
+
+    Application.Initialize;
+    Application.Title := 'KeyTick';
+    Application.CreateForm(TMainForm, MainForm);
+    Application.MainForm.HandleNeeded;
+
+    PH^.AppHandle := Application.Handle;
+    PH^.WinHandle := Application.Mainform.Handle;
+
+    Application.Run;
+  end
+
+  // Any instance after the first
+  else begin
+    PH := MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, 0, 0, 0);
+    SendMessage(PH^.WinHandle, regMsg, -1, -1);
+  end;
+
+  UnMapViewOfFile(PH);
+  CloseHandle(hMap);
+end.
+
+//*)
 
 class function TDBIApplication.CallCommand: Boolean;
 var
@@ -916,6 +961,24 @@ begin
     FileClose(FHandle);
   end;
 end;  { DBIModuleDateTime }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 18/06/2014 14:15:01.<P>
+}
+function DBIVerifyExtensionRegistered(const Extension: String): Boolean;
+var
+  Key: HKey;
+
+begin
+  Result := (Extension <> '') and
+    (ERROR_SUCCESS = RegOpenKeyEx(HKEY_CLASSES_ROOT, PChar(Extension), 0, KEY_QUERY_VALUE, Key));
+
+  if Result then begin
+    RegCloseKey(Key);
+  end;
+end;
 
 
 type
