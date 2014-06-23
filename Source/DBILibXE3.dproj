@@ -61,6 +61,8 @@
         <DCCReference Include="DBITypInfo.pas"/>
         <DCCReference Include="DBICustomListDataConnections.pas"/>
         <DCCReference Include="DBICustomStreamDataConnections.pas"/>
+        <DCCReference Include="DBIComponentDataConnections.pas"/>
+        <DCCReference Include="DBICollectionDataConnections.pas"/>
         <DCCReference Include="DBIDataSet.pas"/>
         <DCCReference Include="DBIFileStreams.pas"/>
         <DCCReference Include="DBIFilters.pas"/>

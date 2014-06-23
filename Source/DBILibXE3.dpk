@@ -39,6 +39,8 @@ contains
   DBItypInfo in 'DBITypInfo.pas',
   DBICustomListDataConnections in 'DBICustomListDataConnections.pas',
   DBICustomStreamDataConnections in 'DBICustomStreamDataConnections.pas',
+  DBIComponentDataConnections in 'DBIComponentDataConnections.pas',
+  DBICollectionDataConnections in 'DBICollectionDataConnections.pas',
   DBIDataSet in 'DBIDataSet.pas',
   DBIFileStreams in 'DBIFileStreams.pas',
   DBIFilters in 'DBIFilters.pas',
