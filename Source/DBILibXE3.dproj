@@ -84,6 +84,8 @@
         <DCCReference Include="DBITokenizers.pas"/>
         <DCCReference Include="DBIStreamAdapters.pas"/>
         <DCCReference Include="DBIXmlUtils.pas"/>
+        <DCCReference Include="DBIComponentDataConnections.pas"/>
+        <DCCReference Include="DBICollectionDataConnections.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

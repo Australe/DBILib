@@ -36,7 +36,7 @@ requires
 
 contains
   DBIConst in 'DBIConst.pas',
-  DBItypInfo in 'DBITypInfo.pas',
+  DBITypInfo in 'DBITypInfo.pas',
   DBICustomListDataConnections in 'DBICustomListDataConnections.pas',
   DBICustomStreamDataConnections in 'DBICustomStreamDataConnections.pas',
   DBIComponentDataConnections in 'DBIComponentDataConnections.pas',
@@ -61,7 +61,10 @@ contains
   DBITokenizerConsts in 'DBITokenizerConsts.pas',
   DBITokenizers in 'DBITokenizers.pas',
   DBIStreamAdapters in 'DBIStreamAdapters.pas',
-  DBIXmlUtils in 'DBIXmlUtils.pas';
+  DBIXmlUtils in 'DBIXmlUtils.pas',
+  DBIComponentDataConnections in 'DBIComponentDataConnections.pas',
+  DBICollectionDataConnections in 'DBICollectionDataConnections.pas';
 
 end.
+
 
