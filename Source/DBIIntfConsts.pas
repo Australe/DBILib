@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -23,19 +23,18 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : native api code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIIntfConsts;
 
 {$I DBICompilers.inc}
 
 {$MINENUMSIZE 4}
-{$T-,H+,X+}
 
 interface
 
 uses
-  {$ifndef fpc} DBCommon, {$endif} {$ifdef DELPHI6} FmtBcd, {$endif} DB;
+  Classes, {$ifndef fpc} DBCommon, {$endif} {$ifdef DELPHI6} FmtBcd, {$endif} DB;
 
 const
 
@@ -155,7 +154,7 @@ type
 
 { Native Types }
 
-  TDBIDataPacket = PVarArray;
+  TDBIDataPacket = TStream;
 
   pDSAttr = ^DSAttr;
   DSAttr = type Byte;
@@ -694,8 +693,8 @@ const
     fldUNKNOWN, fldZSTRING, fldINT16, fldINT32, fldUINT16, fldBOOL, // 0..5
     fldFLOAT, fldFLOAT, fldBCD, fldDATE, fldTIME, fldTIMESTAMP, fldBYTES, // 6..12
     fldVARBYTES, fldINT32, fldBLOB, fldBLOB, fldBLOB, fldBLOB, fldBLOB, // 13..19
-    fldBLOB, fldBLOB, fldCURSOR, fldZSTRING,  //34..35
-    fldWIDESTRING, fldINT64, fldADT, // 20..26
+    fldBLOB, fldBLOB, fldCURSOR, fldZSTRING,  // 20..23
+    fldWIDESTRING, fldINT64, fldADT, // 24..26
     fldArray, fldREF, fldTABLE, fldBLOB, fldBLOB, fldUNKNOWN, fldUNKNOWN, // 27..33
     fldUNKNOWN, fldZSTRING {$ifdef DELPHI6} , fldDATETIME, fldFMTBCD {$endif} //36..37
     {$ifdef DELPHI2006} , fldWIDESTRING, fldBLOB {$ifndef fpc}, fldDATETIME, fldZSTRING {$endif} {$endif} // 38..41
@@ -710,10 +709,10 @@ const
     fldUNKNOWN, fldZSTRING, fldINT16, fldINT32, fldUINT16, fldBOOL, // 0..5
     fldFLOAT, fldFLOAT, fldBCD, fldDATE, fldTIME, fldTIMESTAMP, fldBYTES, // 6..12
     fldVARBYTES, fldINT32, fldBLOB, fldBLOB, fldBLOB, fldBLOB, fldBLOB, // 13..19
-    fldBLOB, fldBLOB, fldCURSOR, fldZSTRING  //34..35
-   {$ifdef DELPHI2006} , fldWIDESTRING {$else} , fldZSTRING {$endif} , fldINT64, fldADT, // 20..26
+    fldBLOB, fldBLOB, fldCURSOR, fldZSTRING  // 20..23
+   {$ifdef DELPHI2006} , fldWIDESTRING {$else} , fldZSTRING {$endif} , fldINT64, fldADT, // 24..26
     fldArray, fldREF, fldTABLE, fldBLOB, fldBLOB, fldUNKNOWN, fldUNKNOWN, // 27..33
-    fldUNKNOWN, fldZSTRING {$ifdef DELPHI6} , fldDATETIME, fldFMTBCD {$endif} //36..37
+    fldUNKNOWN, fldZSTRING {$ifdef DELPHI6} , fldDATETIME, fldFMTBCD {$endif} // 36..37
     {$ifdef DELPHI2006} , fldWIDESTRING, fldBLOB {$ifndef fpc}, fldDATETIME, fldZSTRING {$endif} {$endif} // 38..41
     {$ifdef DELPHIXE2} ,
     fldUINT32, fldINT8, fldUINT8, fldFLOATIEEE, fldUnknown, fldUnknown, fldUnknown, //42..48
@@ -734,21 +733,12 @@ const
   DataTypeMap: array[0..MAXLOGFLDTYPES - 1] of TFieldType = (
     ftUnknown, ftString, ftDate, ftBlob, ftBoolean, ftSmallint,
     ftInteger, ftFloat, ftBCD, ftBytes, ftTime, ftDateTime,
-    ftWord, ftInteger, ftFloatIEEE, ftVarBytes, ftUnknown, ftUnknown,
+    ftWord, ftUnsigned32, ftFloatIEEE, ftVarBytes, ftUnknown, ftUnknown,
     ftLargeInt, ftLargeInt, ftADT, ftArray, ftReference, ftDataSet,
     {$ifdef DELPHI6} ftTimeStamp, ftFMTBcd, {$else} ftDateTime, ftUnknown, {$endif}
     ftWideString
     );
-(*
-  DataTypeMap: array[0..MAXLOGFLDTYPES - 1] of TFieldType = (
-    ftUnknown, ftString, ftDate, ftBlob, ftBoolean, ftSmallint,
-    ftInteger, ftFloat, ftBCD, ftBytes, ftTime, ftDateTime,
-    ftWord, ftInteger, ftUnknown, ftVarBytes, ftUnknown, ftUnknown,
-    ftLargeInt, ftLargeInt, ftADT, ftArray, ftReference, ftDataSet
-    {$ifdef DELPHI6} , ftTimeStamp, ftFMTBcd {$endif}
-    {$ifdef DELPHI2006} , ftWideString {$endif}
-    );
-//*)
+
   BlobTypeMap: array[fldstMEMO..fldstBFILE] of TFieldType = (
     ftMemo, ftBlob, ftFmtMemo, ftParadoxOle, ftGraphic, ftDBaseOle,
     ftTypedBinary, ftBlob, ftBlob, ftBlob, ftBlob, ftOraClob,
@@ -889,13 +879,13 @@ type
   
 const
   // auxillary constants to access data in the DSProps.iUnused Array of DSBase
-  auxProp0 = 0;                     { DSProps.iUnused[0] }
+  auxStreamMode = 0;                { DSProps.iUnused[0] }
   auxDataStream = 1;                { DSProps.iUnused[1] }
   auxMemoStream = 2;                { DSProps.iUnused[2] }
   auxMemoryIndices = 3;             { DSProps.iUnused[3] }
   auxProp4 = 4;                     { DSProps.iUnused[4] }
   auxStatusFilter = 5;              { DSProps.iUnused[5] }
-  auxStreamMode = 6;                { DSProps.iUnused[6] }
+  auxXmlStreamMode = 6;             { DSProps.iUnused[6] }
   auxExclusiveAccess = 7;           { DSProps.iUnused[7] }
 
 
@@ -921,6 +911,9 @@ type
     basepropCHANGEINDEX_VIEW,        { rw DSAttr (UINT32) (update attributes), any combination, 0->show all }
     basepropGETUNIQUEINDEX,          { r  DSIDX, internal use, returns first unique index, if any }
     basepropREMOTE_UPDATEMODE,       { rw UINT32, 0: where key, 1: where all, 3: where ch }
+    basepropXML_STREAMMODE,
+
+    basepropDATAHASCHANGED,
 
     // Additional Source Properties
     basepropDATASETCHANGED,          { r  underlying dataset has changed, e.g. assign new list }
@@ -1413,8 +1406,6 @@ resourcestring
 {$ifndef DELPHI6}
   SCannotCreateDir = 'Unable to create directory';
 {$endif}
-
-  SDebugException = #13#13'raised exception %s with message'#13'%s';
 
 
 

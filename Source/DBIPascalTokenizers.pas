@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIPascalTokenizers;
 
@@ -760,7 +760,6 @@ begin
 
     else
       Input.Check([Tok_Apostrophe, Tok_Unassigned, Tok_UTF8]);
-//##JVR      Input.NextToken;
     end;
   end;
 end;
@@ -1433,9 +1432,6 @@ begin
         UndoToken(Chr_SemiColon);
       end;
     end;
-
-    // Premature Exit;
-//##JVR}    Exit;
   end
 
   // Array

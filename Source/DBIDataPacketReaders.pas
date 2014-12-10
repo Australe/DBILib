@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : DBILib}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIDataPacketReaders;
 
@@ -40,7 +40,7 @@ type
       const FieldName: String;
       const DataType: TFieldType;
       const FieldSize: Word;
-      const Required: String;
+      const Required: Boolean;
       const Attributes: TFieldAttributes
       ): Boolean; virtual;
 
@@ -66,7 +66,7 @@ type
       const FieldName: String;
       const DataType: TFieldType;
       const FieldSize: Word;
-      const Required: String;
+      const Required: Boolean;
       const Attributes: TFieldAttributes
       ): Boolean; override;
 
@@ -136,6 +136,7 @@ type
     function ProcessRow: Boolean;
 
   public
+    function DropMetaData: Boolean;
     function GetData: Boolean; override;
     function GetMetaData: Boolean; override;
 
@@ -301,6 +302,29 @@ end;
 
 { TDBICustomXMLDataPacketReader }
 
+function TDBICustomXMLDataPacketReader.DropMetaData: Boolean;
+begin
+  Result := True;
+
+  // BootStrap the lexer;
+  Input.Reset;
+  Input.NextToken;
+
+  while Result and not Input.Eof do begin
+    Result := (Context <> xmlElement_RowData);
+    if Result then begin
+      Context := GetElement;
+
+      while Result and not Input.Eof do begin
+        Input.NextToken;
+        Context := GetElement;
+        Result := (Context <> xmlElement_RowData);
+      end;
+    end;
+  end;
+end;
+
+
 function TDBICustomXMLDataPacketReader.GetAttribute: TDBIXmlAttribute;
 var
   Index: Integer;
@@ -437,6 +461,9 @@ begin
   else if DBICompareText(FieldType, cdsFieldBytes) = 0 then begin
     Result := db.ftBytes;
   end
+  else if DBICompareText(FieldType, cdsFieldADT) = 0 then begin
+    Result := db.ftADT;
+  end
   else begin
     raise Exception.CreateFmt('Unknown FieldType "%s"', [FieldType]);
   end;
@@ -551,7 +578,7 @@ var
   FieldName: String;
   DataType: TFieldType;
   FieldSize: Word;
-  Required: String;
+  Required: Boolean;
   Attributes: TFieldAttributes;
 
 begin
@@ -561,7 +588,7 @@ begin
     DataType := ftUnknown;
     FieldName := '';
     FieldSize := 0;
-    Required := '';
+    Required := False;
     while Result and not Input.Eof do begin
       case GetAttribute of
         xmlAttribute_AttrName: FieldName := String(GetAttributeValue);
@@ -569,7 +596,7 @@ begin
         xmlAttribute_Hidden: Include(Attributes, faHiddenCol);
         xmlAttribute_Link: Include(Attributes, faLink);
         xmlAttribute_ReadOnly: Include(Attributes, faReadOnly);
-        xmlAttribute_Required: Required := String(GetAttributeValue);
+        xmlAttribute_Required: Required := CompareText(String(GetAttributeValue), 'true') = 0;
         xmlAttribute_Width: FieldSize := GetFieldSize;
         xmlAttribute_SubType: DataType := GetFieldSubType(DataType);
         xmlAttribute_UnNamed: Include(Attributes, faUnNamed);
@@ -623,7 +650,7 @@ function TDBIDatasetDataPacketReader.CreateColumn(
   const FieldName: String;
   const DataType: TFieldType;
   const FieldSize: Word;
-  const Required: String;
+  const Required: Boolean;
   const Attributes: TFieldAttributes
   ): Boolean;
 var
@@ -637,8 +664,14 @@ begin
   FieldDef.Name := FieldName;
   FieldDef.DataType := DataType;
   FieldDef.Size := FieldSize;
-  FieldDef.Required := False;
   FieldDef.Attributes := Attributes;
+
+  // Don't change this order - fpc needs this!
+  if (Required) then begin
+    FieldDef.Attributes := FieldDef.Attributes + [faRequired];
+  end;
+
+  FieldDef.Required := Required;
 
   Result := FieldDefs.Count > 0;
 end;
@@ -764,15 +797,16 @@ function TDBICustomDataPacketReader.CreateColumn(
   const FieldName: String;
   const DataType: TFieldType;
   const FieldSize: Word;
-  const Required: String;
+  const Required: Boolean;
   const Attributes: TFieldAttributes
   ): Boolean;
 const
+  BoolName: array[Boolean] of String = ('False', 'True');
   FieldInfo = 'FieldName = %s, FieldType = %d, FieldSize = %d, Required = %s';
 begin
   Result := True;
 
-  Output.WriteFmt(FieldInfo, [FieldName, Ord(DataType), FieldSize, Required]);
+  Output.WriteFmt(FieldInfo, [FieldName, Ord(DataType), FieldSize, BoolName[Required] ]);
   Output.WriteLine('');
 end;
 

@@ -22,6 +22,8 @@
   ______________________________________________________________________________
 }
 
+{#omcodecop off : jvr : dbilib}
+
 unit DBIPropertyEditors;
 
 {$I DBICompilers.inc}
@@ -29,7 +31,10 @@ unit DBIPropertyEditors;
 interface
 
 uses
-  FldLinks, DBIObjectListDatasets;
+{$ifndef fpc}
+  FldLinks,
+{$endif}
+  DBIObjectListDatasets;
 
 type
   TODSFieldLinkProperty = class(TFieldLinkProperty)

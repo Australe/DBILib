@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -23,7 +23,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBICustomListDataConnections;
 
@@ -144,7 +144,7 @@ type
 
     procedure LoadFromXBaseFile(const AFileName: TFileName);
     procedure LoadFromXBaseStream(AStream: TStream);
-    
+
     procedure ValidateObject(DataObject: TObject); virtual;
 
   public
@@ -277,7 +277,7 @@ type
 { TDBIBlob }
 
 type
-  TDBIBlob = class(TObject)
+  TDBIBlob = class(TPersistent)
   private
     FDataString: TDBIString;
 
@@ -369,11 +369,9 @@ end;  { Destroy }
 {**
   Jvr - 07/01/2002 14:10:39.<P>
 }
-function TDBICustomListDataConnection.AddItem(Item: TObject): Integer;
+function TDBICustomListDataConnection.{%H-}AddItem(Item: TObject): Integer;
 begin
-  Result := -1;
-
-  Error(nil, 'AddItem', '410',
+  raise EDBINotImplementedException.Create(Self, 'AddItem::375',
     'AddItem has NOT been implemented in the derived class!', []);
 end;  { AddItem }
 
@@ -398,7 +396,7 @@ end;  { CreateItem }
 }
 procedure TDBICustomListDataConnection.DeleteItem(const Index: Integer);
 begin
-  Error(nil, 'DeleteItem', '420',
+  raise EDBINotImplementedException.Create(Self, 'DeleteItem::400',
     'DeleteItem has NOT been implemented in the derived class!', []);
 end;  { DeleteItem }
 
@@ -407,11 +405,9 @@ end;  { DeleteItem }
 {**
   Jvr - 29/01/2003 14:30:05.<P>
 }
-function TDBICustomListDataConnection.IndexOfItem(Item: TObject): Integer;
+function TDBICustomListDataConnection.{%H-}IndexOfItem(Item: TObject): Integer;
 begin
-  Result := -1;
-
-  Error(nil, 'IndexOfItem', '435',
+  raise EDBINotImplementedException.Create(Self, 'IndexOfItem::415',
     'IndexOfItem has NOT been implemented in the derived class!', []);
 end;  { IndexOfItem }
 
@@ -420,11 +416,9 @@ end;  { IndexOfItem }
 {**
   Jvr - 29/01/2003 15:27:24.<P>
 }
-function TDBICustomListDataConnection.RemoveItem(Item: TObject): Integer;
+function TDBICustomListDataConnection.{%H-}RemoveItem(Item: TObject): Integer;
 begin
-  Result := -1;
-  
-  Error(nil, 'RemoveItem', '445',
+  raise EDBINotImplementedException.Create(Self, 'RemoveItem::425',
     'RemoveItem has NOT been implemented in the derived class!', []);
 end;  { RemoveItem }
 
@@ -521,7 +515,7 @@ begin
   end;
 
   if (Position < 0) or (Position >= GetCount(dsRecAll)) then begin
-    Error(nil, 'Get', '425', 'Record "%d" out of legal range', [Position]);
+    raise EDBIException.Create(Self, 'Get::525', 'Record "%d" out of legal range', [Position]);
   end;
 
   if (Items[Position] = nil) then begin
@@ -660,9 +654,6 @@ end;  { GetData }
   Jvr - 04/06/2001 14:21:13 - Added BCD support<P>
 }
 procedure TDBICustomListDataConnection.PutData(DataObject: TObject; const Buffer);
-const
-  Caller = 'PutData';
-
 var
   FieldName: TDBIFieldName;
   FieldNo: Integer;
@@ -702,7 +693,7 @@ begin
       // if it wasn't so handy.
       if not Assigned(PropInfo.SetProc) then begin
         if (osErrorOnReadonlyProperty in Options) then begin
-          Error(nil, Caller, '555',
+          raise EDBIException.Create(Self, 'PutData::705',
             SErrorReadOnlyProperty,
             [DataObject.ClassName + '.' + TDBIPropName(PropInfo.Name)]
             );
@@ -776,7 +767,7 @@ end;  { PutData }
 {**
   Jvr - 13/11/2000 12:38:22 - Result always returns False indicating Blank.<P>
 }
-function TDBICustomListDataConnection.GetFieldUnknown(
+function TDBICustomListDataConnection.{%H-}GetFieldUnknown(
   DataObject: TObject;
   var FieldBuffer: TDBIFieldBuffer;
   const FieldName: TDBIFieldName;
@@ -786,11 +777,9 @@ var
   DataTypeName: String;
 
 begin
-  // Field has no value - blank
-  Result := False;
   DataTypeName := TypInfo.GetEnumName(TypeInfo(TFieldType), Ord(DataTypeMap[FieldProps[FieldNo].iFldType]));
 
-  Error(nil, 'GetFieldUnknown', '385',
+  raise EDBIException.Create(Self, 'GetFieldUnknown::790',
     'Field: %s, Unknown data type - "%s" Not supported',
     [FieldName, DataTypeName]
     );
@@ -813,8 +802,7 @@ var
 begin
   DataTypeName := TypInfo.GetEnumName(TypeInfo(TFieldType), Ord(DataTypeMap[FieldProps[FieldNo].iFldType]));
 
-  Error(nil,
-    'PutFieldUnknown', '400',
+  raise EDBIException.Create(Self, 'PutFieldUnknown::815',
     'Field: %s, Unknown data type - "%s" Not supported',
     [FieldName, DataTypeName]
     );
@@ -1240,15 +1228,11 @@ function TDBICustomListDataConnection.GetFieldMemo(
   const FieldName: TDBIFieldName;
   const FieldNo: Word
   ): Boolean;
-const
-  Caller = 'GetFieldMemo';
-
 var
   DataString: TDBIString;
   DataSize: Integer;
 
 begin
-  Result :=False;
   Assert(FieldNo < Length(FieldProps));
   Assert(Assigned(DataObject));
 
@@ -1265,7 +1249,9 @@ begin
     Result := Assigned(PDBIObject(FieldBuffer)^);
   except
     on E: Exception do
-      Error(E, Caller, '11275', 'Unable to Get Blob Data for Field "%s"', [FieldName]);
+      raise EDBIException.Create(Self, E, 'GetFieldMemo::1265',
+        'Unable to Get Blob Data for Field "%s"', [FieldName]
+        );
   end;
 end;  { GetFieldMemo }
 
@@ -1281,10 +1267,6 @@ procedure TDBICustomListDataConnection.PutFieldMemo(
   const FieldName: TDBIFieldName;
   const FieldNo: Word
   );
-
-const
-  Caller = 'PutFieldMemo';
-
 var
   BlobObject: TObject;
   DataString: TDBIString;
@@ -1312,7 +1294,9 @@ begin
       // If the blob object is Unassigned then the data is blank.
       // Otherwise if the blob object is assigned and of an unexpected type, then raise an exception
       else if Assigned(BlobObject) then begin
-        raise Exception.CreateFmt('Unexpected data object type: "%s"', [BlobObject.ClassName]);
+        raise EDBIException.Create(Self, 'PutFieldMemo::1305',
+          'Unexpected data object type: "%s"', [BlobObject.ClassName]
+          );
       end;
 
       // Update the FieldBuffer with the DataObject Reference,
@@ -1324,7 +1308,7 @@ begin
 
   except
     on E: Exception do
-      Error(E, Caller, '1335', 'Unable to Put Blob Data for Field "%s"', [FieldName]);
+      raise EDBIException.Create(Self, E, 'PutFieldMemo::1320', 'Unable to Put Blob Data for Field "%s"', [FieldName]);
   end;
 end;  { PutFieldMemo }
 
@@ -1384,9 +1368,6 @@ function TDBICustomListDataConnection.GetFieldDataset(
   const FieldName: TDBIFieldName;
   const FieldNo: Word
   ): Boolean;
-const
-  Caller = 'GetFieldDataset';
-
 begin
   Result := False;
   Assert(FieldNo < Length(FieldProps));
@@ -1397,7 +1378,7 @@ begin
 
   except
     on E: Exception do
-      Error(E, Caller, '1405',
+      raise EDBIException.Create(Self, E, 'GetFieldDataset::1390',
         'Unable to Get Dataset Data for Field "%s"',
         [FieldName]
         );
@@ -1415,10 +1396,6 @@ procedure TDBICustomListDataConnection.PutFieldDataset(
   const FieldName: TDBIFieldName;
   const FieldNo: Word
   );
-
-const
-  Caller = 'PutFieldDataset';
-
 begin
   Assert(FieldNo < Length(FieldProps));
   Assert(Assigned(DataObject));
@@ -1426,10 +1403,10 @@ begin
   try
     TDBIPropType.Check(DataObject, FieldName, [tkClass]);
 
-    Error(nil, Caller, '1430', 'Not implemented Yet!', []);
+    raise EDBINotImplementedException.Create(Self, 'PutFieldDataset::1415');
   except
     on E: Exception do
-      Error(E, Caller, '1405',
+      raise EDBIException.Create(Self, E, 'PutFieldDataset::1420',
         'Unable to Put Dataset Data for Field "%s"',
         [FieldName]
         );
@@ -1447,9 +1424,6 @@ function TDBICustomListDataConnection.GetFieldADT(
   const FieldName: TDBIFieldName;
   const FieldNo: Word
   ): Boolean;
-const
-  Caller = 'GetFieldADT';
-
 var
   PropObject: TObject;
   Index: Integer;
@@ -1489,10 +1463,6 @@ procedure TDBICustomListDataConnection.PutFieldADT(
   const FieldName: TDBIFieldName;
   const FieldNo: Word
   );
-
-const
-  Caller = 'PutFieldADT';
-
 var
   PropInfo: PPropInfo;
   PropClass: TClass;
@@ -1563,11 +1533,9 @@ end;  { CreateObject }
 {**
   Jvr - 08/11/2000 13:42:00<P>
 }
-function TDBICustomListDataConnection.GetItem(Index: Integer): TObject;
+function TDBICustomListDataConnection.{%H-}GetItem(Index: Integer): TObject;
 begin
-  Result := nil;
-
-  Error(nil, 'GetItem', '1855',
+  raise EDBINotImplementedException.Create(Self, 'GetItem::1550',
     'GetItem has NOT been implemented in the derived class!', []);
 end;  { GetItem }
 
@@ -1576,20 +1544,19 @@ end;  { GetItem }
 {**
   Jvr - 08/11/2000 13:46:15<P>
 }
-function TDBICustomListDataConnection.GetRecordCount(
+function TDBICustomListDataConnection.{%H-}GetRecordCount(
   const StatusFilter: DSAttr
   ): Integer;
 begin
-  Result := -1;
-
-  Error(nil, 'GetRecordCount', '1670',
+  raise EDBINotImplementedException.Create(Self, 'GetRecordCount::1565',
     'GetRecordCount has NOT been implemented in the derived class!', []);
 end;  { GetRecordCount }
 
 
 procedure TDBICustomListDataConnection.New;
 begin
-  Error(nil, 'New', '1875', 'Not Implemented Yet!', []);
+  raise EDBINotImplementedException.Create(Self, 'New::1570',
+    'New has NOT been implemented in the derived class!', []);
 end;  { New }
 
 
@@ -1642,7 +1609,7 @@ end;  { SetOptions }
 }
 procedure TDBICustomListDataConnection.SetItem(Index: Integer; const Value: TObject);
 begin
-  Error(nil, 'SetItem', '1940',
+  raise EDBINotImplementedException.Create(Self, 'SetItem::1625',
     'SetItem has NOT been implemented in the derived class!', []);
 end;  { SetItem }
 
@@ -1655,9 +1622,6 @@ procedure TDBICustomListDataConnection.DataEvent(
   DataObject: TObject;
   Event: TDBIObjectDataEvent
   );
-const
-  Caller = 'DataEvent';
-
 var
   Method: TMethod;
 
@@ -1665,8 +1629,8 @@ begin
   if (DataObject <> nil) and (FObjectDataEventProc <> '') then begin
     Method.Code := DataObject.MethodAddress(FObjectValidationProc);
     if (Method.Code = nil) then begin
-      Error(nil, Caller, '1965', 'Object DataEvent procedure "%s" not found',
-        [FObjectDataEventProc]
+      raise EDBIException.Create(Self, 'DataEvent::1645',
+        'Object DataEvent procedure "%s" not found', [FObjectDataEventProc]
         );
     end;
 
@@ -1681,9 +1645,6 @@ end;
   Jvr - 03/10/2002 16:06:54.<P>
 }
 procedure TDBICustomListDataConnection.ValidateObject(DataObject: TObject);
-const
-  Caller = 'ValidateObject';
-
 var
   Method: TMethod;
 
@@ -1691,8 +1652,8 @@ begin
   if (DataObject <> nil) and (FObjectValidationProc <> '') then begin
     Method.Code := DataObject.MethodAddress(FObjectValidationProc);
     if (Method.Code = nil) then begin
-      Error(nil, Caller, '1990', 'Object validation procedure "%s" not found',
-        [FObjectValidationProc]
+      raise EDBIException.Create(Self, 'ValidateObject::1670',
+        'Object validation procedure "%s" not found', [FObjectValidationProc]
         );
     end;
 
@@ -1716,13 +1677,13 @@ var
 begin
   try
     if (Position < 0) or (Position >= GetCount(dsRecAll)) then begin
-      Error(nil, 'Update', '2015', 'Record "%d" out of legal range', [Position]);
+      raise EDBIException.Create(Self, 'Update::1695', 'Record "%d" out of legal range', [Position]);
     end;
 
     DataObject := Items[Position];
 
     if (DataObject = nil) then begin
-      Error(nil, 'Update', '2020', 'Item "%d" is nil', [Position]);
+      raise EDBIException.Create(Self, 'Update::1700', 'Item "%d" is nil', [Position]);
     end
     else if (@Buffer <> nil) then begin
       ValidateObject(FValidationObject);
@@ -1815,12 +1776,9 @@ end;  { SyncRecordBuffer }
   Jvr - 27/05/2002 16:22:06.<P>
 }
 procedure TDBICustomListDataConnection.ValidateMetaData;
-const
-  Caller = 'ValidateMetaData';
-
 begin
   if GetClass(ClassTypeName) = nil then begin
-    Error(nil, Caller, '2120', SClassNotFound, [ClassTypeName]);
+    raise EDBIException.Create(Self, 'ValidateMetaData::1795', SClassNotFound, [ClassTypeName]);
   end;
 end;  { ValidateMetaData }
 
@@ -1836,13 +1794,10 @@ procedure TDBICustomListDataConnection.ValidateField(
   const FieldNo: Word;
   pFldBuf: Pointer
   );
-const
-  Caller = 'ValidateField';
-
 var
   FieldName: TDBIFieldName;
   PropInfo: PPropInfo;
-  PutObjectFieldProc: TPutObjectFieldProc;
+  PutFieldProc: TPutObjectFieldProc;
 
 begin
   // If object validation is not turned on then Exit
@@ -1870,7 +1825,8 @@ begin
     // if it wasn't so handy.
     if not Assigned(PropInfo.SetProc) then begin
       if (osErrorOnReadonlyProperty in Options) then begin
-        Error(nil, Caller, '2170', SErrorReadOnlyProperty,
+        raise EDBIException.Create(Self, 'ValidateField::1840',
+          SErrorReadOnlyProperty,
           [FValidationObject.ClassName + '.' + TDBIPropName(PropInfo.Name)]
           );
       end
@@ -1882,28 +1838,42 @@ begin
     end;  { if }
 
     case FieldProps[FieldNo].iFldType of
-      fldUNKNOWN:    PutObjectFieldProc := PutFieldUnKnown;
-      fldZSTRING:    PutObjectFieldProc := PutFieldString;
-      fldBLOB:       PutObjectFieldProc := PutFieldMemo;
-      fldBOOL:       PutObjectFieldProc := PutFieldBoolean;
-      fldFLOAT:      PutObjectFieldProc := PutFieldFloat;
-      fldINT16:      PutObjectFieldProc := PutFieldInteger;
-      fldINT32:      PutObjectFieldProc := PutFieldInteger;
-      fldTIMESTAMP:  PutObjectFieldProc := PutFieldDateTime;
-      fldINT64:      PutObjectFieldProc := PutFieldInteger;
-      fldDATE:       PutObjectFieldProc := PutFieldDateTime;
-      fldBCD:        PutObjectFieldProc := PutFieldBCD;
-      fldTABLE:      PutObjectFieldProc := PutFieldDataset;
-      fldADT:        PutObjectFieldProc := PutFieldADT;
-      fldTIME:       PutObjectFieldProc := PutFieldDateTime;
-
-      fldBYTES:      PutObjectFieldProc := PutFieldUnKnown;
-      fldVARBYTES:   PutObjectFieldProc := PutFieldUnKnown;
-
-      else PutObjectFieldProc := PutFieldUnknown;
+      fldUNKNOWN:    PutFieldProc := PutFieldUnknown;
+      fldZSTRING:    PutFieldProc := PutFieldString;
+      fldDATE:       PutFieldProc := PutFieldDateTime;
+      fldBLOB:       PutFieldProc := PutFieldMemo;
+      fldBOOL:       PutFieldProc := PutFieldBoolean;
+      fldINT16:      PutFieldProc := PutFieldInteger;
+      fldINT32:      PutFieldProc := PutFieldInteger;
+      fldFLOAT:      PutFieldProc := PutFieldFloat;
+      fldBCD:        PutFieldProc := PutFieldBCD;
+      fldBYTES:      PutFieldProc := PutFieldUnknown;
+      fldTIME:       PutFieldProc := PutFieldDateTime;
+      fldTIMESTAMP:  PutFieldProc := PutFieldDateTime;
+      fldUINT16:     PutFieldProc := PutFieldInteger;
+      fldUINT32:     PutFieldProc := PutFieldInteger;
+      fldFLOATIEEE:  PutFieldProc := PutFieldFloat;
+      fldVARBYTES:   PutFieldProc := PutFieldUnknown;
+      fldLOCKINFO:   PutFieldProc := PutFieldUnknown;
+      fldCURSOR:     PutFieldProc := PutFieldUnknown;
+      fldINT64:      PutFieldProc := PutFieldInteger;
+      fldUINT64:     PutFieldProc := PutFieldInteger;
+      fldADT:        PutFieldProc := PutFieldADT;
+      fldARRAY:      PutFieldProc := PutFieldUnknown;
+      fldREF:        PutFieldProc := PutFieldUnknown;
+      fldTABLE:      PutFieldProc := PutFieldDataset;
+      fldDATETIME:   PutFieldProc := PutFieldUnknown;
+      fldFMTBCD:     PutFieldProc := PutFieldBCD;
+      fldWIDESTRING: PutFieldProc := PutFieldString;
+      fldINT8:       PutFieldProc := PutFieldInteger;
+      fldUINT8:      PutFieldProc := PutFieldInteger;
+      fldSINGLE:     PutFieldProc := PutFieldFloat;
+      fldUNICODE:    PutFieldProc := PutFieldString;
+    else
+      PutFieldProc := PutFieldUnknown;
     end;  { case }
 
-    PutObjectFieldProc(FValidationObject, pFldBuf, FieldName, FieldNo);
+    PutFieldProc(FValidationObject, pFldBuf, FieldName, FieldNo);
   end;  { if }
 
 {##JVR
@@ -1925,9 +1895,6 @@ procedure TDBICustomListDataConnection.NotifyDataEvent(
   Event: TDBIDataChangeEventType;
   ItemIndex: Integer
   );
-const
-  Caller = 'NotifyDataEvent';
-    
 var
   pRecBuf: TDBIRecordBuffer;
   FieldNo: Integer;
@@ -1940,7 +1907,7 @@ begin
     else begin
       ItemIndex := IndexOfItem(DataObject);
       if (ItemIndex < 0) then begin
-        Error(nil, Caller, '2240', 'Object not found', []);
+        raise EDBIException.Create(Self, 'NotifyDataEvent::1925', 'Object not found', []);
       end;
     end;
   end;
@@ -2011,9 +1978,6 @@ procedure TDBICustomListDataConnection.GetBlob(
   PData: Pointer;
   out Size: LongWord
   );
-const
-  Caller = 'GetBlob';
-
 var
   BlobText: TDBIString;
   BlobObject: TObject;
@@ -2050,7 +2014,9 @@ begin
 
   except
     on E: Exception do
-      Error(E, Caller, '2330', 'Unable to Get Blob Data for Field %s[%d]', [BlobClassName, FieldNo]);
+      raise EDBIException.Create(Self, E, 'GetBlob::2030',
+        'Unable to Get Blob Data for Field %s[%d]', [BlobClassName, FieldNo]
+        );
   end;
 end;  { GetBlob }
 
@@ -2066,9 +2032,6 @@ function TDBICustomListDataConnection.PutBlob(
   PData: Pointer;
   const Size: LongWord
   ): Integer;
-const
-  Caller = 'PutBlob';
-
 begin
   Result := 0;  // Blank
 
@@ -2079,7 +2042,9 @@ begin
     end;
   except
     on E: Exception do
-      Error(E, Caller, '2360', 'Unable to Put Blob Data for FieldNo "%d"', [FieldNo]);
+      raise EDBIException.Create(Self, E, 'PutBlob::2060',
+        'Unable to Put Blob Data for FieldNo "%d"', [FieldNo]
+        );
   end;
 end;  { PutBlob }
 
@@ -2150,12 +2115,11 @@ procedure TDBICustomListDataConnection.LoadFromStream(
   AStream: TStream;
   const Format: TDBIDataFormat
   );
-const
-  Caller = 'LoadFromStream';
-
 begin
   if (Format <> dfXbase) and (Format <> dfXbasePlus) then begin
-    Error(nil, Caller, '2445', 'Only Xbase streams are supported', []);
+    raise EDBIException.Create(Self, 'LoadFromStream::2135',
+      'Only Xbase streams are supported', []
+      );
   end
   else begin
     LoadFromXBaseStream(AStream);
@@ -2169,9 +2133,6 @@ end;
   Jvr - 09/12/2004 18:29:49 - Replaced RecordAttribute with DataInfo.<p>
 }
 procedure TDBICustomListDataConnection.LoadFromXBaseStream(AStream: TStream);
-const
-  Caller = 'LoadFromXBaseStream';
-
 var
   LocalConnection: TDBIXBaseDataConnection;
   RecordBuffer: TDBIRecordBuffer;
@@ -2229,7 +2190,7 @@ begin
     LoadFromXBaseFile(AFileName);
   end
   else begin
-    DatabaseError('Unsupported file format');
+    raise EDBIException.Create(Self, 'LoadFromFile::2205', 'Unsupported file format', []);
   end;
 end;  { LoadFromFile }
 
@@ -2295,9 +2256,6 @@ procedure TDBICustomListDataConnection.SaveToStream(
   AStream: TStream;
   const Format: TDBIDataFormat
   );
-const
-  Caller = 'SaveToStream';
-
 var
   LocalConnection: TDBIXBaseDataConnection;
   RecordBuffer: TDBIRecordBuffer;
@@ -2306,8 +2264,8 @@ var
   Position: Integer;
 
 begin
-  if (Format = dfCDS) then begin
-    Error(nil, Caller, '2130', 'Only XBase streams are supported', []);
+  if (Format = dfXML) then begin
+    raise EDBIException.Create(Self, 'SaveToStream::2280', 'Only XBase streams are supported', []);
   end;
 
   LocalConnection := TDBIXBaseDataConnection.Create(Owner);
@@ -2359,9 +2317,6 @@ procedure TDBICustomListDataConnection.SaveToFile(
   AFileName: String;
   const Format: TDBIDataFormat
   );
-const
-  Caller = 'SaveToFile';
-
 var
   LocalConnection: TDBIXBaseDataConnection;
   RecordBuffer: TDBIRecordBuffer;
@@ -2370,8 +2325,8 @@ var
   Position: Integer;
 
 begin
-  if (Format = dfCDS) then begin
-    Error(nil, Caller, '2635', 'Saving to XML not supported Yet!', []);
+  if (Format = dfXML) then begin
+    raise EDBIException.Create(Self, 'SaveToFil::2340', 'Saving to XML not supported Yet!', []);
   end;
 
   LocalConnection := TDBIXBaseDataConnection.Create(Owner);
@@ -2489,9 +2444,6 @@ var
 
 
   function AddFieldDesc(PropInfo: PPropInfo; var AFieldNo: Integer): pDSFLDDesc;
-  const
-    Caller = 'GetMetaData::AddFieldDesc';
-
   var
     Attributes: TFieldAttributes;
     FieldName: TDBIFieldName;
@@ -2559,7 +2511,8 @@ var
 
     // If field type is invalid then raise exception
     if (Result^.iFldType = fldUNKNOWN) then begin
-      Error(nil, Caller, '2790', 'Unsupported property kind "%s" for field %s', [
+      raise EDBIException.Create(Self, 'GetMetaData::AddFieldDesc::2525',
+        'Unsupported property kind "%s" for field %s', [
         TypInfo.GetEnumName(TypeInfo(TTypeKind), Ord(PropInfo^.PropType^.Kind)),
         FieldName
         ]);

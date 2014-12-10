@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -24,7 +24,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIDataPacketWriters;
 
@@ -33,7 +33,7 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  Classes, SysUtils, DB, DBIStreamAdapters, DBIStrings, DBIDataset;
+  Classes, DB, DBIStreamAdapters, DBIStrings;
 
 type
   TDBICustomDataPacketWriter = class(TDBICustomStreamFormatter)
@@ -97,6 +97,7 @@ type
 
 const
   // FieldTypes
+  cdsFieldADT =              'adt';
   cdsFieldAnsiString =       'string';
   cdsFieldWideString =       'string.uni';
   cdsFieldBoolean =          'boolean';
@@ -133,7 +134,7 @@ const
 implementation
 
 uses
-  DBIConst, DBIIntfConsts, DBIFileStreams;
+  SysUtils;
 
 
 const
@@ -197,8 +198,6 @@ end;
 procedure TDBICSVDataPacketWriter.WriteField(Field: TField);
 var
   FieldData: String;
-  FieldText: String;
-  DisplayText: String;
 
 begin
   case Field.DataType of
@@ -213,17 +212,6 @@ begin
   // All other fieldtypes
   else
     FieldData := Field.AsString;
-  end;
-
-
-  // DisplayText in Currency fields are preceded by the currency symbol
-  DisplayText := Field.DisplayText;
-
-  if (Field.DataType = ftCurrency) then begin
-    FieldText := CurrToStr(Field.AsCurrency);
-  end
-  else begin
-    FieldText := FieldData;
   end;
 
   WriteStr(EncodeFieldData(FieldData));
@@ -462,6 +450,7 @@ begin
       );
 
     case FieldDefs[Index].DataType of
+      db.ftADT:         WriteStr(cdsFieldADT);
       db.ftString,
       db.ftFixedChar:   WriteStr(cdsFieldAnsiString);
       db.ftWideString:  WriteStr(cdsFieldWideString);

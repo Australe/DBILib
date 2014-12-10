@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -18,10 +18,15 @@
   Change History:
   ______________________________________________________________________________
   REL | DATE/TIME           | WHO | DETAILS
-  1.0 | 27/01/99 10:59:59 | JVR | Initial Release
+  1.0 | 27/01/1999 10:59:59 | JVR | Initial Release
   ______________________________________________________________________________
 }
+
+{#omcodecop off : jvr : dbilib}
+
 unit DBIXbaseDatasets;
+
+{$I DBICompilers.inc}
 
 interface
 
@@ -124,7 +129,7 @@ type
 implementation
 
 uses
-  SysUtils, DBIUtils;
+  SysUtils, DBIConst, DBIUtils;
 
 
 { TDBICustomXBaseDataset }
@@ -267,9 +272,6 @@ end;
 procedure TDBICustomXBaseDataset.SetOptions(
   const Value: TDBIXbaseDataConnectionOptions
   );
-const
-  Caller = 'SetOptions';
-
 var
   NewOptions: TDBIXbaseDataConnectionOptions;
 
@@ -280,7 +282,7 @@ begin
 
   if xsShowDeleted in Value then begin
     Exclude(NewOptions, xsShowDeleted);
-    Error(nil, Caller, '280', 'Option "xsShowDeleted" not implemented yet!', []);
+    raise EDBIException.Create(Self, 'SetOptions::280', 'Option "xsShowDeleted" not implemented yet!', []);
   end;
 
   (DataConnection as TDBIXbaseDataConnection).Options := Value;
@@ -292,13 +294,10 @@ end;  { SetOptions }
   Jvr - 08/03/2001 18:31:29.<P>
 }
 procedure TDBICustomXBaseDataset.SetVersion(const Value: TDBIXbaseVersion);
-const
-  Caller = 'SetVersion';
-
 begin
   CheckInActive;
 
-  Error(nil, Caller, '210', 'Not implemented yet!', []);
+  raise EDBINotImplementedException.Create(Self, 'SetVersion::300');
 end;  { SetVersion }
 
 

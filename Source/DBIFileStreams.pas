@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,14 +22,11 @@
   ______________________________________________________________________________
 }
 
+{#omcodecop off : jvr : dbilib}
+
 unit DBIFileStreams;
 
 {$I DBICompilers.inc}
-
-{$ifdef fpc}
-  {$asmmode intel}
-  {$mode delphi}
-{$endif}
 
 {$define Use_BufferedStreams 1}
 
@@ -75,14 +72,6 @@ type
     FOptions: TDBIHandleStreamOptions; // Options to control Streaming behaviour
 
   protected
-    class procedure Error(
-      E: Exception;
-      const Caller: String;
-      const Reference: String;
-      const ErrMsg: String;
-      Args: array of const
-      );
-
     function Commit(grfCommitFlags: Longint = 0): Longint; virtual;
 
     procedure PageRead;
@@ -153,9 +142,6 @@ constructor TDBIHandleStream.Create(
   APageSize: Integer;
   AOptions: TDBIHandleStreamOptions
   );
-const
-  Caller = 'Create';
-
 begin
   inherited Create;
 
@@ -174,7 +160,7 @@ begin
   GetMem(FPage, FPageSize);
 
   if (FSize = -1) then begin
-    Error(nil, Caller, '190', 'Getting file size, Failed to seek to EOF', []);
+    raise EDBIException.Create(Self, 'Create::165', 'Getting file size, Failed to seek to EOF', []);
   end;
 end;  { Create }
 
@@ -211,7 +197,9 @@ begin
 
   if (soForceFlush in FOptions) then begin
 {$ifdef LINUX}
-    raise Exception.Create('Windows.FlushFileBuffers() is a windows call!');
+    raise EDBIException.Create(Self, 'Commit::205',
+      'Windows.FlushFileBuffers() is a windows call!', []
+      );
 {$else}
   {$ifdef DELPHI6} {$WARN SYMBOL_PLATFORM OFF} {$endif}
     SysUtils.Win32Check(Windows.FlushFileBuffers(FHandle));
@@ -226,21 +214,18 @@ end;  { FlushFileBuffers }
   Jvr - 02/05/2002 16:37:01.<P>
 }
 procedure TDBIHandleStream.PageRead;
-const
-  Caller = 'PageRead';
-
 var
   Offset: Longint;
 
 begin
   Offset := FileSeek(FHandle, FPageStart, soFromBeginning);
   if (Offset = -1) then begin
-    Error(nil, Caller, '237', 'Failed to seek to position %d', [FPageStart]);
+    raise EDBIException.Create(Self, 'PageRead::225', 'Failed to seek to position %d', [FPageStart]);
   end;
 
   FPageByteCount := FileRead(FHandle, FPage^, FPageSize);
   if (FPageByteCount <= 0) then begin
-    Error(nil, Caller, '240', 'Failed to read from position %d', [FPageStart]);
+    raise EDBIException.Create(Self, 'PageRead::230', 'Failed to read from position %d', [FPageStart]);
   end;
 end;  { PageRead }
 
@@ -250,9 +235,6 @@ end;  { PageRead }
   Jvr - 02/05/2002 16:38:34.<P>
 }
 procedure TDBIHandleStream.PageWrite;
-const
-  Caller = 'PageWrite';
-
 var
   Offset: Longint;
   BytesWritten: Longint;
@@ -262,12 +244,12 @@ begin
   if not (soWriteThrough in FOptions) then begin
     Offset := FileSeek(FHandle, FPageStart, soFromBeginning);
     if (Offset = -1) then begin
-      Error(nil, Caller, '265', 'Failed to seek to position %d', [FPageStart]);
+      raise EDBIException.Create(Self, 'PageWrite::250', 'Failed to seek to position %d', [FPageStart]);
     end;
 
     BytesWritten := FileWrite(FHandle, FPage^, FPageByteCount);
     if (BytesWritten <> FPageByteCount) then begin
-      Error(nil, Caller, '270', 'Failed to write from position %d', [FPageStart]);
+      raise EDBIException.Create(Self, 'PageWrite::255', 'Failed to write from position %d', [FPageStart]);
     end;
 
     Commit;
@@ -421,9 +403,6 @@ end;  { Read }
   Jvr - 02/05/2002 16:52:50.<P>
 }
 function TDBIHandleStream.Seek(Offset: Longint; Origin: Word): Longint;
-const
-  Caller = 'Seek';
-
 var
   NewPageStart: Longint;
   NewPos: Longint;
@@ -435,12 +414,11 @@ begin
     soFromCurrent:   NewPos := FPageStart + FPagePosition + Offset;
     soFromEnd:       NewPos := FSize + Offset;
   else
-    NewPos := 0;
-    Error(nil, Caller, '415', 'Invalid origin of "%d" specified', [Origin]);
+    raise EDBIException.Create(Self, 'Seek::420', 'Invalid origin of "%d" specified', [Origin]);
   end;  { case }
 
   if (NewPos < 0) or (NewPos > FSize) then begin
-    Error(nil, Caller, '420', 'Invalid offset of "%d" specified', [Offset]);
+    raise EDBIException.Create(Self, 'Seek::425', 'Invalid offset of "%d" specified', [Offset]);
   end;
 
   // Calculate which page of the file we need to be at
@@ -478,9 +456,6 @@ end;  { Seek }
   Jvr - 02/05/2002 16:54:03.<P>
 }
 procedure TDBIHandleStream.SetSize(NewSize : Longint);
-const
-  Caller = 'SetSize';
-
 begin
   // Save the new size and alter the position if required
   FSize := NewSize;
@@ -491,7 +466,7 @@ begin
 
   // Now truncate/extend the file handle
   if FileSeek(FHandle, NewSize, soFromBeginning) = -1 then begin
-    Error(nil, Caller, '470', 'Failed to seek to position %d', [NewSize]);
+    raise EDBIException.Create(Self, 'SetSize::475', 'Failed to seek to position %d', [NewSize]);
   end;
 
 {$ifdef LINUX}
@@ -523,9 +498,6 @@ end;  { SetSize }
   Jvr - 02/05/2002 16:57:49.<P>
 }
 function TDBIHandleStream.Write(const Buffer; Count: Longint): Longint;
-const
-  Caller = 'Write';
-
 var
   PBuffer: {TDBIByteArray} TDBIBufferArray absolute Buffer;
   BufferIndex: Longint;
@@ -560,7 +532,7 @@ begin
   if (soWriteThrough in FOptions) then begin
     Offset := FileSeek(FHandle, FPageStart + FPagePosition, soFromBeginning);
     if (Offset = -1) then begin
-      Error(nil, Caller, '530', 'Failed to seek to position %d', [FPageStart]);
+      raise EDBIException.Create(Self, 'Write::540', 'Failed to seek to position %d', [FPageStart]);
     end;
 
     Result := FileWrite(FHandle, Buffer, Count);
@@ -645,55 +617,6 @@ begin
     FPageByteCount := 0;
   end;
 end;  { Write }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 02/05/2002 18:46:12.<P>
-}
-class procedure TDBIHandleStream.Error(
-  E: Exception;
-  const Caller: String;
-  const Reference: String;
-  const ErrMsg: String;
-  Args: array of const
-  );
-const
-  SDebugException = #13#13'raised exception %s with message'#13'%s';
-
-var
-  Address: Pointer;
-
-{$ifdef DebugExceptions}
-  function GetUnitName: String;
-  begin
-    Result := String(TypInfo.GetTypeData(Self.ClassInfo)^.UnitName);
-  end;
-{$endif}
-
-var
-  DebugInfo: String;
-  ErrorInfo: String;
-
-begin
-  asm
-    mov eax, [ebp + 4] // get return address
-    mov Address, eax
-  end;
-
-  ErrorInfo := '';
-{$ifdef DebugExceptions}
-  if Assigned(E) then begin
-    ErrorInfo := Format(SDebugException, [E.ClassName, E.Message]);
-  end;
-
-  DebugInfo := GetUnitName + '::' + Self.ClassName + '::' + Caller + '::' + Reference + #13;
-{$else}
-  DebugInfo := '';
-{$endif}
-
-  raise EDBIException.CreateFmt(DebugInfo + ErrMsg + ErrorInfo, Args) at Address;
-end;  { Error }
 
 
 
@@ -783,17 +706,14 @@ class function TDBIFileStream.CreateStream(
   AStreamMode: TDBIStreamMode
   ): TStream;
 const
-  Caller = 'CreateStream';
   fmOpenReadMask   = $FFF0;
 
 var
   LocalStream: TStream;
 
 begin
-  Result := nil;
-
   if ((AMode and fmCreate) <> fmCreate) and (AFileName <> '') and not FileExists(AFileName) then begin
-    Error(nil, Caller, '230', 'File "%s" not found', [AFileName]);
+    raise EDBIException.Create(Self, 'CreateStream::725', 'File "%s" not found', [AFileName]);
   end;
 
   // Check file for readonly attribute
@@ -822,7 +742,7 @@ begin
     end;  { smLoadFromFile }
 
   else
-    Error(nil, Caller, '370', 'Unable to access this stream type', []);
+    raise EDBIException.Create(Self, 'CreateStream::750', 'Unable to access this stream type', []);
   end;  { case }
 end;  { CreateStream }
 
@@ -833,18 +753,13 @@ end;  { CreateStream }
   Jvr - 27/02/2001 11:24:55.<P>
 }
 class procedure TDBIFileStream.SaveStreamToFile(Stream: TStream; const AFileName: String);
-const
-  Caller = 'SaveToFile';
-
 var
   LocalStream: TStream;
 
   function CreateFileStream: TStream;
   begin
-    Result := nil;
-
     if (AFileName = '') then begin
-      Error(nil, Caller, '860', 'Invalid FileName', []);
+      raise EDBIException.Create(Self, 'SaveStreamToFile::CreateFileStream::770', 'Invalid FileName', []);
     end;
 
     try
@@ -864,7 +779,7 @@ var
 
     except
       on E: Exception do
-        Error(E, Caller, '915',
+        raise EDBIException.Create(Self, E, 'SaveStreamToFile::CreateFileStream::790',
           'Unable to open file "%s" for writing'#13#10'%s',
           [AFileName, DBIUtils.SystemErrorMessageParam(ExtractFileName(ParamStr(0)))]
           );
@@ -883,7 +798,7 @@ begin
       (Stream as TMemoryStream).SaveToStream(LocalStream);
     end
     else begin
-      Error(nil, Caller, '890',
+      raise EDBIException.Create(Self, 'SaveStreamToFile::810',
         'SaveStreamToFile for this type of stream not implemented Yet', []
         );
     end;

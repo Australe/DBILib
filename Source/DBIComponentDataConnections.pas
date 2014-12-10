@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIComponentDataConnections;
 
@@ -39,22 +39,14 @@ type
     FComponent: TComponent;
 
   protected
-    procedure Error(
-      E: Exception;
-      const Caller: String;
-      const Reference: String;
-      const ErrMsg: String;
-      Args: array of const
-      );
-
     procedure ClearList(AListMode: TDBIListDataConnectionListMode);
 
     function GetClassTypeName: String; override;
     function GetItem(Index: Integer): TObject; override;
-    procedure SetItem(Index: Integer; const Item: TObject); override;
     function GetRecordCount(const StatusFilter: DSAttr): Integer; override;
 
     procedure SetComponent(Value: TComponent);
+    procedure SetItem(Index: Integer; const Item: TObject); override;
 
   public
     constructor Create(AOwner: TObject); override;
@@ -69,20 +61,24 @@ type
 
     property Component: TComponent read FComponent write SetComponent;
 
-  end;  { TDBIObjectListDataConnection }
+  end;
 
 
 implementation
 
 
-const
-  UnitName = 'DBICollectionDataConnections';
+{ TDBIComponentDataConnection }
 
+// _____________________________________________________________________________
+{**
+  Jvr - 21/07/2010 14:06:44.<P>
+}
+function TDBIComponentDataConnection.AddItem(Item: TObject): Integer;
+begin
+  Assert(Item is TComponent);
 
-
-// =============================================================================
-// 'TObjectListDataConnection' public methods
-// =============================================================================
+  Result := (Item as TComponent).ComponentIndex;
+end;  { AddItem }
 
 
 // _____________________________________________________________________________
@@ -111,35 +107,15 @@ end;  { Destroy }
 
 // _____________________________________________________________________________
 {**
-  Jvr - 21/07/2010 09:50:15 - Initial code.<br>
-
-  Remove all data from the list
+  Jvr - 21/07/2010 12:02:19 - Initial code.<br />
 }
-procedure TDBIComponentDataConnection.Reset;
-var
-  Index: Integer;
-
+procedure TDBIComponentDataConnection.ClearList(
+  AListMode: TDBIListDataConnectionListMode
+  );
 begin
-  inherited Reset;
-
-  if Assigned(FComponent) then begin
-    for Index := FComponent.ComponentCount-1 downto 0 do begin
-      FComponent.Components[Index].Free;
-    end;
-  end;
-end;  { Reset }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 21/07/2010 14:06:44.<P>
-}
-function TDBIComponentDataConnection.AddItem(Item: TObject): Integer;
-begin
-  Assert(Item is TComponent);
-
-  Result := (Item as TComponent).ComponentIndex;
-end;  { AddItem }
+  FComponent := nil;
+  FListMode := AListMode;
+end;
 
 
 // _____________________________________________________________________________
@@ -172,6 +148,48 @@ end;  { DeleteItem }
 
 // _____________________________________________________________________________
 {**
+  Jvr - 21/07/2010 12:04:53 - Initial code.<br />
+}
+function TDBIComponentDataConnection.GetClassTypeName: String;
+begin
+  Assert(Assigned(FComponent));
+
+  Result := inherited GetClassTypeName;
+
+  if (Result = '') then begin
+    Result := FComponent.ClassName;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 21/07/2010 12:01:10 - Initial code.<br />
+}
+function TDBIComponentDataConnection.GetItem(Index: Integer): TObject;
+begin
+  Assert(Assigned(FComponent));
+
+  Result := FComponent.Components[Index];
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 21/07/2010 12:01:23 - Initial code.<br />
+}
+function TDBIComponentDataConnection.GetRecordCount(
+  const StatusFilter: DSAttr
+  ): Integer;
+begin
+  Assert(Assigned(FComponent));
+
+  Result := FComponent.ComponentCount;
+end;
+
+
+// _____________________________________________________________________________
+{**
   Jvr - 21/07/2010 14:34:05.<P>
 }
 function TDBIComponentDataConnection.IndexOfItem(Item: TObject): Integer;
@@ -197,83 +215,25 @@ begin
 end;  { RemoveItem }
 
 
-
-// =============================================================================
-// 'TDBIComponentDataConnection' protected methods
-// =============================================================================
-
 // _____________________________________________________________________________
 {**
-  Jvr - 21/07/2010 12:02:19 - Initial code.<br />
+  Jvr - 21/07/2010 09:50:15 - Initial code.<br>
+
+  Remove all data from the list
 }
-procedure TDBIComponentDataConnection.ClearList(
-  AListMode: TDBIListDataConnectionListMode
-  );
+procedure TDBIComponentDataConnection.Reset;
+var
+  Index: Integer;
+
 begin
-  FComponent := nil;
-  FListMode := AListMode;
-end;  { ClearList }
+  inherited Reset;
 
-
-// _____________________________________________________________________________
-{**
-  Jvr - 21/07/2010 12:04:53 - Initial code.<br />
-}
-function TDBIComponentDataConnection.GetClassTypeName: String;
-begin
-  Assert(Assigned(FComponent));
-
-  Result := inherited GetClassTypeName;
-
-  if (Result = '') then begin
-    Result := FComponent.ClassName;
+  if Assigned(FComponent) then begin
+    for Index := FComponent.ComponentCount-1 downto 0 do begin
+      FComponent.Components[Index].Free;
+    end;
   end;
-end;  { GetClassTypeName ]
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 21/07/2010 12:01:10 - Initial code.<br />
-}
-function TDBIComponentDataConnection.GetItem(Index: Integer): TObject;
-begin
-  Assert(Assigned(FComponent));
-
-  Result := FComponent.Components[Index];
-end;  { GetItem }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 21/07/2010 12:01:23 - Initial code.<br />
-}
-function TDBIComponentDataConnection.GetRecordCount(
-  const StatusFilter: DSAttr
-  ): Integer;
-begin
-  Assert(Assigned(FComponent));
-
-  Result := FComponent.ComponentCount;
-end;  { GetRecordCount }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 21/07/2010 12:02:37 - Initial code.<br />
-}
-procedure TDBIComponentDataConnection.SetItem(Index: Integer; const Item: TObject);
-const
-  ErrMsg = 'Not possible to set an item by index in the Components list';
-
-begin
-  Error(nil, 'SetItem', '250', ErrMsg, []);
-{##JVR
-  Assert(Assigned(FComponent));
-  Assert(Item is TComponent);
-
-  FComponent.InsertComponent(Item as TComponent);
-//}
-end;  { SetItem }
+end;  { Reset }
 
 
 // _____________________________________________________________________________
@@ -299,28 +259,19 @@ begin
     dbiBasePropChanged,
     Pointer(basepropDATASETCHANGED)
     );
-end;  { SetCollectrion }
+end;
 
 
 // _____________________________________________________________________________
 {**
-  Jvr - 21/07/2010 12:01:56 - Initial code.<br />
+  Jvr - 21/07/2010 12:02:37 - Initial code.<br />
 }
-procedure TDBIComponentDataConnection.Error(
-  E: Exception;
-  const Caller: String;
-  const Reference: String;
-  const ErrMsg: String;
-  Args: array of const
-  );
+procedure TDBIComponentDataConnection.SetItem(Index: Integer; const Item: TObject);
 begin
-{$IFDEF DebugExceptions}
-  raise EDBIException.CreateFmt(
-    UnitName + '::' + Self.ClassName + '::' + Caller + '::' + Reference + #13 + ErrMsg, Args);
-{$ELSE}
-  raise EDBIException.CreateFmt(ErrMsg, Args);
-{$ENDIF DebugExceptions}
-end;  { Error }
+  raise EDBIException.Create(Self, 'SetItem::255',
+    'Not possible to set an item by index in the Components list', []
+    );
+end;
 
 
 end.

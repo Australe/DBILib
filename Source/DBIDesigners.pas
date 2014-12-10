@@ -1,3 +1,29 @@
+// _____________________________________________________________________________
+{
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
+
+  This source is free software; you may redistribute, use and/or modify it under
+  the terms of the GNU Lesser General Public License as published by the
+  Free Software Foundation; either version 2 of the License, or (at your option)
+  any later version.
+  You may obtain a copy of the LGPL at http://www.gnu.org/copyleft/.
+
+  Software distributed under the License is distributed on an "AS IS" basis,
+  WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+  the specific language governing rights and limitations under the License.
+
+  Version: 2.00
+  Author: John Vander Reest
+
+  Change History:
+  ______________________________________________________________________________
+  REL | DATE/TIME           | WHO | DETAILS
+  1.0 | 09/10/2002 08:18:01 | Jvr | Initial Release
+  ______________________________________________________________________________
+}
+
+{#omcodecop off : jvr : dbilib}
+
 unit DBIDesigners;
 
 {$I DBICompilers.inc}
@@ -5,16 +31,22 @@ unit DBIDesigners;
 interface
 
 uses
-  Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, ExtCtrls, ComCtrls, Buttons, DB,
-  {$ifdef Delphi6} DesignIntf, {$else} DsgnIntf, {$endif} DSDesign;
+{$ifdef fpc}
+  ComponentEditors, FieldsEditor, ToolWin,
+{$else}
+  {$ifdef Delphi6} DesignIntf, {$else} DsgnIntf, {$endif} DSDesign,
+{$endif}
+  SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
+  StdCtrls, ExtCtrls, ComCtrls, Buttons, DB, DBIConst;
 
 type
-{$ifdef Delphi6}
-  IDBIDesigner = IDesigner;
+{$ifdef fpc}
+  TFieldsEditor = TDSFieldsEditorFrm;
 {$else}
-  IDBIDesigner = IFormDesigner;
+  IDBIDesigner = {$ifdef Delphi6} IDesigner; {$else} IFormDesigner; {$endif}
 {$endif}
+
+  EDBIPropertyEditorException = class(EDBICustomException);
 
 
 type
@@ -29,15 +61,22 @@ type
     CheckBoxCustomClass: TCheckBox;
     EditName: TEdit;
     CheckBoxAccessors: TCheckBox;
+    BevelIntro: TBevel;
+    BevelName: TBevel;
+    BevelClass: TBevel;
+    BevelAccessors: TBevel;
+    LabelIntro1: TLabel;
+    LabelIntro2: TLabel;
+    LabelName: TLabel;
+    LabelClass: TLabel;
+    LabelAccessors: TLabel;
     procedure GenerateExecute(Sender: TObject);
     procedure PageControlChange(Sender: TObject);
   protected
     function GetDataset: TDataset;
 
-    property Dataset: TDataset read GetDataset;
-
   public
-    { Public declarations }
+
   end;
 
 
@@ -62,6 +101,9 @@ type
 type
   TDBIFieldsEditor = class(TFieldsEditor)
   private
+{$ifdef fpc}
+    FDataset: TDataset;
+{$endif}
     FTabControl: TTabControl;
     FFieldsContainer: TDBIFieldsContainer;
     FODSEditor: TFormODSDesigner;
@@ -74,15 +116,18 @@ type
     function GetTabControl: TTabControl;
 
     procedure Loaded; override;
-
+{$ifdef fpc}
+    property FieldListBox: TListbox read FieldsListBox;
+{$endif}
     property FieldsContainer: TDBIFieldsContainer read GetFieldsContainer;
     property ODSEditor: TFormODSDesigner read GetODSEditor;
     property TabControl: TTabControl read GetTabControl;
 
   public
     destructor Destroy; override;
-    procedure Load;
+    procedure Display;
 
+{$ifndef fpc}
     class function CreateFieldsEditor(
       Designer: IDBIDesigner;
       ADataset: TDataset;
@@ -90,12 +135,17 @@ type
       var Shared: Boolean
       ): TDBIFieldsEditor;
 
-    class procedure ShowFieldsEditor(
+   class procedure ShowFieldsEditor(
       Designer: IDBIDesigner;
       ADataset: TDataset;
       DesignerClass: TDSDesignerClass
       );
+{$else}
+    class function CreateFieldsEditor(Editor: TFieldsComponentEditor): TDBIFieldsEditor;
+    class procedure ShowFieldsEditor(Editor: TFieldsComponentEditor);
 
+    property Dataset: TDataset read FDataset write FDataset;
+{$endif}
   end;
 
 
@@ -142,28 +192,23 @@ implementation
 uses
   TypInfo;
 
-  
+
 { TDBIBusinessObjectTemplate }
 
 const
   TDBITypeName: array[TFieldType] of String = (
-    'Unknown', 'String', 'Smallint', 'Integer', 'Word',
-    'Boolean', 'Double', 'Currency', 'TBCD', 'TDate', 'TTime', 'TDateTime',
-    'Bytes', 'VarBytes', 'AutoInc', 'Blob', 'String', 'Graphic', 'FmtMemo',
-    'ParadoxOle', 'DBaseOle', 'TypedBinary', 'Cursor', 'FixedChar', 'WideString',
-    'Largeint', 'ADT', 'Array', 'Reference', 'TDataSet', 'OraBlob', 'OraClob',
-    'Variant', 'Interface', 'IDispatch', 'Guid'
-{$ifdef Delphi2006}
-    ,
-    'TimeStamp', 'FMTBcd',
-    'FixedWideChar', 'WideMemo', 'OraTimeStamp', 'OraInterval'
-{$endif}
-
-{$ifdef DelphiXE3}
-    ,
-    'LongWord', 'Shortint', 'Byte', 'Extended', 'Connection', 'Params', 'Stream',
-    'TimeStampOffset', 'Object', 'Single'
-{$endif}
+    'Unknown', 'String', 'Smallint', 'Integer', 'Word', 'Boolean', // 0..5
+    'Double', 'Currency', 'TBCD', 'TDate', 'TTime', 'TDateTime', 'Bytes', // 6..12
+    'VarBytes', 'AutoInc', 'Blob', 'String', 'Graphic', 'FmtMemo', 'ParadoxOle', // 13..19
+    'DBaseOle', 'TypedBinary', 'Cursor', 'FixedChar', // 20..23
+    'WideString', 'Largeint', 'ADT', // 24..26
+    'Array', 'Reference', 'TDataSet', 'OraBlob', 'OraClob', 'Variant', 'Interface', // 27..33
+    'IDispatch', 'Guid' {$ifdef Delphi6} , 'TimeStamp', 'FMTBcd' {$endif} //36..37
+    {$ifdef DELPHI2006} , 'FixedWideChar', 'WideMemo' {$ifndef fpc}, 'OraTimeStamp', 'OraInterval' {$endif} {$endif} // 38..41
+    {$ifdef DelphiXE2} ,
+    'LongWord', 'Shortint', 'Byte', 'Extended', 'Connection', 'Params', 'Stream', //42..48
+    'TimeStampOffset', 'Object', 'Single' // 49..51
+    {$endif}
     );
 
     
@@ -225,7 +270,11 @@ end;
 
 procedure TDBIBusinessObjectPublisher.Publish(Output: TStrings);
 const
+{$ifdef fpc}
+  Prefix: array[Boolean] of String = ('T', 'TCustom');
+{$else}
   Prefix: array[Boolean] of String = ('Tom', 'TomCustom');
+{$endif}
   PropertyScope: array[Boolean] of String = ('published', 'protected');
   UseFieldDefs = True;
 
@@ -363,13 +412,14 @@ begin
   end;
 
   WriteFmt('initialization', []);
-  WriteFmt('  Classes.RegeisterClass(%s%s)', [Prefix[UseCustom], Name]);
+  WriteFmt('  Classes.RegisterClass(%s%s)', [Prefix[UseCustom], Name]);
   WriteFmt('', []);
   WriteFmt('end.', []);
 end;
 
 
-{ TDBIFieldsEditorEditor }
+{ TDBIFieldsEditor }
+{$ifndef fpc}
 
 class function TDBIFieldsEditor.CreateFieldsEditor(
   Designer: IDBIDesigner;
@@ -378,23 +428,50 @@ class function TDBIFieldsEditor.CreateFieldsEditor(
   var Shared: Boolean
   ): TDBIFieldsEditor;
 begin
-  Shared := True;
+  Shared := Assigned(ADataset.Designer);
 
-  if Assigned(ADataset.Designer) then begin
+  if Shared then begin
     Result := (ADataset.Designer as TDSDesigner).FieldsEditor as TDBIFieldsEditor;
   end
   else begin
     Result := TDBIFieldsEditor.Create(Application);
-    Result.Name := 'FieldsEditor';
     Result.DSDesignerClass := DesignerClass;
     Result.Designer := Designer;
     Result.Dataset := ADataset;
+  end;
+end;  { CreateFieldsEditor }
 
-    Shared := False;
+{$else}
+
+class function TDBIFieldsEditor.CreateFieldsEditor(
+  Editor: TFieldsComponentEditor
+  ): TDBIFieldsEditor;
+var
+  Instance: TObject;
+  ADataset: TDataset;
+
+begin
+  ADataset := Editor.GetComponent as TDataset;
+  if (ADataset = nil) then begin
+    raise Exception.Create('TFieldsComponentEditor.Edit LinkDataset=nil');
   end;
 
-  Result.Load;
+  Instance := FindEditorForm(ADataset);
+  if Assigned(Instance) then begin
+    Result := Instance as Self;
+  end
+  else begin
+    Result := Self.Create(Application, ADataset, Editor.Designer);
+    RegisterEditorForm(Result, ADataset);
+  end;
+
+  if Assigned(Result) then begin
+    Result.ComponentEditor := Editor;
+    Result.Dataset := ADataset;
+  end;
 end;  { CreateFieldsEditor }
+
+{$endif}
 
 
 destructor TDBIFieldsEditor.Destroy;
@@ -404,6 +481,15 @@ begin
   
   inherited Destroy;
 end;  { Destroy }
+
+
+procedure TDBIFieldsEditor.Display;
+begin
+  ODSEditor.PageControl.ActivePage := ODSEditor.TabSheetPreferences;
+  
+  Show;
+  BringToFront;
+end;
 
 
 function TDBIFieldsEditor.GetFieldsContainer: TDBIFieldsContainer;
@@ -448,12 +534,6 @@ begin
 end;  { GetTabControl }
 
 
-procedure TDBIFieldsEditor.Load;
-begin
-  ODSEditor.PageControl.ActivePage := ODSEditor.TabSheetPreferences;
-end;
-
-
 procedure TDBIFieldsEditor.Loaded;
 begin
   inherited Loaded;
@@ -463,21 +543,42 @@ begin
 end;  { Loaded }
 
 
+{$ifdef fpc}
+class procedure TDBIFieldsEditor.ShowFieldsEditor(
+  Editor: TFieldsComponentEditor
+  );
+var
+  FieldsEditor: TDBIFieldsEditor;
+
+{$else}
 class procedure TDBIFieldsEditor.ShowFieldsEditor(
   Designer: IDBIDesigner;
   ADataset: TDataset;
   DesignerClass: TDSDesignerClass
   );
 var
-  FieldsEditor: TFieldsEditor;
+  FieldsEditor: TDBIFieldsEditor;
   vShared: Boolean;
 
+{$endif}
 begin
-  FieldsEditor := TDBIFieldsEditor.CreateFieldsEditor(Designer, ADataSet, DesignerClass, vShared);
-  if Assigned(FieldsEditor) then begin
-    FieldsEditor.Show;
+  try
+{$ifdef fpc}
+    FieldsEditor := TDBIFieldsEditor.CreateFieldsEditor(Editor);
+{$else}
+    FieldsEditor := TDBIFieldsEditor.CreateFieldsEditor(Designer, ADataSet, DesignerClass, vShared);
+{$endif}
+    if Assigned(FieldsEditor) then begin
+      FieldsEditor.Display;
+    end;
+  except
+    on E: Exception do
+      raise EDBIPropertyEditorException.Create(
+        Self, E, 'ShowFieldsEditor::585', 'Fields Editor Failed!', []
+        );
   end;
 end;  { ShowFieldsEditor }
+
 
 
 procedure TDBIFieldsEditor.TabChanged(Sender: TObject);
@@ -501,9 +602,9 @@ end;
 
 { TFormODSDesigner }
 
-function TFormODSDesigner.GetDataset: TDataset;
+function TFormODSDesigner.{%H-}GetDataset: TDataset;
 var
-  FieldsEditor: TFieldsEditor;
+  FieldsEditor: TDBIFieldsEditor;
 
 begin
   FieldsEditor := Owner as TDBIFieldsEditor;
@@ -512,12 +613,14 @@ begin
   Result := FieldsEditor.Dataset;
 end;
 
+
 procedure TFormODSDesigner.PageControlChange(Sender: TObject);
 begin
   if (PageControl.ActivePage = TabSheetCode) then begin
     GenerateExecute(Sender);
   end;
 end;
+
 
 procedure TFormODSDesigner.GenerateExecute(Sender: TObject);
 var
@@ -550,7 +653,8 @@ begin
   inherited Destroy;
 end;
 
-function TDBIFieldsContainer.GetEditorControls: TList;
+
+function TDBIFieldsContainer.{%H-}GetEditorControls: TList;
 var
   FieldsEditor: TDBIFieldsEditor;
   Index: Integer;
@@ -559,7 +663,9 @@ begin
   FieldsEditor := Owner as TDBIFieldsEditor;
 
   if not Assigned(FEditorControls) then begin
+{$ifndef fpc}
     FieldsEditor.Panel1.Visible := False;
+{$endif}
     FEditorControls := TList.Create;
 
     for Index := 0 to FieldsEditor.ControlCount-1 do begin
@@ -571,18 +677,21 @@ begin
     FieldsEditor.BorderWidth := 5;
     FieldsEditor.Caption := 'ObjectListDataset Designer';
     FieldsEditor.Height := 400;
-    FieldsEditor.Width := 400;
-
+    FieldsEditor.Width := 420;
+{$ifdef fpc}
+    FieldsEditor.TBCommands.Color := clWindow;
+    FieldsEditor.TBCommands.EdgeBorders := [ebBottom, ebLeft, ebRight, ebTop];
+{$else}
     FieldsEditor.DBNavigator.Flat := True;
     FieldsEditor.DBNavigator.Align := alNone;
     FieldsEditor.DBNavigator.Width := 50;
-
+    FieldsEditor.FieldListbox.BorderStyle := bsNone;
+{$endif}
     FieldsEditor.FieldListbox.Font.Size := 10;
-    FieldsEditor.FieldListbox.BorderStyle := bsNone;;
   end;
+
   Result := FEditorControls;
 end;  { GetEditorControls }
-
 
 
 function TDBIFieldsContainer.GetVisible: Boolean;
@@ -607,5 +716,15 @@ begin
   end;
 end;
 
+
+initialization
+  Classes.RegisterClass(TBevel);
+  Classes.RegisterClass(TCheckbox);
+  Classes.RegisterClass(TEdit);
+  Classes.RegisterClass(TForm);
+  Classes.RegisterClass(TLabel);
+  Classes.RegisterClass(TPageControl);
+  Classes.RegisterClass(TSpeedButton);
+  Classes.RegisterClass(TTabSheet);
 
 end.

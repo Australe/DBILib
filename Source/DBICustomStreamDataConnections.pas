@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,9 +22,11 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : native api code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBICustomStreamDataConnections;
+
+{$I DBICompilers.inc}
 
 interface
 
@@ -77,7 +79,7 @@ type
     function AllocPhysicalBuffer: TDBIRecordBuffer; virtual; abstract;
     procedure FreePhysicalBuffer(var Buffer: TDBIRecordBuffer); virtual; abstract;
 
-    procedure CheckFileName(const Caller, Line: String);
+    procedure CheckFileName(const Context: String);
     function GetBlobFileName: TFileName; virtual; abstract;
     function GetRecordSize: Word; virtual; abstract;
     function HasBlobs: Boolean;
@@ -212,10 +214,10 @@ end;  { Cancel }
 {**
   Jvr - 01/11/2000 18:26:28 - Initial code.<br>
 }
-procedure TDBICustomStreamDataConnection.CheckFileName(const Caller, Line: String);
+procedure TDBICustomStreamDataConnection.CheckFileName(const Context: String);
 begin
   if (FileName = '') then begin
-    Error(nil, Caller, Line, 'Invalid FileName', []);
+    raise EDBIException.Create(Self, Context, 'Invalid FileName', []);
   end;
 end;  { CheckFileName }
 
@@ -469,24 +471,21 @@ procedure TDBICustomStreamDataConnection.SaveToFile(
   AFileName: String;
   const Format: TDBIDataFormat
   );
-const
-  Caller = 'SaveToFile';
-
 begin
   if (AFileName = '') then begin
     AFileName := FileName;
   end;
 
   if (AFileName = '') then begin
-    Error(nil, Caller, '1360', 'Invalid FileName', []);
+    raise EDBIException.Create(Self, 'SaveToFile::475', 'Invalid FileName', []);
   end;
 
   if not Active then begin
-    Error(nil, Caller, '1365', 'DataConnection not active', []);
+    raise EDBIException.Create(Self, 'SaveToFile::480', 'DataConnection not active', []);
   end;
 
-  if (Format = dfCDS) then begin
-    Error(nil, Caller, '1370', 'Saving to XML not Supported Yet!', []);
+  if (Format = dfXML) then begin
+    raise EDBIException.Create(Self, 'SaveToFile::485', 'Saving to XML not Supported Yet!', []);
   end;
 
   // Save to File
@@ -507,24 +506,21 @@ procedure TDBICustomStreamDataConnection.SaveToStream(
   Stream: TStream;
   const Format: TDBIDataFormat
   );
-const
-  Caller = 'SaveToStream';
-
 begin
   if (Stream = nil) then begin
-    Error(nil, Caller, '1395', 'Invalid Stream', []);
+    raise EDBIException.Create(Self, 'SaveToStream::505', 'Invalid Stream', []);
   end;
 
   if not Active then begin
-    Error(nil, Caller, '1400', 'DataConnection not active', []);
+    raise EDBIException.Create(Self, 'SaveToStream::510', 'DataConnection not active', []);
   end;
 
-  if (Format = dfCDS) then begin
-    Error(nil, Caller, '1405', 'Saving to XML not Supported Yet!', []);
+  if (Format = dfXML) then begin
+    raise EDBIException.Create(Self, 'SaveToStream::515', 'Saving to XML not Supported Yet!', []);
   end;
 
   if Assigned(FBlobConnection) then begin
-    Error(nil, Caller, '1410', 'Blobs not supported when saving to stream', []);
+    raise EDBIException.Create(Self, 'SaveToStream::520', 'Blobs not supported when saving to stream', []);
   end;
 
   // Save to Stream
@@ -532,7 +528,7 @@ begin
     (FDataStream as TMemoryStream).SaveToStream(Stream);
   end
   else begin
-    Error(nil, Caller, '1415',
+    raise EDBIException.Create(Self, 'SaveToStream::530',
       'Saving to stream for a "%s" not implemented yet!',
       [FDataStream.ClassName]
       );
@@ -582,9 +578,6 @@ end;  { SetActive }
 }
 procedure TDBICustomStreamDataConnection.SetDataStream(AStream: TStream);
 begin
-  Close;
-  Release;
-
   FileName := '';
   FDataStream := AStream;
 
@@ -602,7 +595,7 @@ var
 
 begin
   if (Position < 0) or (Position >= Integer(GetRecordCount(dsRecAll))) then begin
-    Error(nil, 'Update', '740', 'Record "%d" out of legal range', [Position]);
+    raise EDBIException.Create(Self, 'Update::600', 'Record "%d" out of legal range', [Position]);
   end;
 
   // If buffer is nil then we only want the status

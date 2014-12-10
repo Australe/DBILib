@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIMemoryStreams;
 
@@ -37,7 +37,7 @@ type
   TVirtualMemoryStreamMode = (vsUnknown, vsStandard, vsVirtual);
 
 type
-  TDBIMemoryMappedFile = class(TObject)
+  TDBIMemoryMappedFile = class(TPersistent)
   private
     FFileName: String;
     FMode: Word;

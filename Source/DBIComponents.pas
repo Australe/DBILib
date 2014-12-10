@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIComponents;
 
@@ -118,8 +118,9 @@ type
     property Text: String read GetText write SetText stored IsTextStored;
 
   public
+{$ifndef fpc}
     function ToString: String; {$ifdef DELPHIxe2}override;{$else}virtual;{$endif}
-
+{$endif}
     procedure BeginUpdate; virtual;
     procedure EndUpdate; virtual;
     function GetRootComponent: TComponent; override;
@@ -170,7 +171,10 @@ uses
 {$ifdef Delphi6}
   RtlConsts, Types,
 {$endif}
-  Consts, IniFiles, TypInfo, DBITypInfo, DBIUtils;
+{$ifndef fpc}
+  Consts,
+{$endif}
+  IniFiles, TypInfo, DBITypInfo, DBIUtils;
 
 
 { TDBIIniFile }
@@ -693,10 +697,12 @@ end;
 {**
   Jvr - 13/09/2011 19:16:00 - Initial code.<br />
 }
+{$ifndef fpc}
 function TDBICustomPersistenceAdapter.ToString: String;
 begin
   Result := (SaveToStream(Local(TStringStream.Create('')).Obj as TStream) as TStringStream).DataString;
 end;
+{$endif}
 
 
 

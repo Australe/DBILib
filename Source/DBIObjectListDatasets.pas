@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIObjectListDatasets;
 
@@ -31,7 +31,7 @@ unit DBIObjectListDatasets;
 interface
 
 uses
-  Classes, DB, Contnrs, DBIDataset, DBIConst, DBIIntfConsts, DBIStrings,
+  Classes, DB, Contnrs, DBIDataset, DBIConst, DBIIntfConsts,
   DBIInterfaces, DBICustomListDataConnections;
 
 type
@@ -88,11 +88,12 @@ type
   TDBICustomObjectListDataset = class(TDBICustomListDataset)
   private
     FDataSource: TDataSource;
+
     function GetDataSouce: TDataSource;
     procedure SetDataSource(const Value: TDataSource);
     
   protected
-    function GetData: TObject;
+    function GetDataObject: TObject;
     function GetMode: TDBIDataConnectionMode;
     function GetList: TObjectList;
     procedure SetMode(const Value: TDBIDataConnectionMode);
@@ -104,7 +105,7 @@ type
     constructor Create(AOwner: TComponent); override;
 
     property List: TObjectList read GetList write SetList;
-    property Data: TObject read GetData;
+    property DataObject: TObject read GetDataObject;
     property SourceDataSource: TDataSource read GetDataSouce write SetDataSource;
   end;  { TDBICustomObjectListDataset }
 
@@ -113,7 +114,9 @@ type
   published
     property Active;
     property ClassTypeName;
+{$ifndef fpc}
     property DataSetField;
+{$endif}
     property Mode;              //** cmData or cmFields
     property ObjectValidationProc;
     property ObjectView default True;
@@ -345,9 +348,6 @@ type
 implementation
 
 uses
-{$ifdef DELPHI6}
-  RtlConsts,
-{$endif}
 {$ifndef fpc}
   Consts,
 {$endif}
@@ -438,14 +438,11 @@ procedure TDBICustomListDataset.NotifyDataEvent(
   Event: TDBIDataChangeEventType;
   ItemIndex: Integer = -1
   );
-const
-  Caller = 'NotifyDataset';
-
 begin
   CheckActive;
 
   if (Event = dbiBasePropChanged) then begin
-    Error(nil, Caller, '685',
+    raise EDBIException.Create(Self, 'NotifyDataEvent::445',
       'Illegal Event parameter, valid Events are %s, %s & %s',
       ['dbiRecordInserted', 'dbiRecordModified', 'dbiRecordDeleted']
       );
@@ -553,7 +550,6 @@ begin
 
   // Raise exception if class is not registered (runtime only)
   if not (csDesigning in ComponentState) and (Value <> '') then begin
-//##JVR  if (Value <> '') then begin
     Classes.FindClass(Value);
   end;
 
@@ -646,7 +642,7 @@ end;  { Create }
 {**
   Jvr - 08/12/2004 15:42:16 - Initial code.<p>
 }
-function TDBICustomObjectListDataset.GetData: TObject;
+function TDBICustomObjectListDataset.GetDataObject: TObject;
 var
   RecInfo: PRecInfo;
 
@@ -655,7 +651,7 @@ begin
   if GetActiveRecInfo(RecInfo) then begin
     Result := RecInfo^.Data;
   end;
-end;  { GetData }
+end;  { GetDataObject }
 
 
 // _____________________________________________________________________________
@@ -698,7 +694,6 @@ procedure TDBICustomObjectListDataset.SetList(Value: TObjectList);
 begin
   (DataConnection as TDBIObjectListDataConnection).List := Value;
 
-//##JVR
   try
     if (State = dsBrowse) then begin
       ClearBuffers;

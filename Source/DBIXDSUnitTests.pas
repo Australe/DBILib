@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : native api code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIXDSUnitTests;
 
@@ -31,7 +31,7 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  DBIXbaseDatasets,
+  Classes, DBIXbaseDatasets,
 {$ifndef fpc}
   DBClient, DSIntf,
   {$ifdef omTesting}
@@ -70,6 +70,7 @@ type
     procedure Numeric;
     procedure OrdinalTypes;
     procedure SaveAsCDS;
+    procedure Streaming;
     procedure TestCloseAndDelete;
     procedure UpdateBooks;
   end;
@@ -86,7 +87,15 @@ uses
 {$ifdef DELPHI6}
   Variants,
 {$endif}
-  SysUtils, Windows, Forms, Dialogs, DB, DBIConst, DBIUtils, DBIObjectListDatasets;
+  SysUtils,
+  Windows,
+  Forms,
+  Dialogs,
+  DB,
+  DBIConst,
+  DBIUtils,
+  DBIComponents,
+  DBIObjectListDatasets;
 
 
 
@@ -104,7 +113,7 @@ const
   TableName = 'xCreateBooks.dbf';
 
 var
-  XDS: TXbaseDataset;
+  XDS: TDBIXbaseDataset;
 
 begin
   TBookData.DeleteTables(DataPath(TableName));
@@ -112,7 +121,7 @@ begin
   // Create a new Dataset
   TBookData.XDSCreateTable(DataPath(TableName));
 
-  XDS := TXbaseDataset.Create(nil);
+  XDS := TDBIXbaseDataset.Create(nil);
   try
     XDS.LoadFromFile(DataPath(TableName));
 
@@ -700,20 +709,18 @@ const
   TableName = 'xNullValues.dbf';
 
 var
-  XDS: TXBaseDataset;
-  FieldData: TOrdinalFields;
+  XDS: TDBIXBaseDataset;
 
 begin
-  FieldData := TOrdinalData.GetFields;
-
   TOrdinalData.XDSCreateTable(DataPath(TableName));
 
-  XDS := TXbaseDataset.Create(nil);
+  XDS := TDBIXbaseDataset.Create(nil);
   try
     XDS.FileName := DataPath(TableName);
     XDS.Open;
 
-    TOrdinalData.VerifyFields(XDS, @FieldData, Length(FieldData));
+//##JVR    TOrdinalData.VerifyFields(XDS, @FieldData, Length(FieldData));
+    TOrdinalData.CheckFields(XDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXbaseMapFieldTypes]);
     TOrdinalData.AssertValues(XDS);
 
     TOrdinalData.ClearValues(XDS);
@@ -724,12 +731,13 @@ begin
     XDS.Free;
   end;
 
-  XDS := TXbaseDataset.Create(nil);
+  XDS := TDBIXbaseDataset.Create(nil);
   try
     XDS.FileName := DataPath(TableName);
     XDS.Open;
 
     TOrdinalData.AssertBlanks(XDS);
+    TOrdinalData.CheckFields(XDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXbaseMapFieldTypes]);
 
     TOrdinalData.RefillValues(XDS);
     TOrdinalData.AssertValues(XDS);
@@ -842,7 +850,7 @@ begin
 
     TBookData.ReviseFields(XDS);
 
-    XDS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfCDS);
+    XDS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfXML);
     XDS.Close;
 
   finally
@@ -878,6 +886,70 @@ begin
 {$else}
   FormatSettings.ShortDateFormat := TDBIUnitTest.GetDateTimeFormat;
 {$endif}
+end;
+
+
+type
+  TXDSStreamingComponent = class(TDBIPersistenceAdapter)
+  private
+    FXDS: TDBIXbaseDataset;
+  public
+    function GetRootComponent: TComponent; override;
+  end;
+
+  function TXDSStreamingComponent.GetRootComponent: TComponent;
+  begin
+    if not Assigned(FXDS) then begin
+      FXDS := TDBIXbaseDataset.Create(Self);
+    end;
+    Result := FXDS;
+  end;
+
+procedure TDBIXDSUnitTests.Streaming;
+const
+  TableName = 'xStreamBooks.xml';
+
+var
+  Adapter: TXDSStreamingComponent;
+  XDS: TDBIXbaseDataset;
+
+begin
+  Adapter := TXDSStreamingComponent.Create(nil);
+  try
+    // Create a new Dataset
+    TBookData.XDSCreateTable(DataPath(TableName));
+
+    XDS := Adapter.RootComponent as TDBIXbaseDataset;
+    try
+      XDS.Name := ChangeFileExt(TableName, '');
+
+      // Verify Data was written correctly to file
+      XDS.LoadFromFile(DataPath(TableName));
+      TBookData.CheckFields(XDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXbaseMapFieldTypes]);
+      TBookData.AssertValues(XDS);
+
+      // Stream the Dataset out to File
+      Adapter.SaveToFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+      XDS.Close;
+    finally
+      XDS.Free;
+    end;
+  finally
+    FreeAndNil(Adapter);
+  end;
+
+  Adapter := TXDSStreamingComponent.Create(nil);
+  try
+    // Stream the Dataset Back in
+    Adapter.LoadFromFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+    XDS := Adapter.RootComponent as TDBIXbaseDataset;
+
+    TBookData.CheckFields(XDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXbaseMapFieldTypes]);
+//##JVR    TBookData.VerifyFields(XDS, @FieldData, Length(FieldData));
+    TBookData.AssertValues(XDS);
+  finally
+    FreeAndNil(Adapter);
+  end;
 end;
 
 
@@ -935,7 +1007,7 @@ const
   TableName = 'xUpdateBooks.dbf';
 
 var
-  XDS: TXbaseDataset;
+  XDS: TDBIXbaseDataset;
 
 begin
   TBookData.DeleteTables(DataPath(TableName));
@@ -943,7 +1015,7 @@ begin
   TBookData.XDSUpdateTable(DataPath(TableName));
 
   // Open Dataset
-  XDS := TXbaseDataset.Create(nil);
+  XDS := TDBIXbaseDataset.Create(nil);
   try
     XDS.LoadFromFile(DataPath(TableName));
 

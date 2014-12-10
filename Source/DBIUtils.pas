@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIUtils;
 
@@ -30,21 +30,53 @@ interface
 
 {$I DBICompilers.inc}
 
-{$ifdef fpc}
-  {$asmmode intel}
-  {$mode delphi}
-{$endif}
-
 uses
-  Windows, Messages, Classes, Forms, SysUtils, DB, DBIConst, DBIIntfConsts;
+{$ifndef fpc}
+  Forms,
+{$endif}  
+  Windows, Messages, Classes, SysUtils, DB, DBIConst, DBIIntfConsts;
+
+type
+  TDBIDebugKind = (
+    dkAudit,
+    dkBasic,
+    dkDebug,
+    dkDetailed,
+    dkError,
+    dkLogging,
+    dkMedium,
+    dkIntermediate,
+    dkAdvanced
+    );
+  TDBIDebugKinds = set of TDBIDebugKind;
 
 const
+  DBIDebugKinds = [];
+
+type
+
+  { TDBIDebugInfo }
+
+  TDBIDebugInfo = class(TPersistent)
+  public
+    class procedure Display(const Msg: String; Args: array of const);
+
+    class function GetAttributes(const Value: TFieldAttributes): String;
+    class function GetDataType(const Value: TFieldType): String;
+
+    class procedure LogMsg(const Kind: TDBIDebugKind; const Msg: String; Args: array of const);
+  end;
+
+
+const
+  BoolName: array[Boolean] of String = ('[_]', '[X]');
+
   OpenModes: array[Boolean] of Word = (fmOpenReadWrite, fmOpenRead);
   ShareModes: array[Boolean] of Word = (fmShareDenyNone, fmShareExclusive);
   CreateModes: array[Boolean] of Word = ($0000, fmCreate);
 
 type
-  TDBIFieldMap = class(TObject)
+  TDBIFieldMap = class(TPersistent)
   private
     FSourceFields: TList;
     FTargetFields: TList;
@@ -65,7 +97,7 @@ type
 
 
 type
-  TDBINullFlags = class(TObject)
+  TDBINullFlags = class(TPersistent)
   private
     FSize: Integer;
     FBits: Pointer;
@@ -84,6 +116,8 @@ type
     procedure SetIsNull(Index: Integer; Value: Boolean);
 
   public
+    procedure Log(const Index: Integer);
+
     procedure SetBuffer(const PBuffer: Pointer; const ASize: Integer);
     function SetNullIndex(
       Index: Integer;
@@ -100,6 +134,7 @@ type
   end;  { TDBINullFlags }
 
 
+{$ifndef fpc}
 type
   TDBICommandCallBack = procedure (const Parameters: String) of object;
 
@@ -127,6 +162,7 @@ type
 
     property OnCommand: TDBICommandCallBack read FOnCommand write FOnCommand;
   end;
+{$endif}
 
 
 type
@@ -159,6 +195,21 @@ type
 
 
 type
+  TDBIHostInfo = class(TPersistent)
+  public
+    class function GetComputerName: String;
+    class function GetLocalHostName: String;
+    class function GetUserName: WideString;
+
+  public
+    property ComputerName: String read GetComputerName;
+    property HostName: String read GetLocalHostName;
+    property UserName: WideString read GetUserName;
+
+  end;
+
+
+type
   ILocalInstance = interface(IUnknown)
     function Add(Instance: TObject): TObject;
   end;
@@ -174,17 +225,7 @@ function Local(Instance: TObject): TInstanceRecord;
 // General Helper routines
 procedure Check(Status: DBIResult);
 
-procedure DBIDebug(
-  Self: TObject;
-  const Caller: String;
-  const Msg: String;
-  Args: array of const
-  );
-
 function DBIForceDirectories(Dir: string): Boolean;
-function DBIGetComputerName: String;
-function DBIGetUserName: WideString;
-function DBILocalHostName: String;
 function DBIModuleName: String;
 function DBIModuleDateTime(AModuleName: String = ''): TDateTime;
 function DBIStrDateStampToDateTime(PDateStamp: PAnsiChar): TDateTime;
@@ -201,8 +242,6 @@ function FileIsReadOnly(const FileName: string): Boolean;
 function GetEnvironmentVariable(lpName: PChar; lpBuffer: PChar; nSize: Cardinal): LongWord;
 {$endif}
 
-procedure SaveToPsvStream(Stream: TStream; DataSet: TDataSet);
-procedure SaveToPsvFile(const AFileName: String; ADataSet: TDataSet);
 
 function SwapDWord(Value: LongWord): LongWord;
 function SwapDouble(Value: Double): Double;
@@ -219,7 +258,10 @@ var                           { Taken from Delphi System.pas }
 implementation
 
 uses
-  WinSock, Controls, Dialogs, Contnrs, Registry, DBIFileStreams, DBIXbaseConsts;
+{$ifndef fpc}
+  Controls,
+{$endif}
+  WinSock, TypInfo, Dialogs, Contnrs, Registry, DBIXbaseConsts;
 
 
 { ILocalInstance }
@@ -258,11 +300,80 @@ end;
 
 function Local(Instance: TObject): TInstanceRecord;
 begin
-  if not Assigned(Result.Guard) then begin
+  if not Assigned(Result{%H-}.Guard) then begin
     Result.Guard := TLocalInstance.Create;
   end;
   Result.Obj := Result.Guard.Add(Instance);
 end;
+
+
+
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 26/07/2005 17:20:20 - Initial code.<br>
+}
+class function TDBIHostInfo.GetComputerName: String;
+var
+  Buffer: array[0..255] of Char;
+  Size: LongWord;
+
+begin
+  Size := SizeOf(Buffer);
+{$Warnings Off}
+  Win32Check(Windows.GetComputerName(@Buffer[0], Size));
+{$Warnings On}
+  Result := string(Buffer);
+end;  { GetMachineName }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 04/09/2002 13:52:42.<P>
+}
+class function TDBIHostInfo.GetUserName: WideString;
+var
+  Buffer: array[0..255] of WideChar;
+  Size: LongWord;
+begin
+  Size := SizeOf(Buffer);
+{$ifdef Delphi6}
+  if not Windows.GetUserNameW(@Buffer[0], Size) then RaiseLastOSError;
+{$else}
+  Win32Check(Windows.GetUserNameW(@Buffer[0], Size));
+{$endif}
+  Result := WideString(Buffer);
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 23/01/2003 15:22:26.<P>
+}
+class function TDBIHostInfo.GetLocalHostName: String;
+{$ifdef fpc}
+begin
+  Result := 'localpc';
+end;
+{$else}
+var
+  HostName: AnsiString;
+
+begin
+  SetLength(HostName, 255);
+  if WinSock.GetHostName(PAnsiChar(HostName), Length(HostName)) <> 0 then begin
+{$ifdef DELPHI6}
+    RaiseLastOSError;
+{$else}
+    RaiseLastWin32Error;
+{$endif}
+  end;
+  SetLength(HostName, StrLen(PAnsiChar(HostName)));
+
+  Result := String(HostName);
+end;
+{$endif}
 
 
 
@@ -359,6 +470,9 @@ end;
 
 
 
+
+
+{$ifndef fpc}
 { TDBIApplication }
 
 const
@@ -562,6 +676,7 @@ begin
     Application.UnhookMainWindow(Instance.HookMessage);
   end;
 end;
+{$endif}
 
 
 
@@ -652,6 +767,15 @@ begin
 end;  { Error }
 
 
+procedure TDBINullFlags.Log(const Index: Integer);
+begin
+  TDBIDebugInfo.LogMsg(dkLogging,
+    ' --> TDBINullFlags::Log( IsNullable: %s  -  Size: %d  -  NullIndex[%d]: %d  -  IsNull[%d]: %s )',
+    [BoolName[IsNullable], Size, Index, NullIndex[Index], Index, BoolName[IsNull[Index]] ]
+    );
+end;
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 09/05/2001 16:35:14.<P>
@@ -685,6 +809,7 @@ function TDBINullFlags.GetIsNull(Index: Integer): Boolean;
 begin
   Result :=
     FIsNullable and
+    (FSize > 0) and
     (FNullFlagsIndex[Index] <> -1) and
     GetBit(FNullFlagsIndex[Index]);
 end;  { GetIndexValue }
@@ -795,30 +920,6 @@ begin
 end;  { Check }
 
 
-// _____________________________________________________________________________
-{**
-  Jvr - 21/02/2013 14:11:09 - Moved from DBIConst<P>
-}
-procedure DBIDebug(
-  Self: TObject;
-  const Caller: String;
-  const Msg: String;
-  Args: array of const
-  );
-{$ifdef UseDebugInfo}
-var
-  DebugInfo: String;
-
-begin
-  DebugInfo := Format(Self.ClassName + '::' + Caller + '::' + Msg, Args);
-
-  Windows.OutputDebugString(PChar(DebugInfo));
-{$else}
-begin
-{$endif}
-end;
-
-
 
 // _____________________________________________________________________________
 {**
@@ -854,72 +955,6 @@ begin
     or (ExtractFilePath(Dir) = Dir) then Exit; // avoid 'xyz:\' problem.
 
   Result := DBIForceDirectories(ExtractFilePath(Dir)) and CreateDir(Dir);
-end;
-{$endif}
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 26/07/2005 17:20:20 - Initial code.<br>
-}
-function DBIGetComputerName: String;
-var
-  Buffer: array[0..255] of Char;
-  Size: LongWord;
-
-begin
-  Size := SizeOf(Buffer);
-{$Warnings Off}
-  Win32Check(Windows.GetComputerName(@Buffer[0], Size));
-{$Warnings On}
-  Result := string(Buffer);
-end;  { GetMachineName }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 04/09/2002 13:52:42.<P>
-}
-function DBIGetUserName: WideString;
-var
-  Buffer: array[0..255] of WideChar;
-  Size: LongWord;
-begin
-  Size := SizeOf(Buffer);
-{$ifdef Delphi6}
-  if not Windows.GetUserNameW(@Buffer[0], Size) then RaiseLastOSError;
-{$else}
-  Win32Check(Windows.GetUserNameW(@Buffer[0], Size));
-{$endif}
-  Result := WideString(Buffer);
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 23/01/2003 15:22:26.<P>
-}
-function DBILocalHostName: String;
-{$ifdef fpc}
-begin
-  Result := 'localpc';
-end;
-{$else}
-var
-  HostName: AnsiString;
-
-begin
-  SetLength(HostName, 255);
-  if WinSock.GetHostName(PAnsiChar(HostName), Length(HostName)) <> 0 then begin
-{$ifdef DELPHI6}
-    RaiseLastOSError;
-{$else}
-    RaiseLastWin32Error;
-{$endif}
-  end;
-  SetLength(HostName, StrLen(PAnsiChar(HostName)));
-
-  Result := String(HostName);
 end;
 {$endif}
 
@@ -1079,7 +1114,7 @@ begin
       DBIModuleName +
       FormatDateTime(TempFormat, Now) +
       IntToStr(Windows.GetCurrentProcessId) +
-      {$ifdef DELPHI6} '_' + DBILocalHostName + PathDelim {$else} '\' {$endif};
+      {$ifdef DELPHI6} '_' + TDBIHostInfo.GetLocalHostName + PathDelim {$else} '\' {$endif};
 
     Assert(DBIForceDirectories(_TempFolder), 'Failed to create TempFolder');
   end;
@@ -1087,32 +1122,13 @@ begin
 end;  { DBITempFolder }
 
 
-// _____________________________________________________________________________
-{**
-  Jvr - 09/02/2001 15:46:30.<P>
-}
-procedure Error(
-  E: Exception;
-  const Caller: String;
-  const Reference: String;
-  const ErrMsg: String;
-  Args: array of const
-  );
-begin
-{$IFDEF DebugExceptions}
-  raise EDBIException.CreateFmt(
-    'DBIUtils::' + Caller + '::' + Reference + #13 + ErrMsg, Args);
-{$ELSE}
-  raise EDBIException.CreateFmt(ErrMsg, Args);
-{$ENDIF DebugExceptions}
-end;  { Error }
-
 {$ifndef DELPHI6}
 function FileIsReadOnly(const FileName: string): Boolean;
 begin
   Result := (GetFileAttributes(PAnsiChar(FileName)) and FILE_ATTRIBUTE_READONLY) <> 0;
 end;
 {$endif}
+
 
 {$ifdef fpc}
 // _____________________________________________________________________________
@@ -1126,6 +1142,7 @@ begin
   raise Exception.CreateFmt('DBIUtils::GetEnvironmentVariable() Not implemented for FPC', []);
 end;
 {$endif}
+
 
 // _____________________________________________________________________________
 {**
@@ -1217,96 +1234,58 @@ begin
 end;  { SystemErrorMessageParam }
 
 
-// _____________________________________________________________________________
-{**
-  Convert a dataset to a PSV style CSV stream.
 
-  Jvr - 20/05/2002 16:45:09.<P>
-}
-procedure SaveToPsvStream(Stream: TStream; DataSet: TDataSet);
+
+
+{ TDBIDebugInfo }
+
+class procedure TDBIDebugInfo.Display(const Msg: String; Args: array of const);
+begin
+{$ifdef DebugMode}
+  ShowMessage(Format(Msg, Args));
+{$else}
+  Windows.OutputDebugString(PChar(Format(Msg, Args)));
+{$endif}
+end;
+
+
+class function TDBIDebugInfo.GetAttributes(const Value: TFieldAttributes): String;
 var
-  Index: Integer;
-
-  procedure Write(Str: String);
-  begin
-    if Str <> '' then begin
-      Stream.Write(Str[1], length(Str));
-    end;
-  end;
+  Index: TFieldAttribute;
 
 begin
-  if not Dataset.Active then begin
-    Dataset.Open;
-  end
-  else begin
-    Dataset.First;
-  end;
+  Result := '';
 
-  Dataset.DisableControls;
-  try
-    DataSet.First;
-    Write('#');
-    for Index := 0 to DataSet.Fields.Count - 1 do begin
-      if (DataSet.Fields[Index].FieldName <> FieldName_NullFlags) then begin
-        if Index <> 0 then begin
-          Write('|');
-        end;
-        Write(DataSet.Fields[Index].FieldName);
-      end;
+  for Index := Low(TFieldAttribute) to High(TFieldAttribute) do begin
+    if Index in Value then begin
+      Result := Result + ' | ' + TypInfo.GetEnumName(TypeInfo(TFieldAttribute), Ord(Index));
     end;
-    Write(sLineBreak);
-
-    while not DataSet.EOF do begin
-      for Index := 0 to DataSet.Fields.Count - 1 do begin
-        if (DataSet.Fields[Index].FieldName <> FieldName_NullFlags) then begin
-          if Index <> 0 then begin
-            Write('|');
-          end;
-          Write(DataSet.Fields[Index].AsString);
-        end;
-      end;
-      Write(sLineBreak);
-      DataSet.Next;
-    end;
-  finally
-    Dataset.EnableControls;
   end;
-end;  { SaveAsPsvStream }
+end;
 
 
-// _____________________________________________________________________________
-{**
-  Jvr - 27/02/2001 18:12:53.<P>
-}
-procedure SaveToPsvFile(const AFileName: String; ADataSet: TDataSet);
-const
-  Caller = 'SaveToPsvFile';
-
-var
-  LocalStream: TStream;
-
+class function TDBIDebugInfo.GetDataType(const Value: TFieldType): String;
 begin
-  try
-    LocalStream := TDBIFileStream.Create(
-      AFileName,
-      fmCreate,
-      DBIPageBufferSize,
-      [{No Options}]
-      );
-    try
-      SaveToPsvStream(LocalStream, ADataSet);
-    finally
-      LocalStream.Free;
-    end;
-  except
-    Error(nil, Caller, '685', 'Failed to save dataset as Psv', []);
+  Result := TypInfo.GetEnumName(TypeInfo(TFieldType), Ord(Value));
+end;
+
+
+class procedure TDBIDebugInfo.LogMsg(const Kind: TDBIDebugKind; const Msg: String; Args: array of const);
+begin
+  if (Kind in DBIDebugKinds) then begin
+    Windows.OutputDebugString(PChar(Format(Msg, Args)));
   end;
-end;  { SaveAsPsvFile }
+end;
 
 
+
+
+
+{$ifndef fpc}
 initialization
 
 finalization
   TDBIApplication.UnhookApplication;
+{$endif}
 
 end.

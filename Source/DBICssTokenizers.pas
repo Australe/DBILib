@@ -22,9 +22,11 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBICssTokenizers;
+
+{$I DBICompilers.inc}
 
 interface
 

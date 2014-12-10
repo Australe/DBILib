@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,18 +22,13 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIStrings;
 
 interface
 
 {$I DBICompilers.inc}
-
-{$ifdef fpc}
-  {$asmmode intel}
-  {$mode delphi}
-{$endif}
 
 uses
   Classes, SysUtils;
@@ -325,6 +320,7 @@ end;
 
 
 class function TDBIAnsi.Pos(const Substr, S: AnsiString): Integer;
+{$ifndef fpc}
 var
   P: PAnsiChar;
 begin
@@ -333,7 +329,11 @@ begin
   if P <> nil then
     Result := Integer(P) - Integer(PAnsiChar(S)) + 1;
 end;
-
+{$else}
+begin
+  Result := System.Pos(Substr, S);
+end;
+{$endif}
 
 class function TDBIAnsi.LowerCase(const S: AnsiString): AnsiString;
 var
@@ -945,14 +945,15 @@ begin
 end;
 
 procedure TDBIStrings.Error(const Msg: String; Data: Integer);
-
+{$ifndef fpc}
   function ReturnAddr: Pointer;
   asm
-          MOV     EAX,[EBP+4]
+    mov eax,[ebp+4]
   end;
+{$endif}
 
 begin
-  raise EStringListError.CreateFmt(Msg, [Data]) at ReturnAddr;
+  raise EStringListError.CreateFmt(Msg, [Data]) {$ifndef fpc} at ReturnAddr {$endif} ;
 end;
 
 procedure TDBIStrings.Error(Msg: PResStringRec; Data: Integer);

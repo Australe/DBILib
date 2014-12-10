@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,13 +22,16 @@
   ______________________________________________________________________________
 }
 
+{#omcodecop off : jvr : dbilib}
+
 unit DBIXbaseBlobConnections;
+
+{$I DBICompilers.inc}
 
 interface
 
 uses
-  Classes, SysUtils, Windows, DB, DBIConst, DBIXBaseConsts, DBIFileStreams,
-  DBIInterfaces;
+  Classes, DB, DBIConst, DBIUtils, DBIXBaseConsts, DBIFileStreams;
 
 const
   DefaultFoxproBlobFileFirstBlock = 8;   //* Blocks
@@ -51,7 +54,7 @@ type
   //*  dBase-III Header Record              <pre>
   TDBIDBase3BlobHeader = packed record
                                        //*  Bytes  Size  | Xbase-Version
-    NextFreeBlock: DWord;              //*  00- 03 [04]  | D3
+    NextFreeBlock: LongWord;           //*  00- 03 [04]  | D3
     Reserved1: array[4..15] of Byte;   //*  04- 15 [12]  | D3
     Version: Byte;                     //*  16     [01]  | D3 ==> 03h
     Reserved2: array[17..511] of Byte; //*  17-511 [495] | D3
@@ -61,8 +64,8 @@ type
   {**  DBase IV Header Record  *}
   PDBIDBase4BlobHeader = ^TDBIDBase4BlobHeader;
   TDBIDBase4BlobHeader = packed record
-    NextFreeBlock: DWord;              //*   0-  3 [04]  | D4
-    BlockSize: DWord;                  //*   4-  7 [04]  | D4
+    NextFreeBlock: LongWord;           //*   0-  3 [04]  | D4
+    BlockSize: LongWord;               //*   4-  7 [04]  | D4
     szDBFName: array[8..15] of Char;   //*   8- 15 [12]  | D4
     Reserved1: Byte;                   //*  16     [01]  | D4 ==> 00h
     Reserved2: array[17..19] of Byte;  //*  17- 19 [03]  | D4
@@ -74,8 +77,8 @@ type
   {**  DBase IV BlobField Record  *}
   PDBIDBase4BlobField = ^TDBIDBase4BlobField;
   TDBIDBase4BlobField = packed record  //*                       Used block Sign
-    NextFreeBlock: DWORD;              //*   0-  3 [04] | D4 ==> FFh FFh 08h 00h
-    Size: DWord;                       //*   4-  7 [02] | D4
+    NextFreeBlock: LongWord;           //*   0-  3 [04] | D4 ==> FFh FFh 08h 00h
+    Size: LongWord;                    //*   4-  7 [02] | D4
     Data: array[0..MaxInt-9] of Byte;  //*   8-  n [02] | D4 ==> 2*1Ah EndOfField
   end;  { TDBIDBase4BlobField }
 
@@ -84,7 +87,7 @@ type
   {**  FoxPro Header Record  **}
   PDBIFoxProBlobHeader = ^TDBIFoxProBlobHeader;
   TDBIFoxProBlobHeader = packed record
-    NextFreeBlock: DWord;              //*   0-  3 [04]  | FB  FP
+    NextFreeBlock: LongWord;           //*   0-  3 [04]  | FB  FP
     Reserved1: Word;                   //*   4-  5 [02]  | FB  FP
     BlockSize: Word;                   //*   6-  7 [02]  | FB  FP
     Reserved2: array[8..511] of Byte   //*   8-511 [504] | FB  FP
@@ -93,21 +96,21 @@ type
   {**  FoxPro Infomation Record - used  **}
   PDBIFoxProBlobInfo = ^TDBIFoxProBlobInfo;
   TDBIFoxProBlobInfo = packed record
-    Kind: DWord;                       //*   0-  3 [04] | FB  FP
-    Size: DWord;                       //*   4-  7 [02] | FB  FP
+    Kind: LongWord;                    //*   0-  3 [04] | FB  FP
+    Size: LongWord;                    //*   4-  7 [02] | FB  FP
   end;  { TFoxProDBIBlobInfo }
 
   {**  FoxPro BlobField Record  **}
   PDBIFoxProBlobField = ^TDBIFoxProBlobField;
   TDBIFoxProBlobField = packed record
-    Kind: DWord;                       //*   0-  3 [04] | FB  FP
-    Size: DWord;                       //*   4-  7 [02] | FB  FP
+    Kind: LongWord;                    //*   0-  3 [04] | FB  FP
+    Size: LongWord;                    //*   4-  7 [02] | FB  FP
     Data: array[0..MaxInt-9] of Byte;  //*   8-  n [02] | FB  FP (n = Size)
   end;  { TFoxProDBIBlobField }
 
 
 type
-  TDBIXbaseCustomBlobConnection = class(TDBICustomObject)
+  TDBIXbaseCustomBlobConnection = class(TPersistent)
   private
     FReadonly: Boolean;
     FExclusive: Boolean;
@@ -126,8 +129,8 @@ type
     function GetHeaderBuf: Pointer; virtual;
     function GetHeaderSize: Integer; virtual; abstract;
 
-    function GetNextFreeBlock: DWord; virtual; abstract;
-    procedure SetNextFreeBlock(const Value: DWord); virtual; abstract;
+    function GetNextFreeBlock: LongWord; virtual; abstract;
+    procedure SetNextFreeBlock(const Value: LongWord); virtual; abstract;
 
     function GetBlockSize: Word; virtual; abstract;
     procedure SetBlockSize(const Value: Word); virtual; abstract;
@@ -155,25 +158,25 @@ type
 
     // Blob methods
     procedure GetBlob(
-      const Position: DWord;
-      const OffSet: DWord;
+      const Position: LongWord;
+      const OffSet: LongWord;
       PData: Pointer;
-      out Size: DWord
+      out Size: LongWord
       ); virtual; abstract;
 
     function PutBlob(
-      const Position: DWord;
-      const OffSet: DWord;
+      const Position: LongWord;
+      const OffSet: LongWord;
       PData: Pointer;
-      const Size: DWord
-      ): DWord; virtual; abstract;
+      const Size: LongWord
+      ): LongWord; virtual; abstract;
 
     function WriteBlob(
-      const Position: DWord;
-      const BlockCount: DWord;
-      const Size: DWord;
+      const Position: LongWord;
+      const BlockCount: LongWord;
+      const Size: LongWord;
       PData: Pointer
-      ): DWord; virtual; abstract;
+      ): LongWord; virtual; abstract;
 
     property Attributes: TFieldAttributes read GetAttributes;
     property Exclusive: Boolean read FExclusive write FExclusive;
@@ -191,8 +194,8 @@ type
     function GetHeaderSize: Integer; override;
     function GetBlobSize(const Position: LongWord): LongWord;
 
-    function GetNextFreeBlock: DWord; override;
-    procedure SetNextFreeBlock(const Value: DWord); override;
+    function GetNextFreeBlock: LongWord; override;
+    procedure SetNextFreeBlock(const Value: LongWord); override;
 
     function GetBlockSize: Word; override;
     procedure SetBlockSize(const Value: Word); override;
@@ -200,25 +203,25 @@ type
   public
     // Blob methods
     procedure GetBlob(
-      const Position: DWord;
-      const OffSet: DWord;
+      const Position: LongWord;
+      const OffSet: LongWord;
       PData: Pointer;
-      out Size: DWord
+      out Size: LongWord
       ); override;
 
     function PutBlob(
-      const Position: DWord;
-      const OffSet: DWord;
+      const Position: LongWord;
+      const OffSet: LongWord;
       PData: Pointer;
-      const Size: DWord
-      ): DWord; override;
+      const Size: LongWord
+      ): LongWord; override;
 
     function WriteBlob(
-      const Position: DWord;
-      const BlockCount: DWord;
-      const Size: DWord;
+      const Position: LongWord;
+      const BlockCount: LongWord;
+      const Size: LongWord;
       PData: Pointer
-      ): DWord; override;
+      ): LongWord; override;
 
   end;  { TDBIDbaseBlobConnection }
 
@@ -229,8 +232,8 @@ type
     procedure DefaultMetaData; override;
     function GetHeaderSize: Integer; override;
 
-    function GetNextFreeBlock: DWord; override;
-    procedure SetNextFreeBlock(const Value: DWord); override;
+    function GetNextFreeBlock: LongWord; override;
+    procedure SetNextFreeBlock(const Value: LongWord); override;
 
     function GetBlockSize: Word; override;
     procedure SetBlockSize(const Value: Word); override;
@@ -238,25 +241,25 @@ type
   public
     // Blob methods
     procedure GetBlob(
-      const Position: DWord;
-      const OffSet: DWord;
+      const Position: LongWord;
+      const OffSet: LongWord;
       PData: Pointer;
-      out Size: DWord
+      out Size: LongWord
       ); override;
 
     function PutBlob(
-      const Position: DWord;
-      const OffSet: DWord;
+      const Position: LongWord;
+      const OffSet: LongWord;
       PData: Pointer;
-      const Size: DWord
-      ): DWord; override;
+      const Size: LongWord
+      ): LongWord; override;
 
     function WriteBlob(
-      const Position: DWord;
-      const BlockCount: DWord;
-      const Size: DWord;
+      const Position: LongWord;
+      const BlockCount: LongWord;
+      const Size: LongWord;
       PData: Pointer
-      ): DWord; override;
+      ): LongWord; override;
 
   end;  { TDBIFoxProBlobConnection }
 
@@ -265,7 +268,7 @@ type
 implementation
 
 uses
-  Math, DBIUtils;
+  SysUtils, Math;
 
 
 { TDBIDbaseBlobConnection }
@@ -326,14 +329,11 @@ end;  { GetBlobSize }
   Jvr - 09/02/2001 17:23:21.<P>
 }
 procedure TDBIDbaseBlobConnection.GetBlob(
-  const Position: DWord;
-  const OffSet: DWord;
+  const Position: LongWord;
+  const OffSet: LongWord;
   PData: Pointer;
-  out Size: DWord
+  out Size: LongWord
   );
-const
-  Caller = 'GetBlob';
-
 var
   BlobInfo: TDBIFoxProBlobInfo;
 
@@ -358,7 +358,7 @@ begin
 
   except
     on E: Exception do
-      Error(E, Caller, '405', 'Unable to Get Blob Data', []);
+      raise EDBIException.Create(Self, E, 'GetBlob::360', 'Unable to Get Blob Data', []);
   end;
 end;  { GetBlob }
 
@@ -370,14 +370,11 @@ end;  { GetBlob }
   If PData is nil then clear the Block(s) specified at 'Position' specified
 }
 function TDBIDbaseBlobConnection.WriteBlob(
-  const Position: DWord;
-  const BlockCount: DWord;
-  const Size: DWord;
+  const Position: LongWord;
+  const BlockCount: LongWord;
+  const Size: LongWord;
   PData: Pointer
-  ): DWord;
-const
-  Caller = 'WriteBlob';
-
+  ): LongWord;
 var
   PBlob: PDBIFoxProBlobField;
 
@@ -415,7 +412,7 @@ begin
     end;
   except
     on E: Exception do
-      Error(E, Caller, '455',
+      raise EDBIException.Create(Self, E, 'WriteBlob::415',
         'Unable to write "%d" bytes ("%d blocks) at position "%d" to file "%s"',
         [Size, BlockCount, Position, FFileName]
         );
@@ -433,21 +430,17 @@ end;  { WriteBlob }
   @Return    The new offset value for the just written Blob
 }
 function TDBIDbaseBlobConnection.PutBlob(
-  const Position: DWord;
-  const OffSet: DWord;
+  const Position: LongWord;
+  const OffSet: LongWord;
   PData: Pointer;
-  const Size: DWord
-  ): DWord;
-const
-  Caller = 'PutBlob';
-
+  const Size: LongWord
+  ): LongWord;
 var
   BlobInfo: TDBIFoxProBlobInfo;
   OldBlockCount: LongWord;
   NewBlockCount: LongWord;
 
 begin
-  Result := 0;        // Memo is Blank
   OldBlockCount := 0; // No Data;
 
   Assert(Assigned(FBlobStream));
@@ -476,7 +469,7 @@ begin
 
       // Clear the old data first, only if it's NOT a new Blob
       if (Position <> 0) then begin
-        Result := WriteBlob(Position, OldBlockCount, 0, nil);
+        {Result := }WriteBlob(Position, OldBlockCount, 0, nil);
       end;
 
       // Now write the new data
@@ -507,7 +500,7 @@ begin
 
   except
     on E: Exception do
-      Error(E, Caller, '450', 'Unable to write Blob Data', []);
+      raise EDBIException.Create(Self, E, 'PutBlob::500', 'Unable to write Blob Data', []);
   end;
 end;  { PutBlob }
 
@@ -539,7 +532,7 @@ end;  { GetHeaderSize }
 {**
   Jvr - 29/12/2004 18:42:28 - Initial code.<br>
 }
-function TDBIDbaseBlobConnection.GetNextFreeBlock: DWord;
+function TDBIDbaseBlobConnection.GetNextFreeBlock: LongWord;
 begin
   Result := PDBIDbase3BlobHeader(PHeader)^.NextFreeBlock;
 end;  { GetNextFreeBlock }
@@ -549,7 +542,7 @@ end;  { GetNextFreeBlock }
 {**
   Jvr - 29/12/2004 18:44:13 - Initial code.<br>
 }
-procedure TDBIDbaseBlobConnection.SetNextFreeBlock(const Value: DWord);
+procedure TDBIDbaseBlobConnection.SetNextFreeBlock(const Value: LongWord);
 begin
   PDBIDbase3BlobHeader(PHeader)^.NextFreeBlock := Value;
 end;  { SetNextFreeBlock }
@@ -588,14 +581,11 @@ end;  { SetBlockSize }
   Jvr - 09/02/2001 17:23:21.<P>
 }
 procedure TDBIFoxProBlobConnection.GetBlob(
-  const Position: DWord;
-  const OffSet: DWord;
+  const Position: LongWord;
+  const OffSet: LongWord;
   PData: Pointer;
-  out Size: DWord
+  out Size: LongWord
   );
-const
-  Caller = 'GetBlob';
-
 var
   BlobInfo: TDBIFoxProBlobInfo;
 
@@ -604,7 +594,7 @@ begin
   try
     // Get the BlobSize
     FBlobStream.Seek(BlockSize * Position, soFromBeginning);
-    FBlobStream.Read(BlobInfo, SizeOf(BlobInfo));
+    FBlobStream.Read(BlobInfo{%H-}, SizeOf(BlobInfo));
     BlobInfo.Size := SwapDWord(BlobInfo.Size);
 
     // If PData parameter is nil, then only return the Size value
@@ -622,7 +612,7 @@ begin
 
   except
     on E: Exception do
-      Error(E, Caller, '360', 'Unable to Get Blob Data', []);
+      raise EDBIException.Create(Self, E, 'GetBlob::615', 'Unable to Get Blob Data', []);
   end;  { try..except }
 end;  { GetBlob }
 
@@ -634,13 +624,12 @@ end;  { GetBlob }
   If PData is nil then clear the Block(s) specified at 'Position' specified
 }
 function TDBIFoxProBlobConnection.WriteBlob(
-  const Position: DWord;
-  const BlockCount: DWord;
-  const Size: DWord;
+  const Position: LongWord;
+  const BlockCount: LongWord;
+  const Size: LongWord;
   PData: Pointer
-  ): DWord;
+  ): LongWord;
 const
-  Caller = 'WriteBlob';
   // TFoxProDBIBlobKind = (FoxProBlobImage, FoxProBlobMemo, FoxProBlobObject);
   FoxProBlobMemo = 1;
 
@@ -676,7 +665,7 @@ begin
     end;
   except
     on E: Exception do
-      Error(E, Caller, '370',
+      raise EDBIException.Create(Self, E, 'WriteBlob::665',
         'Unable to write "%d" bytes ("%d blocks) at position "%d" to file "%s"',
         [Size, BlockCount, Position, FFileName]
         );
@@ -694,21 +683,17 @@ end;  { WriteBlob }
   @Return    The new offset value for the just written Blob
 }
 function TDBIFoxProBlobConnection.PutBlob(
-  const Position: DWord;
-  const OffSet: DWord;
+  const Position: LongWord;
+  const OffSet: LongWord;
   PData: Pointer;
-  const Size: DWord
-  ): DWord;
-const
-  Caller = 'PutBlob';
-
+  const Size: LongWord
+  ): LongWord;
 var
   BlobInfo: TDBIFoxProBlobInfo;
   OldBlockCount: LongWord;
   NewBlockCount: LongWord;
 
 begin
-  Result := 0;        // Memo is Blank
   OldBlockCount := 0; // No Data
 
   Assert(Assigned(FBlobStream));
@@ -717,7 +702,7 @@ begin
     if (Position <> 0) then begin
       // Get Current Blob Metadata
       FBlobStream.Seek(BlockSize * Position, soFromBeginning);
-      FBlobStream.Read(BlobInfo, SizeOf(BlobInfo));
+      FBlobStream.Read(BlobInfo{%H-}, SizeOf(BlobInfo));
       BlobInfo.Kind := SwapDWord(BlobInfo.Kind);
       BlobInfo.Size := SwapDWord(BlobInfo.Size);
 
@@ -741,7 +726,7 @@ begin
 
       // Clear the old data first, only if it's NOT a new Blob
       if (Position <> 0) then begin
-        Result := WriteBlob(Position, OldBlockCount, 0, nil);
+        {Result := }WriteBlob(Position, OldBlockCount, 0, nil);
       end;
 
       // Now write the new data
@@ -772,7 +757,7 @@ begin
 
   except
     on E: Exception do
-      Error(E, Caller, '450', 'Unable to write Blob Data', []);
+      raise EDBIException.Create(Self, E, 'PutBlob::760', 'Unable to write Blob Data', []);
   end;  { try..except }
 end;  { PutBlob }
 
@@ -809,7 +794,7 @@ begin
   Result := SizeOf(TDBIFoxProBlobHeader);
 end;
 
-function TDBIFoxProBlobConnection.GetNextFreeBlock: DWord;
+function TDBIFoxProBlobConnection.GetNextFreeBlock: LongWord;
 begin
   Result := SwapDWord(PDBIFoxProBlobHeader(GetHeaderBuf)^.NextFreeBlock);
 end;
@@ -819,7 +804,7 @@ begin
   PDBIFoxProBlobHeader(GetHeaderBuf)^.BlockSize := Swap(Value);
 end;
 
-procedure TDBIFoxProBlobConnection.SetNextFreeBlock(const Value: DWord);
+procedure TDBIFoxProBlobConnection.SetNextFreeBlock(const Value: LongWord);
 begin
   PDBIFoxProBlobHeader(GetHeaderBuf)^.NextFreeBlock := SwapDWord(Value);
 end;
@@ -841,7 +826,7 @@ end;
 }
 function TDBIXbaseCustomBlobConnection.GetAttributes: TFieldAttributes;
 const
-  ReadOnlyAttrMap: array[Boolean] of TFieldAttributes = ([], [faReadOnly]);
+  ReadOnlyAttrMap: array[Boolean] of TFieldAttributes = ([], [db.faReadOnly]);
 
 begin
   Assert(Assigned(Self));
@@ -887,9 +872,6 @@ end;  { DefaultMetaData }
   Jvr - 09/02/2001 16:37:49.<P>
 }
 procedure TDBIXbaseCustomBlobConnection.ReadMetaData;
-const
-  Caller = 'ReadMetaData';
-
 begin
   Assert(Assigned(FBlobStream));
 
@@ -898,7 +880,7 @@ begin
     FBlobStream.Read(GetHeaderBuf^, GetHeaderSize);
   except
     on E: Exception do
-      Error(E, Caller, '400', 'Unable to Read Blob MetaData', []);
+      raise EDBIException.Create(Self, E, 'ReadMetaData::885', 'Unable to Read Blob MetaData', []);
   end;  { try..except }
 end;  { ReadMetaData }
 
@@ -908,11 +890,10 @@ end;  { ReadMetaData }
   Jvr - 09/02/2001 16:39:14.<P>
 }
 procedure TDBIXbaseCustomBlobConnection.WriteMetaData;
-const
-  Caller = 'WriteMetaData';
-
 begin
-  if not FDirty then Exit;
+  if not FDirty then begin
+    Exit;
+  end;
 
   Assert(Assigned(FBlobStream));
   try
@@ -924,7 +905,7 @@ begin
 
   except
     on E: Exception do
-      Error(E, Caller, '335',
+      raise EDBIException.Create(Self, E, 'WriteMetaData::905',
         'Unable to write "%d" bytes of MetaData to file "%s"',
         [GetHeaderSize, FFileName]
         );
@@ -1061,16 +1042,13 @@ end;  { NewBlobStream }
   Jvr - 29/12/2004 11:34:16 - Refactored to allow multiple data formats.<p>
 }
 procedure TDBIXbaseCustomBlobConnection.SaveToFile(AFileName: String);
-const
-  Caller = 'SaveToFile';
-
 begin
   if (AFileName = '') then begin
     AFileName := FFileName;
   end;
 
   if (AFileName = '') then begin
-    Error(nil, Caller, '795', 'Invalid FileName', []);
+    raise EDBIException.Create(Self, 'SaveToFile::1050', 'Invalid FileName', []);
   end;
 
   TDBIFileStream.SaveStreamToFile(FBlobStream, AFileName);

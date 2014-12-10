@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -23,7 +23,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : native api code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIIndices;
 
@@ -31,18 +31,13 @@ interface
 
 {$I DBICompilers.inc}
 
-{$ifdef fpc}
-  {$asmmode intel}
-  {$mode delphi}
-{$endif}
-
 {$define _AGGREGATES True}
 
 // Disable Typed @ operator, Controls the type of pointer returned by @ operator.
 {$T-}
 
 uses
-  Classes, SysUtils, DB, DBIConst, DBIStrings, DBIIntfConsts, DBIFilters;
+  Classes, SysUtils, DB, DBIConst, DBIStrings, DBIIntfConsts, DBIFilters, DBIUtils;
 
 const
   LocateCaseMap: array[Boolean] of TLocateOption = (TLocateOption(0), loCaseInsensitive);
@@ -79,7 +74,7 @@ type
 
     </CODE>
   }
-  TDBIndex = class(TObject)
+  TDBIndex = class(TPersistent)
   private
     FIndexDesc: pDSIDXDesc;                           // iKeyFields is '1' based
     FFilter: TDBIDatasetFilter;
@@ -203,7 +198,7 @@ type
 
     </CODE>
   }
-  TDBIIndexList = class(TObject)
+  TDBIIndexList = class(TPersistent)
   private
     FIndexList: TList;
     FIndexDescs: TIndexDescList;        // Array of Index description properties
@@ -211,14 +206,6 @@ type
                                         // Add/Update (Edit/Insert)
 
   protected
-    procedure Error(
-      E: Exception;
-      const Caller: String;
-      const Reference: String;
-      const ErrMsg: String;
-      Args: array of const
-      );
-
     function GetCount: Integer;
 
     function GetIndex(Index: Integer): TDBIndex;
@@ -433,7 +420,7 @@ type
   end;
 
 
-  TDBIGroupList = class(TObject)
+  TDBIGroupList = class(TPersistent)
   private
     FItems: TList;
 
@@ -548,14 +535,6 @@ type
     FDisplayOrder: TDBIDisplayOrder;
 
   protected
-    procedure Error(
-      E: Exception;
-      const Caller: String;
-      const Reference: String;
-      const ErrMsg: String;
-      Args: array of const
-      );
-
     function GetCount: Integer; override;
     function GetFieldAsString(const RecordBuffer; pFieldDesc: PDSFLDDesc): TDBIString; virtual;
 
@@ -1168,7 +1147,7 @@ begin
 
   except
     on E: Exception do begin
-      Error(E, 'Clear', '1485', 'Failed to clear the indicies', []);
+      raise EDBIException.Create(Self, E, 'Clear::1155', 'Failed to clear the indicies', []);
     end;
   end;
 end;  { Clear }
@@ -1209,7 +1188,7 @@ begin
     fldZSTRING: FIndexList.Add(TDBIStringIndex.Create(@FIndexDescs[Index]));
 
   else
-    Error(nil, 'CreateIndex', '1520',
+    raise EDBIException.Create(Self, 'CreateIndex::1195',
       'Failed to Create Index %s, "%d" type indices not supported',
       [IndexDesc.szName, IndexType]
     );
@@ -1245,7 +1224,7 @@ begin
 
   except
     on E: Exception do begin
-      Error(E, 'DeleteIndex', '935', 'Failed to Delete Index %d', [Index]);
+      raise EDBIException.Create(Self, E, 'DeleteIndex::1235', 'Failed to Delete Index %d', [Index]);
     end;
   end;
 end;  { DeleteIndex }
@@ -1484,27 +1463,6 @@ end;  { AddUpdatedField }
 
 // _____________________________________________________________________________
 {**
-  Jvr - 02/04/2001 15:52:44.<P>
-}
-procedure TDBIIndexList.Error(
-  E: Exception;
-  const Caller: String;
-  const Reference: String;
-  const ErrMsg: String;
-  Args: array of const
-  );
-begin
-{$IFDEF DebugExceptions}
-  raise EDBIException.CreateFmt(
-    'DBIIndices::' + Self.ClassName + '::' + Caller + '::' + Reference + #13 + ErrMsg, Args);
-{$ELSE}
-  raise EDBIException.CreateFmt(ErrMsg, Args);
-{$ENDIF DebugExceptions}
-end;  { Error }
-
-
-// _____________________________________________________________________________
-{**
   Jvr - 02/04/2001 15:25:17.<P>
 }
 function TDBIIndexList.GetCount: Integer;
@@ -1582,8 +1540,6 @@ var
   Index: Integer;
 
 begin
-  Result := nil;
-
   for Index := 0 to FIndexList.Count - 1 do begin
     if (StrLIComp(FIndexDescs[Index].szName, PDBIChar(Name), SizeOf(FIndexDescs[Index].szName)) = 0) then begin
       Result := FIndexList[Index];
@@ -1591,7 +1547,7 @@ begin
     end;
   end;
 
-  Error(nil, 'GetIndexByName', '1820', 'Illegal index name: ', [Name]);
+  raise EDBIException.Create(Self, 'GetIndexByName::1560', 'Illegal index name: ', [Name]);
 end;  { GetIndexByName }
 
 
@@ -1611,7 +1567,7 @@ begin
     end;
   end;
 
-  Error(nil, 'SetIndexByName', '1840', 'Illegal index name: ', [Name]);
+  raise EDBIException.Create(Self, 'SetIndexByName::1575', 'Illegal index name: ', [Name]);
 end;  { SetIndexByName }
 
 
@@ -1787,9 +1743,8 @@ end;  { InternalCompare }
 }
 function TDBIDefaultIndex.GetCount: Integer;
 begin
-  raise Exception.CreateFmt(
-    '%s::%s::%s::%s'#13'GetCount should never be called on the default index',
-    ['DBIIndices', Self.Classname, 'GetCount', '1505']
+  raise EDBIException.Create(Self, 'GetCount::1755',
+    'GetCount() should never be called on the default index', []
     );
   Result := FCount;
 end;  { GetCount }
@@ -2228,27 +2183,6 @@ end;  { InternalModify }
 
 // _____________________________________________________________________________
 {**
-  Jvr - 02/04/2001 15:21:18.<P>
-}
-procedure TDBIStandardIndex.Error(
-  E: Exception;
-  const Caller: String;
-  const Reference: String;
-  const ErrMsg: String;
-  Args: array of const
-  );
-begin
-{$IFDEF DebugExceptions}
-  raise EDBIException.CreateFmt(
-    'DBIIndices::' + Self.ClassName + '::' + Caller + '::' + Reference + #13 + ErrMsg, Args);
-{$ELSE}
-  raise EDBIException.CreateFmt(ErrMsg, Args);
-{$ENDIF DebugExceptions}
-end;  { Error }
-
-
-// _____________________________________________________________________________
-{**
   Jvr - 02/04/2001 15:18:04.<P>
 }
 function TDBIStandardIndex.GetCount: Integer;
@@ -2458,7 +2392,7 @@ begin
   case pFieldDesc.IFldType of
     FLDINT16: Result := TDBIString(IntToStr(PSmallInt(FieldBuffer)^));
     FLDINT32: Result := TDBIString(IntToStr(PInteger(FieldBuffer)^));
-    FLDINT64: Error(nil, 'GetFieldAsString', '2510', 'Not implemented Yet!', []);
+    FLDINT64: raise EDBINotImplementedException.Create(Self, 'GetFieldAsString::FLDINT64::2405');
   end;
 end;  { GetFieldAsString }
 
@@ -2515,7 +2449,7 @@ var
 
 begin
   case pFieldDesc.IFldType of
-    FLDINT64: Error(nil, 'GetFieldAsString', '1275', 'Not implemented Yet!', []);
+    FLDINT64: raise EDBINotImplementedException.Create(Self, 'InternalInsert::FLDINT64::2460');
   end;
   Data := GetFieldAsString(pRecBuf, pFieldDesc);
 
@@ -2634,7 +2568,7 @@ var
 begin
   // Convert Number To String (See TXBaseDBICursor.PutFieldFloat)
   //pLocateValue := pKeyValues^[0];
-  Move(pKeyValues^[0], DoubleValue, SizeOf(Double));
+  Move(pKeyValues^[0], DoubleValue{%H-}, SizeOf(Double));
   pLocateValue := PDBIChar(DBIFloatToStr(DoubleValue));
 
   // Don't forget the null terminator #0

@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -28,7 +28,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : native api code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIXbaseDataConnections;
 
@@ -206,7 +206,6 @@ type
     WorkAreaID: Byte;                      // | 20    [01] |         D3  D4  D5  W5
     Reserved2: array[0..1] of Byte;        // | 21-22 [02] |
     SetFields: Byte;                       // | 23    [01] |         D3
-//##JVR    Reserved3: array[0..6] of Byte; // | 24-30 [07] |
     FieldData: array[0..6] of AnsiChar;    // | 24-30 [07] | JVR !!!
     FieldInMdx: Byte;                      // | 31    [01] |         D3  D4  D5  W5
   end;
@@ -675,11 +674,11 @@ var
 
 begin
   if (Position < 0) or (Position >= Integer(FHeader.RecordCount)) then begin
-    Error(nil, 'Delete', '635', 'Record "%d" out of legal range', [Position]);
+    raise EDBIException.Create(Self, 'Delet::675', 'Record "%d" out of legal range', [Position]);
   end;
 
   DataStream.Seek((FHeader.RecordSize * Position) + DataOffset, soFromBeginning);
-  DataStream.Read(DeleteStatus, 1);
+  DataStream.Read(DeleteStatus{%H-}, 1);
 
   // Toggle the Deletion Status
   if (DeleteStatus = DT_DELFLAG) then begin
@@ -725,7 +724,7 @@ var
 
 begin
   if (Position < 0) or (Position >= Integer(FHeader.RecordCount)) then begin
-    Error(nil, 'Get', '685', 'Record "%d" out of legal range', [Position]);
+  raise EDBIException.Create(Self, 'Get::725', 'Record "%d" out of legal range', [Position]);
   end;
 
   // Create a buffer on the heap if required buffer is larger than the LocalBuffer
@@ -777,9 +776,6 @@ end;  { Get }
   Jvr - 19/06/2002 18:47:16 - Lock now resets the Stream before Locking<P>
 }
 function TDBIXbaseDataConnection.Lock: Boolean;
-const
-  Caller = 'Lock';
-
 var
   OffsetLow: LongWord;
   SizeLow: LongWord;
@@ -793,7 +789,6 @@ begin
   end;
 
   OffsetLow := 0;
-  SizeLow := 0;
 
   // Calculate the File lock Offset Low
   case Version of
@@ -822,7 +817,7 @@ begin
     end;
 
   else
-    Error(nil, Caller, '820',
+    raise EDBINotImplementedException.Create(Self, 'Lock::820',
       '"%s"'#13'is an Xbase file of version $%x'#13 +
       'Locking is not Yet! supported for this file version',
       [FileName, FHeader.Version]
@@ -858,9 +853,6 @@ end;  { Lock }
   Jvr - 19/06/2002 18:47:49 - Unlock now resets the Stream before Locking<P>
 }
 function TDBIXbaseDataConnection.Unlock: Boolean;
-const
-  Caller = 'Unlock';
-
 var
   OffsetLow: LongWord;
   SizeLow: LongWord;
@@ -875,8 +867,10 @@ begin
 
   Result := False;
   OffsetLow := 0;
-  SizeLow := 0;
-  if (DataStream is TMemoryStream) then Exit;
+
+  if (DataStream is TMemoryStream) then begin
+    Exit;
+  end;
 
   // Calculate the File lock Offset Low
   case Version of
@@ -905,7 +899,7 @@ begin
     end;  { xbVisualFoxPro }
 
   else
-    Error(nil, Caller, '900',
+    raise EDBINotImplementedException.Create(Self, 'Unlock::905',
       '"%s"'#13'is an Xbase file of version $%x'#13 +
       'Locking is not Yet! supported for this file version',
       [FileName, FHeader.Version]
@@ -957,7 +951,6 @@ begin
     Exit;
   end;
 
-  OffsetLow := 0;
   OffsetHigh := 0;
   SizeLow := 1;
   SizeHigh := 0;
@@ -975,8 +968,7 @@ begin
       OffsetLow := XbaseLockOffsets[Version] - LongWord(RecNo);
     end;
   else
-//##JVR    Error(nil, Caller, '975',
-    ShowMessageFmt(
+    raise EDBINotImplementedException.Create(Self, 'LockRecord::975',
       '"%s"'#13'is an Xbase file of version $%x'#13 +
       'Locking is not Yet! supported for this file version',
       [FileName, FHeader.Version]
@@ -1030,7 +1022,6 @@ begin
     Exit;
   end;
 
-  OffsetLow := 0;
   OffsetHigh := 0;
   SizeLow := 1;
   SizeHigh := 0;
@@ -1048,8 +1039,7 @@ begin
       OffsetLow := XbaseLockOffsets[Version] - LongWord(RecNo);
     end;
   else
-//##JVR    Error(nil, Caller, '1040',
-  ShowMessageFmt(
+    raise EDBINotImplementedException.Create(Self, 'UnlockRecord::1050',
       '"%s"'#13'is an Xbase file of version $%x'#13 +
       'Locking is not Yet! supported for this file version',
       [FileName, FHeader.Version]
@@ -1122,7 +1112,7 @@ procedure TDBIXbaseDataConnection.GetMetaData;
           Assert(PFieldDesc^.iFldSubType > 0);
 
           Result := (PFieldDesc^.iFldSubType = fldstMEMO) and
-            ((PFieldDesc^.iUnits1 = SizeOfMemo) or (PFieldDesc^.iUnits1 = 10))
+            ((PFieldDesc^.iFldLen = SizeOfMemo) or (PFieldDesc^.iFldLen = 10)) { DBase-3 }
         end;
 
         fldSINGLE, fldFLOAT, fldFLOATIEEE: Result := True;
@@ -1136,9 +1126,6 @@ procedure TDBIXbaseDataConnection.GetMetaData;
     const PhysicalFieldProps: TDBIXbaseField;
     PFieldDesc: pDSFLDDesc
     );
-  const
-    Caller = 'GetMetaData::EncodeField';
-
   var
     Attributes: TFieldAttributes;
 
@@ -1176,8 +1163,15 @@ procedure TDBIXbaseDataConnection.GetMetaData;
       if not IsFieldCompatible(@PhysicalFieldProps, PFieldDesc) then begin
         PFieldDesc^.iFldType := XbaseFieldBaseTypeMap[PhysicalFieldProps.FieldType];
         PFieldDesc^.iFldSubType := XbaseFieldSubTypeMap[PhysicalFieldProps.FieldType];
-        PFieldDesc^.iUnits1 := PhysicalFieldProps.FieldSize[0];   // Size
-        PFieldDesc^.iUnits2 := PhysicalFieldProps.FieldSize[1];   // Decimals
+
+        if (PFieldDesc^.iFldType = fldBlob) then begin
+          PFieldDesc^.iFldLen := PhysicalFieldProps.FieldSize[0];   // Size
+        end
+        else begin
+          PFieldDesc^.iUnits1 := PhysicalFieldProps.FieldSize[0];   // Size
+        end;
+
+        PFieldDesc^.iUnits2 := PhysicalFieldProps.FieldSize[1];     // Decimals
       end;
     end
 
@@ -1194,10 +1188,12 @@ procedure TDBIXbaseDataConnection.GetMetaData;
       PFieldDesc^.iFldType := fldUNKNOWN;
       PFieldDesc^.iFldSubType := fldstNONE;
 
-      Error(nil, Caller, '1210', 'Unknown Xbase Field Type "%s"', [PhysicalFieldProps.FieldType]);
+      raise EDBIException.Create(Self, 'GetMetaData::EncodeField::1190',
+        'Unknown Xbase Field Type "%s"', [PhysicalFieldProps.FieldType]
+        );
     end;
 
-    
+
     // Now set the type dependant stuff
     case PhysicalFieldProps.FieldType of
       DT_INTEGER: begin
@@ -1328,23 +1324,6 @@ procedure TDBIXbaseDataConnection.GetMetaData;
         Inc(PhysicalFieldOffset, FFields[FieldNo].FieldSize[0]);
       end;  { if }
     end;  { for }
-    
-{##JVR
-    // -------------------------------------------------------------------------
-    // InitializeNullFlags
-    // Physical Null field flag information
-    NullFlags.IsNullable :=
-      DBICompareText(FFields[FieldCount - 1].FieldName, FieldName_NullFlags) = 0;
-
-    NullFlagsIndex := 0;
-    for FieldNo := 0 to FieldCount - 1 do begin
-      // Create Index values for the physical fields Null-Flags
-      IsNullable := ffNullableField in FFields[FieldNo].FieldFlags;
-      if NullFlags.SetNullIndex(FieldNo, IsNullable, NullFlagsIndex) then begin
-        Inc(NullFlagsIndex);
-      end;
-    end;
-//}    
   end;  { EncodePhysicalFieldDefs }
   
 
@@ -1386,7 +1365,7 @@ begin
     BytesRead := DataStream.Read(FHeader, SizeOf(FHeader));
 
     if (BytesRead < SizeOf(FHeader)) then begin
-      raise Exception.Create(SReadHeaderFailed);
+      raise EDBIException.Create(Self, 'ReadMetaData::1365', SReadHeaderFailed, []);
     end;
 
     // Only verify that this is a valid Xbase file if specified in options
@@ -1402,7 +1381,7 @@ begin
       SizeOf(TDBIXbaseField) * XbaseFoxProMaxFieldCount
       );
     if (BytesRead < SizeOf(TDBIXbaseField)) then begin
-      raise Exception.Create(SReadFieldsFailed);
+      raise EDBIException.Create(Self, 'ReadMetaData::1385', SReadFieldsFailed, []);
     end;
   finally
     if not WasAllReadyOpen then begin
@@ -1468,7 +1447,7 @@ begin
       Modified := True;
     except
       on E: Exception do
-        Error(E, 'WriteMetaData', '1310', 'Unable to Write Header Structure', []);
+        raise EDBIException.Create(Self, E, 'WriteMetaData::1450', 'Unable to Write Header Structure', []);
     end;  { try..except }
 
     if (AMode = mdAll) or (AMode = mdNew) then begin
@@ -1479,7 +1458,7 @@ begin
         end;
       except
         on E: Exception do
-          Error(E, 'WriteMetaData', '1320', 'Unable to Write Fields Structure', []);
+          raise EDBIException.Create(Self, E, 'WriteMetaData::1460', 'Unable to Write Fields Structure', []);
       end;  { try..except }
     end;  { if }
 
@@ -1545,9 +1524,6 @@ end;  { GetRecordSize }
   Jvr - 07/03/2001 14:22:10.<P>
 }
 function TDBIXbaseDataConnection.GetVersion: TDBIXbaseVersion;
-const
-  Caller = 'GetVersion';
-
 begin
   with FHeader do begin
     case Version of
@@ -1562,9 +1538,7 @@ begin
     else
       inherited Active := False;
       
-      Result := xbUnknownXbaseVersion;
-
-      Error(nil, Caller, '1550',
+      raise EDBIException.Create(Self, 'GetVersion::1545',
         'Not a known Xbase file, Signature = "%x"',
         [FHeader.Version]
         );
@@ -1602,9 +1576,6 @@ end;  { GetVersionInfo }
 function TDBIXbaseDataConnection.GetRecordCount(
   const StatusFilter: DSAttr
   ): Integer;
-const
-  Caller = 'GetRecordCount';
-
 var
   Position: Integer;
 //##JVR  Attributes: DSAttr;
@@ -1612,9 +1583,10 @@ var
   PRecBuf: Pointer;
 
 begin
-//##JVR  Result := -1;
-  PRecBuf := nil;
 {##JVR
+  Result := -1;
+  PRecBuf := nil;
+
   // If Physical Recordcount is Zero then return 0 no matter what
   if FHeader.RecordCount = 0 then begin
     Result := 0;
@@ -1630,10 +1602,10 @@ begin
   //   dsRecRefresh has to be before all other cases because the value
   //   of dsRecRefresh includes all other values (255)
   else if (StatusFilter = dsRecRefresh) then begin
-Error(nil, Caller, '1925',
-  'Refreshed RecordCount currently disabled',
-  [StatusFilter]
-  );
+    raise EDBIException.Create(Self, 'GetRecordCount::1605',
+      'Refreshed RecordCount currently disabled',
+      [StatusFilter]
+      );
 
     GetMetaData;
     Result := FHeader.RecordCount;
@@ -1642,17 +1614,17 @@ Error(nil, Caller, '1925',
   // If dsRecActive then Get the RecordCount from the metadata (Header)
   //##JVR -  NO, count the active records.
   else if (StatusFilter and dsRecActive) = dsRecActive then begin
-Error(nil, Caller, '1940',
-  'Get RecordCount for active records currently disabled',
-  [StatusFilter]
-  );
+    raise EDBIException.Create(Self, 'GetRecordCount::1620',
+      'Get RecordCount for active records currently disabled',
+      [StatusFilter]
+      );
 
 //##JVR    Result := FHeader.RecordCount;
     GetMetaData;
     Result := 0;
     for Position := 0 to FHeader.RecordCount-1 do begin
 //##JVR      Attributes := GetCurrentRecord(Position, PRecBuf^);
-      GetCurrentRecord(Position, PRecBuf^, @DataInfo);
+      GetCurrentRecord(Position, {%H-}PRecBuf^, @DataInfo);
 //##JVR      if (Attributes and StatusFilter) = StatusFilter then begin
       if (DataInfo.Attribute and StatusFilter) = StatusFilter then begin
         Inc(Result);
@@ -1662,10 +1634,10 @@ Error(nil, Caller, '1940',
 
   // Count the deleted records
   else if (StatusFilter and dsRecDeleted) = dsRecDeleted then begin
-Error(nil, Caller, '1960',
-  'Get RecordCount for deleted records currently disabled',
-  [StatusFilter]
-  );
+    raise EDBIException.Create(Self, 'GetRecordCount::1640',
+      'Get RecordCount for deleted records currently disabled',
+      [StatusFilter]
+      );
 
     GetMetaData;
     Result := 0;
@@ -1680,7 +1652,7 @@ Error(nil, Caller, '1960',
 
   // Oops how did we get here?
   else begin
-    Error(nil, Caller, '1976',
+    raise EDBIException.Create(Self, 'GetRecordCount::1655',
       'Illegal status filter value "%d" for RecordCount',
       [StatusFilter]
       );
@@ -1781,18 +1753,15 @@ end;  { SetVersion }
   Jvr - 11/05/2005 16:26:23 - Initial code.<br>
 }
 function TDBIXbaseDataConnection.CreateBlobConnection: TDBIXbaseCustomBlobConnection;
-const
-  Caller = 'CreateBlobConnection';
-
 begin
-  Result := nil;
-
   case Version of
     xbDbase3: Result := TDBIDbaseBlobConnection.Create;
     xbFoxPro: Result := TDBIFoxProBlobConnection.Create;
     xbVisualFoxpro: Result := TDBIFoxProBlobConnection.Create;
   else
-    Error(nil, Caller, '2360', 'This data format has no support for Blobs', []);
+    raise EDBIException.Create(Self, 'CreateBlobConnection::1790',
+      'This Xbase file data format has no support for Blobs', []
+      );
   end;
 
   if Assigned(Result) then begin
@@ -1967,8 +1936,6 @@ procedure TDBIXbaseDataConnection.GetPhysicalProperties(
   var PhysicalFieldProps: TDBIXbaseField
   );
 const
-  Caller = 'GetPhysicalProperties';
-
   dbfPhysicalSizeOfBoolean = 1;
   dbfPhysicalSizeOfBlob = 4;
   dbfPhysicalSizeOfDate = 8;
@@ -2001,7 +1968,7 @@ begin
   if not (faRequired in Attributes) then begin
     PhysicalFieldProps.FieldFlags := [ffNullableField];
   end;
-  
+
   case PFieldProps^.iFldType of
     fldTIMESTAMP: begin
       PhysicalFieldProps.FieldSize[0] := dbfPhysicalSizeOfTimeStamp;
@@ -2169,7 +2136,7 @@ begin
   end;  { case }
 
   if (Word(PhysicalFieldProps.FieldSize) <= 0) then begin
-    Error(nil, Caller, '2375',
+    raise EDBIException.Create(Self, 'GetPhysicalProperties::2140',
       'Unable to map Data Type "%d" correctly',
       [PFieldProps^.iFldType]
       );
@@ -2424,8 +2391,6 @@ begin
     if (FFields[FieldNo].FieldType <> DT_NULLFLAGS) then begin
       Byte(TDBIRecordBuffer(@Buffer)[FieldProps[FieldNo].iNullOffsInRec]) := Ord(IsBlank);
     end;
-
-//##JVR    DBIDebug(Self, 'GetData', '[%s].blank = %s', [FieldProps[FieldNo].szName, BoolValue[IsBlank]]);
   end;  { for }
 end;  { GetData }
 
@@ -2570,7 +2535,9 @@ begin
   Modified := True;
   Dirty := True;
 
-  if (BytesRead <> ASize) then DatabaseError(SWriteDataFailed);
+  if (BytesRead <> ASize) then begin
+    raise EDBIException.Create(Self, 'WriteData::2540', SWriteDataFailed, []);
+  end;
 
   if (APosition = posEof) then begin
     FHeader.RecordCount := FHeader.RecordCount + 1;
@@ -2641,7 +2608,7 @@ end;  { GetFieldAsPChar }
 {**
   Jvr - 08/11/2000 13:27:11<P>
 }
-function TDBIXbaseDataConnection.GetFieldUnknown(
+function TDBIXbaseDataConnection.{%H-}GetFieldUnknown(
   const RecordBuffer;
   var FieldBuffer: TDBIFieldBuffer;
   FieldNo: Word
@@ -2650,8 +2617,6 @@ var
   DataTypeName: String;
 
 begin
-  Result := False;
-
   try
     try
       DataTypeName := TypInfo.GetEnumName(TypeInfo(TFieldType), Ord(DataTypeMap[FieldProps[FieldNo].iFldType]));
@@ -2659,7 +2624,7 @@ begin
       DataTypeName := Format('%d', [FieldProps[FieldNo].iFldType]);
     end;
   finally
-    Error(nil, 'GetFieldUnknown', '2620',
+    raise EDBIException.Create(Self, 'GetFieldUnknown::2630',
       'Field: %s, Unknown data type - "%s" Not supported',
       [FieldProps[FieldNo].szName, DataTypeName]
       );
@@ -2687,7 +2652,7 @@ begin
       DataTypeName := Format('%d', [FieldProps[FieldNo].iFldType]);
     end;
   finally
-    Error(nil, 'PutFieldUnknown', '2650',
+    raise EDBIException.Create(Self, 'PutFieldUnknown::2660',
       'Field: %s, Unknown data type - "%s" Not supported',
       [FieldProps[FieldNo].szName, DataTypeName]
       );
@@ -2929,7 +2894,7 @@ begin
   if (FieldBuffer = nil) or not Result then Exit;
 
   // Assign data to conversion buffer
-  Move(PData^, ConvBuff, Size);
+  Move(PData^, ConvBuff{%H-}, Size);
   // Make sure the data is null terminated for the conversion routine
   ConvBuff[Size] := TDBIRecordElement(0);
   // Convert the dbase numeric type to an extended floating point value
@@ -3110,7 +3075,7 @@ begin
   if (FieldBuffer = nil) or not Result then Exit;
 
   // Assign data to conversion buffer
-  Move(PData^, ConvBuff, Size);
+  Move(PData^, ConvBuff{%H-}, Size);
   // Make sure the data is null terminated for the conversion routine
   ConvBuff[Size] := TDBIRecordElement(0);
 
@@ -3214,7 +3179,7 @@ begin
   if (FieldBuffer = nil) or not Result then Exit;
 
   // Assign data to conversion buffer
-  Move(PData^, ConvBuff, Size);
+  Move(PData^, ConvBuff{%H-}, Size);
   // Make sure the data is null terminated for the conversion routine
   ConvBuff[Size] := #0;
 
@@ -3548,9 +3513,6 @@ function TDBIXbaseDataConnection.GetFieldMemo(
   var FieldBuffer: TDBIFieldBuffer;
   FieldNo: Word
   ): Boolean;
-const
-  Caller = 'GetFieldMemo';
-
 var
   Position: LongWord;
   PData: TDBIRecordBuffer;
@@ -3559,10 +3521,8 @@ var
   Code: Integer;
 
 begin
-  Result := False;
-
   // if the physical length of the data = 4 then the value is binary
-  if (FieldProps[FieldNo].iUnits1 = SizeOfMemo) then begin
+  if (FieldProps[FieldNo].iFldLen = SizeOfMemo) then begin
     Move(RecordBuffer, Pointer(@Position)^, SizeOfMemo);
     Result := Position <> 0;
 
@@ -3574,10 +3534,10 @@ begin
   end
 
 
-  // else if the physical field size = 10 then the value is ascii
-  else if (FieldProps[FieldNo].iUnits1 = 10) then begin
+  // else if the physical field length = 10 then the value is ascii (DBase-3)
+  else if (FieldProps[FieldNo].iFldLen = 10) then begin
     PData := @RecordBuffer;
-    Size := FieldProps[FieldNo].iUnits1;
+    Size := FieldProps[FieldNo].iFldLen;
 
     // Move pointer to first valid char of data
     while (PData^ = TDBIRecordElement(' ')) and (Size > 0) do begin
@@ -3605,9 +3565,9 @@ begin
 
   // Otherwise we don't know how the memo position is stored
   else begin
-    Error(nil, Caller, '3475',
+    raise EDBIException.Create(Self, 'GetFieldMemo::3575',
       'Unknown memo field (position), size = %d',
-      [FieldProps[FieldNo].iUnits1]
+      [FieldProps[FieldNo].iFldLen]
       );
   end;
 end;  { GetFieldMemo }
@@ -3622,35 +3582,34 @@ end;  { GetFieldMemo }
 procedure TDBIXbaseDataConnection.PutFieldMemo(var RecordBuffer;
   const FieldBuffer: TDBIFieldBuffer; FieldNo: Word);
 const
-  Caller = 'PutFieldMemo';
   FormatLength = 3;
 
 begin
   // if the physical length of the data = 4 then the value is binary
-  if (FieldProps[FieldNo].iUnits1 = SizeOfMemo) then begin
+  if (FieldProps[FieldNo].iFldLen = SizeOfMemo) then begin
     if (FieldBuffer <> nil) then begin
       Move(FieldBuffer^, RecordBuffer, FieldProps[FieldNo].iFldLen);
     end;
   end
 
 
-  // else if the physical field size = 10 then the value is ascii
-  else if (FieldProps[FieldNo].iUnits1 = 10) then begin
+  // else if the physical field size = 10 then the value is ascii (DBase-3)
+  else if (FieldProps[FieldNo].iFldLen = 10) then begin
     if (FieldBuffer = nil) then begin
-      FillChar(RecordBuffer, FieldProps[FieldNo].iUnits1, Ord(' '));
+      FillChar(RecordBuffer, FieldProps[FieldNo].iFldLen, Ord(' '));
     end
     else begin
-      FormatBuf(RecordBuffer, FieldProps[FieldNo].iUnits1, '%*d', FormatLength,
-        [FieldProps[FieldNo].iUnits1, Integer(FieldBuffer^)]);
+      FormatBuf(RecordBuffer, FieldProps[FieldNo].iFldLen, '%*d', FormatLength,
+        [FieldProps[FieldNo].iFldLen, Integer(FieldBuffer^)]);
     end;
   end
 
 
   // Otherwise we don't know how the memo position is stored
   else begin
-    Error(nil, Caller, '3515',
+    raise EDBIException.Create(Self, 'PutFieldMemo::3615',
       'Unknown memo field (position), size = %d',
-      [FieldProps[FieldNo].iUnits1]
+      [FieldProps[FieldNo].iFldLen]
       );
   end;
 end;  { PutFieldMemo }

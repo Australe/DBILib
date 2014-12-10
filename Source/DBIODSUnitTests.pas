@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : native api code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIODSUnitTests;
 
@@ -66,6 +66,7 @@ type
 {$ifndef fpc}
     procedure CreateGadCDS;
 {$endif}
+    procedure DataPacket;
     procedure DateTimeConsts;
     procedure DefaultStringAttributes;
 {$ifndef fpc}
@@ -86,6 +87,7 @@ type
     procedure NullFlags;
     procedure ReadOnlyProperty;
     procedure SaveAsCDS;
+    procedure Streaming;
     procedure UpdateBooks;
     procedure Validation;
 
@@ -171,8 +173,11 @@ uses
   DB,
   DBIConst,
   DBIUtils,
+  DBIComponents,
   DBIDataset,
-  DBIXbaseDatasets;
+  DBIIntfConsts,
+  DBIXbaseDatasets,
+  DBIXmlUtils;
 
 
 
@@ -215,7 +220,7 @@ end;
 
 procedure TDBIODSUnitTests.BinaryTypes;
 const
-  Caller = 'v';
+  Caller = 'BinaryTypes';
   TableName = 'oBinaryTypes.cds';
 
 var
@@ -303,7 +308,7 @@ begin
         end;
         Delta := Usage;
 
-        DBIDebug(Self, Caller, 'Memory Usage = [%f KB]', [Usage / 1024]);
+        TDBIDebugInfo.LogMsg(dkDebug, '%s::%s Memory Usage = [%f KB]', [Self.ClassName, Caller, Usage / 1024]);
       end;
 
 
@@ -448,6 +453,69 @@ begin
 end;
 {$endif}
 
+
+procedure TDBIODSUnitTests.DataPacket;
+const
+  TableName = 'oDataPacket.dbf';
+
+var
+  DataPacket: TDBIDataPacket;
+  FieldData: TBookFields;
+  ODS: TDBIObjectListDataset;
+
+begin
+  FieldData := TBookData.GetFields;
+
+  // Create a new Dataset
+  TBookData.ODSCreateTable(DataPath(TableName));
+
+  DataPacket := nil;
+  try
+    ODS := TDBIObjectListDataset.Create(nil);
+    try
+      ODS.Name := ChangeFileExt(TableName, '');
+      ODS.ClassTypeName := TBookData.ClassName;
+
+      TBookData.CreateFieldDefs(ODS);
+
+      // Verify Data was written correctly to file
+      ODS.List.Clear;
+      ODS.LoadFromFile(DataPath(TableName));
+
+      TBookData.AssertValues(ODS);
+
+      // Save the Dataset as a Data Packet
+      DataPacket := TDBIXmlData.CreateDataPacket(ODS.Data);
+
+      ODS.Close;
+     finally
+      ODS.Free;
+    end;
+
+    ODS := TDBIObjectListDataset.Create(nil);
+    try
+      ODS.Name := ChangeFileExt(TableName, '');
+      ODS.ClassTypeName := TBookData.ClassName;
+
+      // Assign DataPacket
+      ODS.Data := DataPacket;
+
+      Assert(ODS.DataSize > 0, 'Datasize indicates no data');
+      Assert(Length(ODS.XmlData) = ODS.DataSize, 'Datasize is incorrect');
+
+      TBookData.VerifyFields(ODS, @FieldData, Length(FieldData));
+      TBookData.AssertValues(ODS);
+
+      ODS.Close;
+     finally
+      ODS.Free;
+    end;
+  finally
+    TDBIXmlData.FreeDataPacket(DataPacket);
+  end;
+end;
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 27/11/2002 16:19:32.<P>
@@ -479,18 +547,7 @@ begin
     // Do Nothing
   end;
 
-(*##JVR
-  try
-    DateTimeString := DateTimeToStr(DBIMaxDateTime+2);
-    StrToDateTime(DateTimeString);
-    Fail('DBIMaxDateTime + 2 = ' + DateTimeString + ': Should never reach this point');
 
-  except
-    on ETestFailed do raise;
-  else
-    // Do Nothing
-  end;  { try..except }
-//*)
   DateTimeValue := DBISignifyNullDateTime;
   DateTimeVariant := DateTimeValue;
 
@@ -573,10 +630,12 @@ begin
     FieldDef.Name := 'FloatField';
     FieldDef.DataType := ftFloat;
     FieldDef.Size := 0;
-    FieldDef.Size := 0;
+    FieldDef.Precision := 0;
 
     ODS.CreateDataset;
 
+    // After the CreateDataset Get the FielDef - These are recreated!
+    FieldDef := ODS.FieldDefs[0];
     Assert(FieldDef.Size = 0, Format('FieldDef.Size = %d, Should be Zero', [FieldDef.Size]));
     Assert(FieldDef.Precision = 0, Format('FieldDef.Precision = %d, Should be Zero', [FieldDef.Precision]));
 
@@ -610,7 +669,7 @@ begin
     TStringData.VerifyFields(CDS, @FieldData, Length(FieldData));
     TStringData.AssertValues(CDS);
 
-    CDS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfXML);
+    CDS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dbclient.dfXML);
     CDS.Close;
   finally
     CDS.Free;
@@ -657,7 +716,7 @@ begin
     TStringData.VerifyFields(ODS, @FieldData, Length(FieldData));
     TStringData.AssertValues(ODS);
 
-    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfCDS);
+    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfXML);
     ODS.SaveToFile(DataPath(TableName));
     ODS.Close;
 
@@ -707,7 +766,8 @@ begin
     ODS.FieldDefs.Clear;
     ODS.Fields.Clear;
     ODS.Open;
-    TStringData.VerifyFields(ODS, @FieldData, Length(FieldData));
+//##JVR    TStringData.VerifyFields(ODS, @FieldData, Length(FieldData));
+    TStringData.CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldSize, fcPrecision, fcReadOnly, fcSkipFieldSizeString]);
     TStringData.AssertValues(ODS);
     ODS.Close;
 
@@ -1388,7 +1448,7 @@ begin
     for Index := Low(OrderedNumbers) to High(OrderedNumbers) do begin
       Assert(
         CompareOrderedRecordWithObject(@(OrderedNumbers[Index])).Sequence =
-        (ODS.Data as TBookCategory).Sequence
+        (ODS.DataObject as TBookCategory).Sequence
         );
       ODS.Next;
     end;
@@ -1409,9 +1469,12 @@ end;
 
 
 procedure TDBIODSUnitTests.ObjectTypes;
+const
+  TableName = 'oCreateEntity.xml';
+
 begin
   // Run Object Tests
-  TEntityData.ODSCreateEntity;
+  TEntityData.ODSCreateEntity(DataPath(TableName));
 end;
 
 
@@ -1644,7 +1707,7 @@ begin
 
     TBookData.ReviseFields(ODS);
 
-    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfCDS);
+    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfXML);
     ODS.Close;
 
     Assert(SysUtils.FileExists(DataPath(ChangeFileExt(TableName, '.cds'))));
@@ -1680,6 +1743,94 @@ begin
 {$else}
   FormatSettings.ShortDateFormat := TDBIUnitTest.GetDateTimeFormat;
 {$endif}
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 19/11/2014 10:24:01.<P>
+}
+type
+  TODSStreamingComponent = class(TDBIPersistenceAdapter)
+  private
+    FODS: TDBIObjectListDataset;
+  public
+    function GetRootComponent: TComponent; override;
+  end;
+
+  function TODSStreamingComponent.GetRootComponent: TComponent;
+  begin
+    if not Assigned(FODS) then begin
+      FODS := TDBIObjectListDataset.Create(Self);
+    end;
+    Result := FODS;
+  end;
+
+procedure TDBIODSUnitTests.Streaming;
+const
+  TableName = 'oStreamBooks.dbf';
+
+var
+  Adapter: TODSStreamingComponent;
+  ODS: TDBIObjectListDataset;
+
+begin
+  Adapter := TODSStreamingComponent.Create(nil);
+  try
+    // Create a new Dataset
+    TBookData.ODSCreateTable(DataPath(TableName));
+
+    ODS := Adapter.RootComponent as TDBIObjectListDataset;
+    ODS.Name := ChangeFileExt(TableName, '');
+    ODS.ClassTypeName := TBookData.ClassName;
+
+    TBookData.CreateFieldDefs(ODS);
+
+    // Verify Data was written correctly to file
+    ODS.List.Clear;
+    ODS.LoadFromFile(DataPath(TableName));
+    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.xml')));
+
+    TBookData.CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
+    TBookData.AssertValues(ODS);
+
+    // Stream the Dataset out to File
+    Adapter.SaveToFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+    ODS.Close;
+
+  finally
+    FreeAndNil(Adapter);
+  end;
+
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    ODS.Name := ChangeFileExt(TableName, '');
+    ODS.ClassTypeName := TBookData.ClassName;
+
+    // Verify Data was written correctly to file
+    ODS.List.Clear;
+    ODS.LoadFromFile(DataPath(ChangeFileExt(TableName, '.xml')));
+
+//##JVR    TBookData.VerifyFields(ODS, @FieldData, Length(FieldData));
+    TBookData.CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
+    TBookData.AssertValues(ODS);
+  finally
+    FreeAndNil(ODS);
+  end;
+
+  Adapter := TODSStreamingComponent.Create(nil);
+  try
+    // Stream the Dataset Back in
+    Adapter.LoadFromFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+    ODS := Adapter.RootComponent as TDBIObjectListDataset;
+    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.2.xml')));
+
+//##JVR    TBookData.VerifyFields(ODS, @FieldData, Length(FieldData));
+    TBookData.CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
+    TBookData.AssertValues(ODS);
+  finally
+    FreeAndNil(Adapter);
+  end;
 end;
 
 
@@ -1741,6 +1892,12 @@ begin
     ODS.Next;
     ODS.Next;
 
+    // First Test valid data
+    ODS.Edit;
+    ODS.FieldByName('Gender').AsString := 'F';
+    ODS.Post;
+
+    // Now test invalid data
     ODS.Edit;
     try
       ODS.FieldByName('Gender').AsString := 'male';

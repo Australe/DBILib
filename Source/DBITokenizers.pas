@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : DBILib}
+{#omcodecop off : jvr : dbilib}
 
 unit DBITokenizers;
 
@@ -356,7 +356,11 @@ function Macro(const Format: String; const Args: array of const): String;
 implementation
 
 uses
-  Types, TypInfo, DBIUtils;
+{$ifdef Delphi6}
+  Types,
+{$endif}
+  TypInfo,
+  DBIUtils;
 
 
 type
@@ -565,7 +569,7 @@ end;
   Jvr - 04/04/2011 09:14:12 - Initial code.<br />
 }
 type
-  TDBIProtectedStreamFormatter = class(TDBICustomStreamFormatter);
+  TDBIProtectedStreamFormatter = class(TDBIStreamFormatter);
 
 function TDBICustomParser.GetScope: TDBIScopeStack;
 begin
@@ -589,6 +593,11 @@ procedure TDBICustomParser.SyntaxError(
   const ErrMsg: String;
   Args: array of const
   );
+{$ifndef fpc}
+var
+  Address: Pointer;
+{$endif}
+
 const
   MsgFormat =
     '%s Syntax Error at [Line: %d, Offset: %d]'#13 +
@@ -597,20 +606,14 @@ const
     '  Type = "%s"'#13 +
     '  String = "%s"';
 
-var
-  Address: Pointer;
-
-  function GetUnitName: String;
-  begin
-    Result := String(TypInfo.GetTypeData(Self.ClassInfo)^.UnitName);
-  end;
-
 begin
+{$ifndef fpc}
   // Get return address
   asm
     mov eax, [ebp + 4]
     mov Address, eax
   end;
+{$endif}
 
   raise Exception.CreateFmt(MsgFormat, [
     Caller,
@@ -620,7 +623,7 @@ begin
     Input.Token.TokenName,
     GetEnumName(TypeInfo(TDBITokenKind), Ord(Input.Token.TokenKind)),
     Input.Token.AsString
-    ]) at Address;
+    ]) {$ifndef fpc} at Address {$endif} ;
 end;
 
 
@@ -872,6 +875,7 @@ const
   ErrMsg = 'Unexpected Token "%s" at [ %d, %d ]';
 
 begin
+  Result := Token.TokenString;
   if not (Token.TokenType in TokenTypes) then begin
     raise EAnalyserError.CreateFmt(ErrMsg, [Token.TokenString, Token.Row, Token.Column]);
   end;
@@ -887,6 +891,7 @@ const
   ErrMsg = 'Unexpected Token "%s" at [ %d, %d ]';
 
 begin
+  Result := Token.TokenString;
   if not (Token.TokenKind in TokenKinds) then begin
     raise EAnalyserError.CreateFmt(ErrMsg, [Token.TokenString, Token.Row, Token.Column]);
   end;
@@ -1774,9 +1779,6 @@ end;
 { TDBICustomScope }
 
 function TDBICustomScope.CheckType(AClassType: TDBICustomScopeClass): Boolean;
-const
-  Caller = 'CheckType';
-
 var
   ScopeName: String;
 

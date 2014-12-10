@@ -32,7 +32,9 @@ uses
 
   // Tests
   DBIUnitTests,
+{$ifndef fpc}
   DBICDSUnitTests,
+{$endif}
   DBIAUXUnitTests,
   DBIODSUnitTests,
   DBIXDSUnitTests;

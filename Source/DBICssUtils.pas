@@ -22,9 +22,11 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBICssUtils;
+
+{$I DBICompilers.inc}
 
 interface
 
@@ -259,12 +261,6 @@ procedure TDBICustomControlStyle.Assign(Source: TPersistent);
       end
       else if (CssStyle.Children[Index] is TDBICssPseudoElementStyle) then begin
         // Skip - dealt with by caller
-
-{##JVR
-      end
-      else begin
-        MessageDlg(Format('Invalid Class "%s"', [CssStyle.Children[Index].Classname]), mtError, [mbOK], 0);
-//}
       end;
     end;
   end;

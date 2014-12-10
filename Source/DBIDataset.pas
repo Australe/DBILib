@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -26,24 +26,13 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIDataset;
 
-interface
-
 {$I DBICompilers.inc}
 
-{$ifdef fpc}
-  {$asmmode intel}
-  {$mode delphi}
-{$endif}
-
-{. $define _AGGREGATES True}
-{. $define _UNUSED True}
-
-// Disable Typed @ operator, Controls the type of pointer returned by @ operator.
-{$T-}
+interface
 
 uses
 {$ifdef Delphi2009}
@@ -216,7 +205,6 @@ type
 {$endif}
 
 
-
 { TDBIDataSet }
 
   TDBILoadMode = (lmCreateDataset, lmDisableSourceEvents);
@@ -273,16 +261,9 @@ type
   end;
 {$endif}
 
-  TDBICustomDataset = class(TDataset)
-  protected
-    procedure Error(
-      E: Exception;
-      const Caller: String;
-      const Reference: String;
-      const ErrMsg: String;
-      Args: array of const
-      );
 
+  TDBICustomDataset = class(TDataset {$ifdef fpc}, IFPObserver {$endif} )
+  protected
     function GetFieldClass(FieldType: TFieldType): TFieldClass; override;
 
 {$ifdef fpc}
@@ -293,7 +274,10 @@ type
   protected
     procedure CheckFieldCompatibility(Field: TField; FieldDef: TFieldDef); virtual;
     procedure CreateFields; override;
+
     procedure DefChanged(Sender: TObject); virtual; abstract;
+    procedure FPOObservedChanged(ASender : TObject; Operation : TFPObservedOperation; Data : Pointer);
+
     function GetFieldData(FieldNo: Integer; Buffer: TDBIValueBuffer): Boolean; overload; virtual;
     function GetStateFieldValue(State: TDataSetState; Field: TField): Variant; virtual;
     procedure OpenParentDataSet(ParentDataSet: TDBICustomDataset);
@@ -301,6 +285,11 @@ type
 
     property DataSetField: TField read FDatasetField;
     property ObjectView: Boolean read FObjectView write FObjectView;
+
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+
 {$endif}
 
   end;
@@ -332,7 +321,9 @@ type
     FCloneSource: TDBIDataSet;
 {$ifdef _UNUSED}
     FReconcileDataSet: TDBIDataSet;
-    FSavedPacket: TDataPacket;
+{$endif}
+    FSavedPacket: TDBIDataPacket;
+{$ifdef _UNUSED}
     FDeltaPacket: TDataPacket;
     FParams: TParams;
 {$endif}
@@ -356,12 +347,12 @@ type
     FIndexFieldCount: Integer;
     FIndexGroupingLevel: Integer;
 {$ifdef _UNUSED}
-    FAppServer: IAppServer;
+    FAppServer: IDBIAppServer;
     FProviderName: string;
     FRemoteServer: TCustomRemoteServer;
+{$endif}
     FPacketRecords: Integer;
     FConstDisableCount: Integer;
-{$endif}
 {$ifdef _AGGREGATES}
     FMaxAggGroupingLevel: Integer;
 {$endif}
@@ -382,12 +373,12 @@ type
     FNotifyCallback: Boolean;
 {$ifdef _UNUSED}
     FOpeningFile: Boolean;
-    FProviderEOF: Boolean;
 {$endif}
+    FProviderEOF: Boolean;
     FFetchOnDemand: Boolean;
     FStoreDefs: Boolean;
-{$ifdef _UNUSED}
     FSavePacketOnClose: Boolean;
+{$ifdef _UNUSED}
     FOnReconcileError: TReconcileErrorEvent;
 {$endif}
     FStatusFilter: TUpdateStatusSet;
@@ -417,9 +408,7 @@ type
 {$ifdef _AGGREGATES}
     procedure ClearActiveAggs;
 {$endif}
-{$ifdef _UNUSED}
     procedure ClearSavedPacket;
-{$endif}
 {$ifdef _AGGREGATES}
     procedure CloseAggs;
 {$endif}
@@ -443,8 +432,10 @@ type
 {$endif}
 {$ifdef _UNUSED}
     function GetChangeCount: Int64;
-    function GetData: OleVariant;
+{$endif}
+    function GetData: TDBIDataPacket;
     function GetDataSize: Integer;
+{$ifdef _UNUSED}
     function GetDelta: OleVariant;
 {$endif}
     function GetIndexDefs: TIndexDefs;
@@ -452,8 +443,8 @@ type
     function GetIndexName: string;
     function GetLogChanges: Boolean;
     function GetMasterFields: string;
-{$ifdef _UNUSED}
     function GetProviderEOF: Boolean;
+{$ifdef _UNUSED}
     function GetSavePoint: Int64;
     function GetHasAppServer: Boolean;
 {$endif}
@@ -465,7 +456,8 @@ type
     procedure MasterChanged(Sender: TObject);
     procedure MasterDisabled(Sender: TObject);
     procedure NotifyCallback; stdcall;
-    procedure ReadData(Reader: TReader);
+    procedure ReadData(Stream: TStream);
+    procedure ReadInternalOptions(Reader: TReader);
 {$ifdef _UNUSED}
     function ReconcileCallback(iRslt: Integer; iUpdateKind: DSAttr;
       iResAction: dsCBRType; iErrCode: Integer; pErrMessage, pErrContext: Pointer;
@@ -480,9 +472,9 @@ type
 {$endif}
 {$ifdef _UNUSED}
     procedure SetConnectionBroker(const Value: TConnectionBroker);
-    procedure SaveDataPacket(Format: TDataPacketFormat = dfBinary);
-    procedure SetData(const Value: OleVariant);
 {$endif}
+    procedure SaveDataPacket(Format: TDBIDataFormat = dfXML);
+    procedure SetData(const Value: TDBIDataPacket);
     procedure SetDataSource(Value: TDataSource);
 {$ifdef _UNUSED}
     procedure SetDisableStringTrim(Value: Boolean);
@@ -511,12 +503,12 @@ type
     procedure SetupConstraints;
     procedure SetupInternalCalcFields(Add: Boolean);
 {$endif}
-    procedure WriteData(Writer: TWriter);
+    procedure WriteData(Stream: TStream);
+    procedure WriteInternalOptions(Writer: TWriter);
     procedure SetStatusFilter(const Value: TUpdateStatusSet);
-{$ifdef _UNUSED}
     function GetXMLData: string;
     procedure SetXMLData(const Value: string);
-{$endif}
+
   protected
     { IProviderSupport }
 {$ifdef _UNUSED}
@@ -564,9 +556,7 @@ type
 {$ifdef DelphiXE3}
     procedure DataConvert(Field: TField; Source, Dest: Pointer; ToNative: Boolean); overload; override; //##JVR deprecated 'Use overloaded method instead';
 {$endif DelphiXE3}
-{$ifdef _AGGREGATES}
     procedure DataEvent(Event: TDataEvent; Info: TDBIDataEventInfo); override;  {##NEW Info: NativeInt }
-{$endif}
     procedure DeactivateFilters;
     procedure DefChanged(Sender: TObject); override;
     procedure DefineProperties(Filer: TFiler); override;
@@ -614,12 +604,10 @@ type
     procedure InternalDelete; override;
     procedure InternalEdit; override;
     procedure InternalFirst; override;
-{. $ifdef _UNUSED}
     function InternalGetOptionalParam(const ParamName: string;
       FieldNo: Integer = 0): OleVariant;
     procedure InternalSetOptionalParam(const ParamName: string; const Value: OleVariant;
       IncludeInDelta: Boolean = False; FieldNo: Integer = 0);
-{. $endif}
     procedure InternalGotoBookmark(Bookmark: TDBIBookmark); overload; override;
     procedure InternalHandleException; override;
     procedure InternalInitFieldDefs; override;
@@ -639,8 +627,8 @@ type
     procedure PostKeyBuffer(Commit: Boolean);
 {$ifdef _UNUSED}
     procedure RefreshInternalCalcFields(Buffer: TDBIRecordBuffer); override;
-    procedure ReadDataPacket(Stream: TStream; ReadSize: Boolean);
 {$endif}
+    procedure ReadDataPacket(Stream: TStream; ReadSize: Boolean);
 {$ifdef _AGGREGATES}
     procedure ResetAggField(Field: TField); override;
 {$endif}
@@ -671,9 +659,7 @@ type
     procedure SetKeyFields(KeyIndex: TKeyIndex; const Values: array of const);
     procedure SetLinkRanges(MasterFields: TDBIFieldList{<TField>});
     procedure SetOnFilterRecord(const Value: TFilterRecordEvent); override;
-{$ifdef _UNUSED}
     procedure SetProviderEOF(Value: Boolean); virtual;
-{$endif}
     procedure SetRecNo(Value: Integer); override;
 {$ifdef _UNUSED}
     procedure SetRemoteServer(Value: TCustomRemoteServer); virtual;
@@ -681,11 +667,9 @@ type
     procedure SwitchToIndex(const IndexName: string);
     procedure SyncCursors(Cursor1, Cursor2: IDBICursor);
     procedure UpdateIndexDefs; override;
-{$ifdef _UNUSED}
     procedure WriteDataPacket(Stream: TStream; WriteSize: Boolean;
-      Format: TDataPacketFormat = dfBinary);
+      Format: TDBIDataFormat = dfXML);
     function ConstraintsStored: Boolean;
-{$endif}
 {$ifdef _AGGREGATES}
     property Aggregates: TDBIAggregates read FAggregates write SetAggregates;
     property AggregatesActive: Boolean read FAggregatesActive write SetAggsActive default False;
@@ -715,8 +699,11 @@ type
 {$ifdef _UNUSED}
     property ObjectView default True;
     property Params: TParams read FParams write SetParams;
-    property ProviderEOF: Boolean read GetProviderEOF write SetProviderEOF;
 {$endif}
+  protected
+    //##JVR - This should be public but will remain protected until fully tested.
+    property ProviderEOF: Boolean read GetProviderEOF write SetProviderEOF;
+  public
     property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
 {$ifdef _UNUSED}
     property StoreDefs: Boolean read FStoreDefs write FStoreDefs default False;
@@ -773,9 +760,9 @@ type
   protected
     //##JVR - This should be public but will remain protected until fully tested.
     property MasterFields: string read GetMasterFields write SetMasterFields;
+    property PacketRecords: Integer read FPacketRecords write FPacketRecords default -1;
   public
 {$ifdef _UNUSED}
-    property PacketRecords: Integer read FPacketRecords write FPacketRecords default -1;
     property RemoteServer: TCustomRemoteServer read GetRemoteServer write SetRemoteServer;
 {$endif}
     procedure AddIndex(const Name, Fields: string; Options: TIndexOptions;
@@ -801,15 +788,13 @@ type
     procedure CloneCursor(Source: TDBIDataset; Reset: Boolean;
       KeepSettings: Boolean = False); virtual;
     function CompareBookmarks(Bookmark1, Bookmark2: TBookmark): Integer; override;
-{$ifdef _UNUSED}
     function ConstraintsDisabled: Boolean;
+{$ifdef _UNUSED}
     function DataRequest(Data: OleVariant): OleVariant; virtual;
 {$endif}
     procedure DeleteIndex(const Name: string);
-{$ifdef _UNUSED}
     procedure DisableConstraints;
     procedure EnableConstraints;
-{$endif}
     procedure EditKey;
     procedure EditRangeEnd;
     procedure EditRangeStart;
@@ -883,11 +868,11 @@ type
     property ChangeCount: Int64 read GetChangeCount;
 {$endif}
     property CloneSource: TDBIDataSet read FCloneSource;
-{$ifdef _UNUSED}
-    property Data: OleVariant read GetData write SetData;
-    property XMLData: string read GetXMLData write SetXMLData;
-    property AppServer: IAppServer read GetAppServer write SetAppServer;
+    property Data: TDBIDataPacket read GetData write SetData;
     property DataSize: Integer read GetDataSize;
+    property XMLData: string read GetXMLData write SetXMLData;
+{$ifdef _UNUSED}
+    property AppServer: IAppServer read GetAppServer write SetAppServer;
     property Delta: OleVariant read GetDelta;
 {$endif}
     property GroupingLevel: Integer read FGroupingLevel;
@@ -909,7 +894,7 @@ type
       const Format: TDBIDataFormat
       ): TDBIDataFormat;
 
-    procedure CheckIsInitialised(const Caller, Line: String);
+    procedure CheckIsInitialised(const Context: String);
 
     function GetActiveRecInfo(out RecInfo: PRecInfo): Boolean;
 
@@ -1003,6 +988,7 @@ type
 
   protected
     function GetModified: Boolean;
+    procedure InternalHandleException;
     procedure ReadBlobData;
     procedure SetModified(const Value: Boolean);
 
@@ -1022,10 +1008,10 @@ const
 
 function PackageParams(Params: TParams; Types: TParamTypes = AllParamTypes): OleVariant;
 procedure UnpackParams(const Source: OleVariant; Dest: TParams);
+{$endif}
 
 const
   AllRecords = -1;
-{$endif}
 
 implementation
 
@@ -1033,11 +1019,13 @@ implementation
 uses
 {$ifdef DELPHI6}
   RtlConsts, Variants, FmtBcd, MaskUtils,
+{$else}
+  Forms,
 {$endif DELPHI6}
 {$ifndef fpc}
   Consts, DBConsts, DBCommon, Mask,
 {$endif}
-  SysConst, TypInfo, DBIUtils, DBIXmlUtils, Forms, Dialogs, DBIStrings;
+  SysConst, TypInfo, DBIUtils, DBIXmlUtils, Dialogs, DBIStrings;
 
 
 { Exceptions }
@@ -1192,9 +1180,7 @@ begin
   FMasterLink := TMasterDataLink.Create(Self);
   FMasterLink.OnMasterChange := MasterChanged;
   FMasterLink.OnMasterDisable := MasterDisabled;
-{$ifdef _UNUSED}
   FPacketRecords := AllRecords;
-{$endif}
   FFetchOnDemand := True;
 {$ifdef _UNUSED}
   FParams := TParams.Create(Self);
@@ -1218,13 +1204,12 @@ end;
 destructor TDBIDataset.Destroy;
 begin
   // Because of the creation order of DSBase inherited needs to be called first
-{$ifdef _UNUSED}
   FSavePacketOnClose := False;
-{$endif}
+
   inherited Destroy;
 
-{$ifdef _UNUSED}
   ClearSavedPacket;
+{$ifdef _UNUSED}
   FreeDataPacket(FDeltaPacket);
   SetRemoteServer(nil);
   SetConnectionBroker(nil);
@@ -1415,7 +1400,7 @@ end;
 function TDBIDataset.InternalGetOptionalParam(const ParamName: string;
   FieldNo: Integer = 0): OleVariant;
 begin
-  VarClear(Result);
+  VarClear(Result{%H-});
 end;
 
 {$ifdef _UNUSED}
@@ -1471,6 +1456,7 @@ begin
 end;
 {$endif}
 
+
 procedure TDBIDataset.OpenCursor(InfoQuery: Boolean);
 
 {$ifdef _UNUSED}
@@ -1498,9 +1484,9 @@ var
 {$endif}
 
 begin
-{$ifdef _UNUSED}
   FProviderEOF := True;
   FSavePacketOnClose := False;
+{$ifdef _UNUSED}
   CheckCircularLinks;
   if not FOpeningFile and (FileName <> '') and FileExists(FileName) then
   begin
@@ -1552,7 +1538,7 @@ begin
     if (FieldDefs.Count > 0) then begin
       FDSBase.EncodeFieldDescs(FieldDefs);
 //##JVR      Check(FDSBase.CreateDS(FieldDefs.Count, pDSFLDDesc(FieldDescs), TDBINameBuffer(TDBIString(Name))));
-    end
+    end;
 //##WIP
 
 
@@ -1570,11 +1556,14 @@ begin
     Resync([]);
   end;
 
-{$ifdef _UNUSED}
   { DSBase now has the data packet so we don't need to hold on to it }
+
+  { We are using the Loaded() method to load the data packet into the dataset
+    This means we cannot clear the packet here but must do it in the loaded() method.
+
   ClearSavedPacket;
+  }
   FSavePacketOnClose := True;
-{$endif}
 end;
 
 
@@ -1731,8 +1720,6 @@ end;
 procedure TDBIDataset.CheckFieldCompatibility(Field: TField; FieldDef: TFieldDef);
 const
 {$ifdef fpc}
-  //##JVR - This array is currently a one to one mapping,
-  //##JVR - and still needs to be altered to assign the compatible types
   BaseFieldTypes: array[TFieldType] of TFieldType = (
     ftUnknown, ftString, ftSmallint, ftInteger, ftWord, ftBoolean, ftFloat,
     ftCurrency, ftBCD, ftDate, ftTime, ftDateTime, ftBytes, ftVarBytes,
@@ -1882,9 +1869,6 @@ procedure TDBIDataset.InternalOpen;
       Result := V;
   end;
 
-const
-  Caller = 'InternalOpen';
-
 var
   CursorProps: DSProps;
 
@@ -1951,7 +1935,7 @@ begin
 
   except
     on E: Exception do
-      Error(E, Caller, '830', 'Failed to initialise FieldDefs', []);
+      raise EDBIException.Create(Self, E, 'InternalOpen::1951', 'Failed to initialise FieldDefs', []);
   end;
 
   { Populate Fields from FieldDefs }
@@ -2118,74 +2102,108 @@ end;
 }
 procedure TDBIDataset.InternalHandleException;
 begin
+{$ifndef DELPHI6}
   Application.HandleException(Self);
+{$else}
+  if Assigned(Classes.ApplicationHandleException) then
+    Classes.ApplicationHandleException(Self);
+{$endif}
 end;
 
 
-{$ifdef _UNUSED}
-function TDBIDataset.GetData: OleVariant;
-var
-  DataPacket: TDataPacket;
+function TDBIDataset.GetData: TDBIDataPacket;
 begin
-  if Active then
-  begin
+  if Active then begin
     CheckBrowseMode;
-    FDSBase.SetProp(dspropXML_STREAMMODE, TDBIPropValue(xmlOFF));
+    FDSBase.SetProp(basepropXML_STREAMMODE, TDBIPropValue(xmlON)); //##JVR TDBIPropValue(xmlOFF));
+    ClearSavedPacket;
+    FSavedPacket := TDBIXmlData.CreateDataPacket(Self);
+{$ifdef _UNUSED}
     Check(FDSBase.StreamDS(DataPacket));
   end
-  else
+  else begin
     SafeArrayCheck(SafeArrayCopy(FSavedPacket, DataPacket));
+{$endif}
+  end;
+
+{$ifdef _UNUSED}
   DataPacketToVariant(DataPacket, Result);
+{$endif}
+  Result := FSavedPacket;
 end;
 
-procedure TDBIDataset.SetData(const Value: OleVariant);
+
+procedure TDBIDataset.SetData(const Value: TDBIDataPacket);
 begin
   FSavePacketOnClose := False;
   Close;
   ClearSavedPacket;
-  if not VarIsNull(Value) then
+  if Assigned(Value) then
   begin
+    FSavedPacket := TDBIXmlData.CreateDataPacket(Value);
+    TDBIXmlData.LoadFromDataPacket(FSavedPacket, Self);
+{$ifdef _UNUSED}
     SafeArrayCheck(SafeArrayCopy(VarToDataPacket(Value), FSavedPacket));
     Open;
+{$endif}
   end;
 end;
 
+
 function TDBIDataset.GetXMLData: string;
-var
-  DataPacket: TDataPacket;
-  VarPacket: OleVariant;
 begin
-  if Active then
-  begin
+  if Active then begin
     CheckBrowseMode;
-    FDSBase.SetProp(dspropXML_STREAMMODE, TDBIPropValue(xmlON));
+    FDSBase.SetProp(basepropXML_STREAMMODE, TDBIPropValue(xmlON));
+
+    Result := TDBIXmlData.DatasetToXmlString(Self);
+{$ifdef _UNUSED}
     Check(FDSBase.StreamDS(DataPacket));
     DataPacketToVariant(DataPacket, VarPacket);
     Result := VariantArrayToString(VarPacket);
+{$endif}
+  end
+  else begin
+    Result := '';
   end;
 end;
 
+
 procedure TDBIDataset.SetXMLData(const Value: string);
+var
+  DataPacket: TDBIDataPacket;
+
 begin
-  SetData(StringToVariantArray(Value));
+  DataPacket := TDBIXmlData.CreateDataPacket(Value);
+  try
+    SetData(DataPacket);
+  finally
+    TDBIXmlData.FreeDataPacket(DataPacket);
+  end;
 end;
+
 
 procedure TDBIDataset.ClearSavedPacket;
 begin
-  FreeDataPacket(FSavedPacket);
+  TDBIXmlData.FreeDataPacket(FSavedPacket);
 end;
 
-procedure TDBIDataset.SaveDataPacket(Format: TDataPacketFormat);
+
+procedure TDBIDataset.SaveDataPacket(Format: TDBIDataFormat = dfXML);
 const
-  StreamMode: array[TDataPacketFormat] of TDBIPropValue = (xmlOFF, xmlON, xmlUTF8);
+  StreamMode: array[Boolean] of TDBIPropValue = (xmlOFF, xmlON);
 begin
   if Assigned(FDSBase) and (DataSetField = nil) then
   begin
-    FDSBase.SetProp(dspropXML_STREAMMODE, TDBIPropValue(StreamMode[Format]));
+    FDSBase.SetProp(basepropXML_STREAMMODE, TDBIPropValue(StreamMode[Format=dfXML]));
     ClearSavedPacket;
+    FSavedPacket := TDBIXmlData.CreateDataPacket(Self);
+{$ifdef _UNUSED}
     Check(FDSBase.StreamDS(FSavedPacket));
+{$endif}
   end;
 end;
+
 
 function TDBIDataset.GetDataSize: Integer;
 begin
@@ -2194,15 +2212,17 @@ begin
   else if Active then
   begin
     SaveDataPacket;
-    Result := DataPacketSize(FSavedPacket);
+    Result := TDBIXmlData.DataPacketSize(FSavedPacket);
     ClearSavedPacket;
   end
   else if Assigned(FSavedPacket) then
-    Result := DataPacketSize(FSavedPacket)
+    Result := TDBIXmlData.DataPacketSize(FSavedPacket)
   else
     Result := 0;
 end;
 
+
+{$ifdef _UNUSED}
 procedure TDBIDataset.FetchMoreData(All: Boolean);
 var
   Count: Integer;
@@ -2226,10 +2246,6 @@ end;
   Jvr - 31/10/2010 16:32:59 - only allow "foDetails" calls.<br>
 }
 procedure TDBIDataset.InternalFetch(Options: TFetchOptions);
-const
-  Caller = 'InternalFetch';
-  ErrMsg = 'Only "Option = foDetails" is permitted, "foRecord, foBlobs" NOT implemented';
-
 {$ifdef _UNUSED}
 var
   DataPacket: TDataPacket;
@@ -2238,7 +2254,9 @@ var
 {$endif}
 begin
   if (foRecord in Options) or (foBlobs in Options) then begin
-    Error(nil, Caller, '1414', ErrMsg, []);
+    raise EDBIException.Create(Self, 'InternalFetch::2235',
+      'Only "Option = foDetails" is permitted, "foRecord, foBlobs" NOT implemented', []
+      );
   end;
 
   CheckActive;
@@ -2280,8 +2298,6 @@ end;
 
 procedure TDBIDataset.CheckProviderEOF;
 begin
-//##JVR --- NOT required for non provider style datasets ---
-
 {$ifdef _UNUSED}
   if HasAppServer and not ProviderEOF and FFetchOnDemand and (FPacketRecords <> 0) then
     FetchMoreData(True);
@@ -2403,6 +2419,8 @@ begin
   if Assigned(Value) then
     ClearSavedPacket;
 end;
+{$endif}
+
 
 procedure TDBIDataset.SetProviderEOF(Value: Boolean);
 begin
@@ -2411,6 +2429,7 @@ begin
     FCloneSource.ProviderEOF := Value;
 end;
 
+
 function TDBIDataset.GetProviderEOF: Boolean;
 begin
   if Assigned(FCloneSource) then
@@ -2418,6 +2437,8 @@ begin
   Result := FProviderEOF;
 end;
 
+
+{$ifdef _UNUSED}
 function TDBIDataset.GetRemoteServer: TCustomRemoteServer;
 begin
   Result := FRemoteServer;
@@ -2458,11 +2479,10 @@ begin
 
   if (Operation = opRemove) and (AComponent = FCloneSource) then
   begin
-{$ifdef _UNUSED}
     FProviderEOF := FCloneSource.ProviderEOF;
-{$endif}
     FCloneSource := nil;
   end;
+  
 {$ifdef _UNUSED}
   if (Operation = opRemove) and (AComponent = FConnectionBroker) then
     FConnectionBroker:= nil;
@@ -2471,13 +2491,13 @@ end;
 
 
 
-{$ifdef _AGGREGATES}
 // _____________________________________________________________________________
 {**
   Jvr - 08/10/2008 19:27:09 - Initial code.<br />
 }
 procedure TDBIDataset.DataEvent(Event: TDataEvent; Info: TDBIDataEventInfo);
 begin
+{$ifdef _AGGREGATES}
   case Event of
 {$ifdef _UNUSED}
     deParentScroll: MasterChanged(Self);
@@ -2491,10 +2511,10 @@ begin
         AppServer := nil;
 {$endif}
   end;
+{$endif}
 
   inherited;
 end;
-{$endif}
 
 
 {$ifdef _UNUSED}
@@ -2637,8 +2657,7 @@ begin
       E.Free;
     end;
   except
-    if Assigned(Classes.ApplicationHandleException) then
-      ApplicationHandleException(Self);
+    InternalHandleException;
     Action := raAbort;
   end;
   Result := Ord(Action) + 1;
@@ -2821,7 +2840,7 @@ procedure TDBIDataset.EncodeFieldDesc(out FieldDesc: DSFLDDesc;
   const Name: string; DataType: TFieldType; Size, Precision: Integer;
   Calculated: Boolean; Attributes: TFieldAttributes);
 begin
-  FillChar(FieldDesc, SizeOf(FieldDesc), #0);
+  FillChar(FieldDesc{%H-}, SizeOf(FieldDesc), #0);
   StrLCopy(FieldDesc.szName, TDBINameBuffer(TDBIString(Name)), SizeOf(FieldDesc.szName)-1);
 
   FieldDesc.iFldType := FieldTypeMap[DataType];
@@ -2870,14 +2889,22 @@ end;
 }
 procedure TDBIDataset.CreateDataset;
 
+  procedure CheckFieldDef(FieldDef: TFieldDef);
+  begin
+    with FieldDef do
+      if Required then
+        Attributes := Attributes + [faRequired] else
+        Attributes := Attributes - [faRequired];
+  end;
+
   procedure GetFieldDefCount(FieldDefs: TFieldDefs; var Count: Integer);
   var
     I: Integer;
   begin
     Inc(Count, FieldDefs.Count);
     for I := 0 to FieldDefs.Count - 1 do
-      if TDBIFieldDef(FieldDefs[I]).HasChildDefs then
-        GetFieldDefCount(TDBIFieldDef(FieldDefs[I]).ChildDefs, Count);
+      if TDBIFieldDef.HasChildDefs(FieldDefs[I]) then
+        GetFieldDefCount(TDBIFieldDef.ChildDefs(FieldDefs[I]), Count);
   end;
 
   procedure EncodeFieldDescs(FieldDefs: TFieldDefs; FieldDescs: TFieldDescList;
@@ -2887,14 +2914,16 @@ procedure TDBIDataset.CreateDataset;
   begin
     for I := 0 to FieldDefs.Count - 1 do
     begin
+      CheckFieldDef(FieldDefs[I]);
       EncodeFieldDesc(FieldDescs[DescNo], FieldDefs[I].Name, FieldDefs[I].DataType, FieldDefs[I].Size, FieldDefs[I].Precision, False, FieldDefs[I].Attributes);
       Inc(DescNo);
-      if TDBIFieldDef(FieldDefs[I]).HasChildDefs then
+
+      if TDBIFieldDef.HasChildDefs(FieldDefs[I]) then
       begin
         if FieldDefs[I].DataType = ftDataSet then
-          GetFieldDefCount(TDBIFieldDef(FieldDefs[I]).ChildDefs, FieldDescs[DescNo-1].iUnits2);
+          GetFieldDefCount(TDBIFieldDef.ChildDefs(FieldDefs[I]), FieldDescs[DescNo-1].iUnits2);
 
-        EncodeFieldDescs(TDBIFieldDef(FieldDefs[I]).ChildDefs, FieldDescs, DescNo);
+        EncodeFieldDescs(TDBIFieldDef.ChildDefs(FieldDefs[I]), FieldDescs, DescNo);
       end;
     end;
   end;
@@ -2973,10 +3002,8 @@ procedure TDBIDataset.EmptyDataSet;
 begin
   CheckBrowseMode;
   Check(FDSBase.Reset);
-{$ifdef _UNUSED}
-  FDSBase.SetProp(dspropDATAHASCHANGED, TDBIPropValue(True));
+  FDSBase.SetProp(basepropDATAHASCHANGED, TDBIPropValue(True));
   ProviderEOF := True;
-{$endif}
   Resync([]);
   InitRecord(ActiveBuffer);
 end;
@@ -3009,66 +3036,70 @@ begin
     Check(FDSBase.AddField(nil));
   end;
 end;
+{$endif}
 
+
+// _____________________________________________________________________________
+{**
+  Jvr - 26/11/2014 13:48:24 - Initial code.<br>
+}
 procedure TDBIDataset.WriteDataPacket(Stream: TStream; WriteSize: Boolean;
-  Format: TDataPacketFormat = dfBinary);
+  Format: TDBIDataFormat = dfXML);
 var
   Size: Integer;
-  DataPtr: Pointer;
+
 begin
-  if Active then CheckBrowseMode;
-  if IsCursorOpen then
-  begin
+  if Active then begin
+    CheckBrowseMode;
+  end;
+
+  if IsCursorOpen then begin
     CheckProviderEOF;
     SaveDataPacket(Format);
   end;
-  if Assigned(FSavedPacket) then
-  begin
-    Size := DataPacketSize(FSavedPacket);
-    SafeArrayCheck(SafeArrayAccessData(FSavedPacket, DataPtr));
-    try
-      if WriteSize then
-        Stream.Write(Size, SizeOf(Size));
-      Stream.Write(DataPtr^, Size);
-    finally
-      SafeArrayCheck(SafeArrayUnAccessData(FSavedPacket));
+
+  if Assigned(FSavedPacket) then begin
+    Size := TDBIXmlData.DataPacketSize(FSavedPacket);
+
+    if WriteSize then begin
+      Stream.Write(Size, SizeOf(Size));
     end;
-    if Active then ClearSavedPacket;
+    Stream.CopyFrom(FSavedPacket, Size);
+
+    if Active then begin
+      ClearSavedPacket;
+    end;
   end;
 end;
 
+
+// _____________________________________________________________________________
+{**
+  Jvr - 26/11/2014 13:24:12 - Initial code.<br>
+}
 procedure TDBIDataset.ReadDataPacket(Stream: TStream; ReadSize: Boolean);
 var
   Size: Integer;
-  DataPtr: Pointer;
-  VarBound: TVarArrayBound;
+
 begin
-  if ReadSize then
-    Stream.ReadBuffer(Size, SizeOf(Size))
-  else
+  if ReadSize then begin
+    Stream.ReadBuffer(Size, SizeOf(Size));
+  end
+  else begin
     Size := Stream.Size - Stream.Position;
-  if Size > 0 then
-  begin
+  end;
+
+  if (Size > 0) then begin
     ClearSavedPacket;
-    FillChar(VarBound, SizeOf(VarBound), 0);
-    VarBound.ElementCount := Size;
-    FSavedPacket := TDataPacket(SafeArrayCreate(varByte, 1, @VarBound));
-    if FSavedPacket = nil then
-      VarArrayCreateError;
     try
-      SafeArrayCheck(SafeArrayAccessData(FSavedPacket, DataPtr));
-      try
-        Stream.Read(DataPtr^, Size);
-      finally
-        SafeArrayCheck(SafeArrayUnAccessData(FSavedPacket));
-      end;
+      FSavedPacket := TDBIXmlData.CreateDataPacket(Stream, Size);
     except
       ClearSavedPacket;
       raise;
     end;
   end;
 end;
-{$endif}
+
 
 
 // _____________________________________________________________________________
@@ -3081,11 +3112,14 @@ procedure TDBIDataset.LoadFromStream(
   OpenMode: TDBIOpenMode
   );
 begin
-  if (Format = dfCDS) then begin
-    DBIXmlUtils.LoadFromXmlStream(AStream, Self);
+  if (Format = dfXML) then begin
+    Close;
+    DataConnection.FileName := '';
+
+    TDBIXmlData.LoadFromStream(AStream, Self);
   end
   else if (Format = dfCSV) then begin
-    DBIXmlUtils.LoadFromCSVStream(AStream, Self);
+    TDBICsVData.LoadFromStream(AStream, Self);
   end
   else begin
     Close;
@@ -3106,14 +3140,14 @@ end;  { LoadFromStream }
 }
 procedure TDBIDataset.SaveToStream(AStream: TStream; Format: TDBIDataFormat);
 begin
-  if (Format = dfCDS) then begin
-    DBIXmlUtils.SaveToXmlStream(AStream, Self);
+  if (Format = dfXML) then begin
+    TDBIXmlData.SaveToStream(AStream, Self);
   end
   else if (Format = dfCSV) then begin
-    DBIXmlUtils.SaveToCSVStream(AStream, Self);
+    TDBICSVData.SaveToStream(AStream, Self);
   end
   else if (Format = dfPSV) then begin
-    DBIUtils.SaveToPsvStream(AStream, Self);
+    TDBIPsvData.SaveToStream(AStream, Self);
   end
   else begin
     DataConnection.SaveToStream(AStream, Format);
@@ -3138,11 +3172,14 @@ begin
 
   Format := SelectFormat(AFileName, Format);
 
-  if (Format = dfCDS) then begin
-    DBIXmlUtils.LoadFromXmlFile(AFileName, Self);
+  if (Format = dfXML) then begin
+    Close;
+    DataConnection.FileName := '';
+
+    TDBIXmlData.LoadFromFile(AFileName, Self);
   end
   else if (Format = dfCSV) then begin
-    DBIXmlUtils.LoadFromCSVFile(AFileName, Self);
+    TDBICsvData.LoadFromFile(AFileName, Self);
   end
   else begin
     Close;
@@ -3177,14 +3214,14 @@ begin
       DBCursor.CloneCursor(Self, True);
 
       Format := SelectFormat(AFileName, Format);
-      if (Format = dfCDS) then begin
-        DBIXmlUtils.SaveToXmlFile(AFileName, DBCursor);
+      if (Format = dfXML) then begin
+        TDBIXmlData.SaveToFile(AFileName, DBCursor);
       end
       else if (Format = dfCSV) then begin
-        DBIXmlUtils.SaveToCSVFile(AFileName, DBCursor);
+        TDBICsvData.SaveToFile(AFileName, DBCursor);
       end
       else if (Format = dfPSV) then begin
-        DBIUtils.SavetoPsvFile(AFileName, DBCursor);
+        TDBIPsvData.SavetoFile(AFileName, DBCursor);
       end
       else begin
         DataConnection.SaveToFile(AFileName, Format);
@@ -3216,9 +3253,9 @@ begin
 
   Extension := LowerCase(ExtractFileExt(AFileName));
   if (Extension = '.xml') then
-    Result := dfCDS
+    Result := dfXML
   else if (Extension = '.cds') then
-    Result := dfCDS
+    Result := dfXML
   else if (Extension = '.csv') then
     Result := dfCSV
   else if (Extension = '.psv') then
@@ -3283,18 +3320,20 @@ begin
   end;
 end;
 
-{$ifdef _UNUSED}
+
 function TDBIDataset.ConstraintsDisabled: Boolean;
 begin
   Result := FConstDisableCount > 0;
 end;
 
+
 procedure TDBIDataset.DisableConstraints;
 begin
   if FConstDisableCount = 0 then
-    Check(FDSBase.SetProp(dspropCONSTRAINTS_DISABLED, TDBIPropValue(True)));
+    Check(FDSBase.SetProp(basepropCONSTRAINTS_DISABLED, TDBIPropValue(True)));
   Inc(FConstDisableCount);
 end;
+
 
 procedure TDBIDataset.EnableConstraints;
 begin
@@ -3302,10 +3341,10 @@ begin
   begin
     Dec(FConstDisableCount);
     if FConstDisableCount = 0 then
-      Check(FDSBase.SetProp(dspropCONSTRAINTS_DISABLED, TDBIPropValue(False)));
+      Check(FDSBase.SetProp(basepropCONSTRAINTS_DISABLED, TDBIPropValue(False)));
   end;
 end;
-{$endif}
+
 
 
 { Record Functions }
@@ -3377,7 +3416,7 @@ end;
 }
 procedure TDBIDataset.InternalInitRecord(Buffer: TDBIRecordBuffer);
 begin
-  CheckIsInitialised('InternalInitRecord', '1460');
+  CheckIsInitialised('InternalInitRecord::3375');
   Check(FDSCursor.InitRecord(Buffer));
 end;
 
@@ -3598,7 +3637,7 @@ function TDBIDataset.GetActiveRecBuf(out RecBuf: TDBIRecordBuffer): Boolean;
   begin
     UpdateCursorPos;
     Result := TempBuffer;
-    Error(nil, 'GetActiveRecBuf', '2410', 'GetOriginalBuffer() Not Implemented Yet!', []);
+    raise EDBINotImplementedException.Create(Self, 'GetOriginalBuffer::3605');
 {$ifdef _UNUSED}
     if FDSCursor.GetProp(curpropGETORG_RECBUF, PDBIPropValue(@Result)) <> DBERR_NONE then
       GetCurrentRecord(Result);
@@ -3732,7 +3771,7 @@ var
   LSize: Integer;
   LName: string;
   FieldDesc: DSFLDDesc;
-  LFieldDef: TDBIFieldDef;
+  LFieldDef: TFieldDef;
 
 begin
   FieldDesc := FieldDescs[DescNo];
@@ -3836,7 +3875,7 @@ begin
 
   if LType <> ftUnknown then
   begin
-    LFieldDef := TDBIFieldDef(FieldDefs.AddFieldDef);
+    LFieldDef := FieldDefs.AddFieldDef;
 {$ifndef fpc}
     LFieldDef.FieldNo := FieldID;
 {$endif}
@@ -3846,17 +3885,20 @@ begin
     LFieldDef.Size := LSize;
     LFieldDef.Precision := LPrecision;
     LFieldDef.Attributes := PFieldAttributes(@(FieldDesc.iFldAttr))^;
+{$ifdef fpc}
+    LFieldDef.Required := faRequired in LFieldDef.Attributes;
+{$endif}
     if FieldDesc.iFldSubType = fldstFIXED then
       LFieldDef.Attributes := LFieldDef.Attributes + [faFixed];
     LFieldDef.InternalCalcField := FieldDesc.bCalculated;
     case LType of
       ftADT:
         for I := 0 to FieldDesc.iUnits1 - 1 do
-          AddFieldDesc(FieldDescs, DescNo, FieldID, LFieldDef.ChildDefs);
+          AddFieldDesc(FieldDescs, DescNo, FieldID, TDBIFieldDef.ChildDefs(LFieldDef));
       ftArray:
         begin
           I := FieldID;
-          AddFieldDesc(FieldDescs, DescNo, I, LFieldDef.ChildDefs);
+          AddFieldDesc(FieldDescs, DescNo, I, TDBIFieldDef.ChildDefs(LFieldDef));
           Inc(FieldID, FieldDesc.iUnits2);
         end;
     end; { case }
@@ -3911,7 +3953,7 @@ end;
 }
 function TDBIDataset.GetFieldData(FieldNo: Integer; Buffer: TDBIValueBuffer): Boolean;
 var
-  RecBuf: TDBIREcordBuffer;
+  RecBuf: TDBIRecordBuffer;
   IsBlank: LongBool;
 begin
   Result := GetActiveRecBuf(RecBuf);
@@ -3968,7 +4010,7 @@ end;
 }
 function TDBIDataset.GetStateFieldValue(State: TDataSetState; Field: TField): Variant;
 
-  function CheckNotChanged(Buffer: TDBIREcordBuffer): Variant;
+  function CheckNotChanged(Buffer: TDBIRecordBuffer): Variant;
   var
     IsBlank: Integer;
   begin
@@ -3989,7 +4031,7 @@ begin
     dsNewValue:
       if FNewValueBuffer = nil then
       begin
-        FNewValueBuffer := TDBIREcordBuffer(ActiveBuffer);
+        FNewValueBuffer := TDBIRecordBuffer(ActiveBuffer);
         try
           Result := CheckNotChanged(FNewValueBuffer);
         finally
@@ -4018,10 +4060,10 @@ end;
 }
 procedure TDBIDataset.SetFieldData(Field: TField; Buffer: TDBIValueBuffer);
 var
-  RecBuf: TDBIREcordBuffer;
+  RecBuf: TDBIRecordBuffer;
 begin
 //##JVR  FIndexFieldCount := 0;
-  CheckIsInitialised('SetFieldData', '2064');
+  CheckIsInitialised('SetFieldData::4025');
 
   if not (State in dsWriteModes) then DatabaseError(SNotEditing, Self);
   if (State = dsSetKey) and ((Field.FieldNo < 0) or (FIndexFieldCount > 0) and
@@ -4039,7 +4081,6 @@ begin
     Field.Validate(Buffer);
     if State in [dsEdit, dsInsert] then
       Check(FDSCursor.VerifyField(Field.FieldNo, Buffer));
-
     Check(FDSCursor.PutField(RecBuf, Field.FieldNo, Buffer));
 
 {$ifdef _AGGREGATES}
@@ -4200,7 +4241,7 @@ end;
 }
 procedure TDBIDataset.InternalFirst;
 begin
-  CheckIsInitialised('InternalFirst', '445');
+  CheckIsInitialised('InternalFirst::4205');
   Check(FDSCursor.MoveToBOF);
 end;
 
@@ -4211,7 +4252,7 @@ end;
 }
 procedure TDBIDataset.InternalLast;
 begin
-  CheckIsInitialised('InternalLast', '460');
+  CheckIsInitialised('InternalLast::4215');
   Check(FDSCursor.MoveToEOF);
 end;
 
@@ -4222,7 +4263,7 @@ end;
 }
 procedure TDBIDataset.InternalPost;
 begin
-  CheckIsInitialised('InternalPost', '525');
+  CheckIsInitialised('InternalPost::4225');
 
   if State = dsEdit then
     Check(FDSCursor.ModifyRecord(ActiveBuffer))
@@ -4271,9 +4312,6 @@ end;
                               to notify the engine of the cancel operation<P>
 }
 procedure TDBIDataset.InternalCancel;
-const
-  Caller = 'InternalCancel';
-
 var
   PRecordInfo: PRecInfo;
 
@@ -4283,9 +4321,8 @@ begin
 
     // Just a check to make sure that it's ok to reuse dsRecOrg
     if (PRecordInfo^.Attribute and dsRecLockReset) = dsRecOrg then begin
-      Error(nil, Caller, '2180',
-        'dsRecOrg [%s], is overloaded in it''s use.',
-        ['Original record (was changed)']
+      raise EDBIException.Create(Self, 'InternalCancel::4290',
+        'Attribute "dsRecOrg" is overloaded in it''s use, Original record was changed', []
         );
     end;
 
@@ -4333,7 +4370,7 @@ begin
   if doDisableEdits in FDSOptions then
     DatabaseError(SNoEditsAllowed, Self);
 
-  CheckIsInitialised('InternalEdit', '500');
+  CheckIsInitialised('InternalEdit::4330');
 
   PRecordInfo := PRecInfo(TDBIRecordBuffer(ActiveBuffer) + FRecInfoOfs);
   Check(FDSCursor.MovetoSeqNo(PRecordInfo^.RecordNumber));
@@ -4437,7 +4474,7 @@ end;
 }
 procedure TDBIDataset.InternalGotoBookmark(Bookmark: TDBIBookmark);
 begin
-  CheckIsInitialised('InternalGotoBookmark', '508');
+  CheckIsInitialised('InternalGotoBookmark::4435');
   Check(FDSCursor.MoveToBookmark(Bookmark));
 end;
 
@@ -4451,7 +4488,7 @@ procedure TDBIDataset.InternalSetToRecord(Buffer: TDBIRecordBuffer);
 begin
 //##JVR  InternalGotoBookmark(TBookmark(Buffer + FBookmarkOfs));
 
-  CheckIsInitialised('InternalSetToRecord', '4282');
+  CheckIsInitialised('InternalSetToRecord::4450');
   Check(FDSCursor.MoveToBookmark(@Buffer[FBookmarkOfs]));
 end;
 
@@ -4518,7 +4555,7 @@ const
   RetCodes: array[Boolean, Boolean] of ShortInt = ((2, -1),(1, 0));
 
 begin
-  CheckIsInitialised('CompareBookmarks', '775');
+  CheckIsInitialised('CompareBookmarks::4516');
 
   { Check for uninitialized bookmarks }
   Result := RetCodes[Bookmark1 = nil, Bookmark2 = nil];
@@ -4551,7 +4588,7 @@ begin
     end;
   except
     on E: Exception do
-      Error(E, 'BookmarkValid', '2285', 'Failed to validate bookmark', []);
+      raise EDBIException.Create(Self, E, 'BookmarkValid::4555', 'Failed to validate bookmark', []);
   end;
 end;
 
@@ -4874,7 +4911,7 @@ var
   Descending,
   CaseInsensitive: LongBool;
 begin
-  FillChar(IndexDesc, SizeOf(IndexDesc), 0);
+  FillChar(IndexDesc{%H-}, SizeOf(IndexDesc), 0);
   with IndexDesc do
   begin
 //##UNICODE    StrCopy(szName, PChar(Name));
@@ -5071,10 +5108,12 @@ begin
   try
     GetFieldList(FieldList, Fields);
     for I := 0 to FieldList.Count - 1 do
-      if TField(FieldList[I]).FieldNo > 0 then
-        FieldList[I] := Pointer(TField(FieldList[I]).FieldNo)
-      else
+      if TField(FieldList[I]).FieldNo > 0 then begin
+         FieldList[I] := Pointer(TField(FieldList[I]).FieldNo);
+      end
+      else begin
         DatabaseError(SFieldIndexError, Self);
+      end;
 
     Check(Cursor.SortOnFields(FieldList.Count, PPointer(FieldList.List),
       GetFlags(Descending, DescFlags), GetFlags(CaseInsensitive, CaseFlags)));
@@ -5314,7 +5353,7 @@ end;
 
 procedure TDBIDataset.GotoNearest;
 begin
-  Error(nil, 'GotoNearest', '2360', 'Not implemented Yet', []);
+  raise EDBINotImplementedException.Create(Self, 'GotoNearest::5325');
 end;
 {$ifdef _UNUSED}
 var
@@ -5534,6 +5573,17 @@ begin
   finally
     Exclude(FInternalOptions, ioLoading);
   end;
+
+  if Assigned(FSavedPacket) then begin
+    TDBIXmlData.LoadData(FSavedPacket, Self);
+    ClearSavedPacket;
+  end;
+end;
+
+
+procedure TDBIDataset.ReadData(Stream: TStream);
+begin
+  ReadDataPacket(Stream, True);
 end;
 
 
@@ -5541,30 +5591,44 @@ end;
 {**
   Jvr - 28/05/2002 15:54:24.<P>
 }
-procedure TDBIDataset.ReadData(Reader: TReader);
-const
-  Caller = 'ReadData';
+procedure TDBIDataset.ReadInternalOptions(Reader: TReader);
+
+  function ReadStr: AnsiString;
+{$ifdef fpc}
+  var
+    Size: Byte;
+
+  begin
+    Reader.Read(Size, 1);
+    SetLength(Result, Size);
+    if Size > 0 then begin
+      Reader.Read(Pointer(@Result[1])^, Size);
+    end;
+  end;
+{$else}
+  begin
+    Result := AnsiString(Reader.ReadStr);
+  end;
+{$endif}
+
 
 var
   EnumName: String;
   Value: Integer;
-
+  
 begin
   FInternalOptions := [];
+
   if (Reader.NextValue = vaSet) then begin
     Reader.ReadValue;
 
     while True do begin
-{$ifndef fpc}
-      EnumName := Reader.ReadStr;
-{$else}
-      EnumName := Reader.ReadString;
-{$endif}
+      EnumName := String(ReadStr);
       if (EnumName = '') then Break;
 
       Value := GetEnumValue(TypeInfo(TDBIInternalOption), EnumName);
       if (Value = -1) then begin
-        Error(nil, Caller, '4155', SInvalidPropertyValue, []);
+        raise EDBIException.Create(Self, 'ReadInternalOptions::5625', SInvalidPropertyValue, []);
       end;
       Include(FInternalOptions, TDBIInternalOption(Value));
     end;
@@ -5572,37 +5636,63 @@ begin
 end;
 
 
+procedure TDBIDataset.WriteData(Stream: TStream);
+begin
+  WriteDataPacket(Stream, True);
+end;
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 28/05/2002 15:54:40.<P>
 }
-procedure TDBIDataset.WriteData(Writer: TWriter);
-var
-  Option: TDBIInternalOption;
+procedure TDBIDataset.WriteInternalOptions(Writer: TWriter);
 
   procedure WriteValue(Value: TValueType);
+  const
+    Size = {$ifdef fpc} 1; {$else} SizeOf(Value); {$endif}
   begin
-    Writer.Write(Value, SizeOf(Value));
+    Writer.Write(Value, Size);
   end;
+
+
+  procedure WriteStr(const Value: AnsiString);
+{$ifdef fpc}
+  var
+    Len: Integer;
+    Size: Byte;
+
+  begin
+    Len := Length(Value);
+    if (Len > 255) then begin
+      Len := 255;
+    end;
+
+    Size := Len;
+    Writer.Write(Size, 1);
+    if (Len > 0) then begin
+      Writer.Write(Value[1], Len);
+    end;
+  end;
+{$else}
+  begin
+    Writer.WriteStr(Value);
+  end;
+{$endif}
+
+
+var
+  Option: TDBIInternalOption;
 
 begin
   WriteValue(vaSet);
   for Option := Low(TDBIInternalOption) to High(TDBIInternalOption) do begin
     if (Option in FInternalOptions) then begin
-{$ifndef fpc}
-      Writer.WriteStr(TDBIString(GetEnumName(TypeInfo(TDBIInternalOption), Ord(Option))));
-{$else}
-      Writer.WriteString(TDBIString(GetEnumName(TypeInfo(TDBIInternalOption), Ord(Option))));
-{$endif}
+      WriteStr(TDBIString(GetEnumName(TypeInfo(TDBIInternalOption), Ord(Option))));
     end;
   end;
-{$ifndef fpc}
-  Writer.WriteStr('');
-{$else}
-  Writer.WriteString('');
-{$endif}
+  WriteStr('');
 end;
-
 
 
 // _____________________________________________________________________________
@@ -5698,12 +5788,22 @@ end;
 procedure TDBIDataset.DefineProperties(Filer: TFiler);
   function StoreData: Boolean;
   begin
+    Result := Active and (DataSetField = nil) and (FCloneSource = nil);
+    if Result and Assigned(Filer.Ancestor) then begin
+      Result := not TDBIDataset(Filer.Ancestor).Active or (TDBIDataset(Filer.Ancestor).DataSize <> Self.DataSize);
+    end;
+  end;
+
+  function StoreInternalOptions: Boolean;
+  begin
     Result := FInternalOptions <> [];
   end;
 
 begin
   inherited DefineProperties(Filer);
-  Filer.DefineProperty('InternalOptions', ReadData, WriteData, StoreData);
+
+  Filer.DefineProperty('InternalOptions', ReadInternalOptions, WriteInternalOptions, StoreInternalOptions);
+  Filer.DefineBinaryProperty('Data', ReadData, WriteData, StoreData);
 end;
 
 
@@ -5782,7 +5882,7 @@ begin
     Accept := True;
     OnFilterRecord(Self, Accept);
   except
-    Application.HandleException(Self);
+    InternalHandleException;
   end;
   RestoreState(SaveState);
   Result := Accept;
@@ -6051,7 +6151,7 @@ var
   CaseInsensitive: Boolean;
 
 begin
-  CheckIsInitialised('LocateRecord', '770');
+  CheckIsInitialised('LocateRecord::6050');
 
   CheckBrowseMode;
   CursorPosChanged;
@@ -6676,7 +6776,6 @@ begin
       end;
     end;
 end;
-
 {$endif}
 
 
@@ -6763,12 +6862,14 @@ begin
   UnPackParams(Params, Self.Params);
   DoAfterExecute(OwnerData);
 end;
+{$endif}
 
 function TDBIDataset.ConstraintsStored: Boolean;
 begin
   Result := Constraints.Count > 0;
 end;
 
+{$ifdef _UNUSED}
 procedure TDBIDataset.SetupConstraints;
 type
   TConstraintType = (ctField, ctRecord, ctDefault);
@@ -7001,7 +7102,7 @@ begin
     FField.Modified := True;
     FDataSet.DataEvent(deFieldChange, Longint(FField));
   except
-    Application.HandleException(Self);
+    InternalHandleException;
   end;
 
   inherited Destroy;
@@ -7011,6 +7112,17 @@ end;
 function TDBIBlobStream.GetModified: Boolean;
 begin
   Result := _Modified;
+end;
+
+
+procedure TDBIBlobStream.InternalHandleException;
+begin
+{$ifndef DELPHI6}
+  Application.HandleException(Self);
+{$else}
+  if Assigned(Classes.ApplicationHandleException) then
+    Classes.ApplicationHandleException(Self);
+{$endif}
 end;
 
 
@@ -7598,8 +7710,8 @@ begin
   end
   else begin
     if (State = dsCalcFields) then begin
-      Error(nil, 'GetRecordNumber', '3950', 'Not Tested for (State = dsCalcFields)', []);
-      BufPtr := CalcBuffer;
+      raise EDBIException.Create(Self, 'GetRecordNumber::7605', 'Not Tested for (State = dsCalcFields)', []);
+//##JVR      BufPtr := CalcBuffer;
     end
     else begin
       BufPtr := ActiveBuffer;
@@ -7621,7 +7733,7 @@ end;
 }
 procedure TDBIDataset.SetRecordNumber(Value: Integer);
 begin
-  CheckIsInitialised('SetRecId', '1670');
+  CheckIsInitialised('SetRecId::7620');
   CheckBrowseMode;
   if (Value <> RecordNumber) then begin
     if (Value <= GetRecordCount) then begin
@@ -7631,8 +7743,10 @@ begin
       DoAfterScroll;
     end
     else begin
-      Error(nil, 'SetRecId', '1725', 'Attempt to MoveCursor to RecNo [%d]' +
-        ' where there are only [%d] records', [Value, GetRecordCount]);
+      raise EDBIException.Create(Self, 'SetRecId::7635',
+        'Attempt to MoveCursor to RecNo [%d] where there are only [%d] records',
+        [Value, GetRecordCount]
+        );
     end;
   end;
 end;
@@ -7676,9 +7790,6 @@ procedure TDBIDataset.LoadFromDataset(
   ADataset: TDataset;
   LoadModes: TDBILoadModes = [lmDisableSourceEvents]
   );
-const
-  Caller = 'LoadFromDataset';
-
 var
   RecordBuffer: TDBIRecordBuffer;
   DisabledState: Boolean;
@@ -7750,7 +7861,7 @@ var
                   else
                     PBoolean(@Buffer[FieldOffset])^ := False;
                 end;
-                
+
               else
                 PBoolean(@Buffer[FieldOffset])^ := DataField.AsInteger <> 0;
               end;  { case }
@@ -7847,8 +7958,8 @@ var
             end;  { fldBLOB }
 
             else begin
-              Error(nil,
-                'LoadBufferFromFields', '7685', 'Field type "%d: not Supported',
+              raise EDBIException.Create(Self, 'LoadBufferFromFields::7850',
+                'Field type "%d: not Supported',
                 [FDataConnection.FieldProps[TargetFieldNo].iFldType]
                 );
             end;  { Default }
@@ -7865,7 +7976,7 @@ var
         end;
       except
         on E: Exception do begin
-          Error(E, Caller, '1425',
+          raise EDBIException.Create(Self, E, 'LoadBufferFromFields::7870',
             'Failed to Convert Field[%0:d] "%1:s" of type "%2:s" ' +
             'to Field[%3d] "%4:s" of type "%5:s"', [
             FieldMap.SourceFields[FieldNo].FieldNo,
@@ -7926,7 +8037,10 @@ begin
       end;  { try..finally }
 
     except
-      Error(nil, Caller, '1455', 'Failed to insert Record "%d"', [ADataset.RecNo]);
+      on E: Exception do
+        raise EDBIException.Create(Self, E, 'LoadFromDataset::7930',
+          'Failed to insert Record "%d"', [ADataset.RecNo]
+          );
     end;  { try..except }
 
   finally
@@ -7945,11 +8059,12 @@ end;  { LoadFromDataset }
 {**
   ..<P>
 }
-procedure TDBIDataset.CheckIsInitialised(const Caller, Line: String);
+procedure TDBIDataset.CheckIsInitialised(const Context: String);
 begin
   if (not Assigned(FDSBase)) or (not Assigned(FDSCursor)) then begin
-    Error(nil, Caller, Line,
-      'Database Interface/Cursor has not been properly initialised.', []);
+    raise EDBIException.Create(Self, Context,
+      'Database Interface/Cursor has not been properly initialised.', []
+      );
   end;
 end;  { CheckInitialised }
 
@@ -8125,13 +8240,41 @@ end;  { Unlock }
 
 
 
+
 { TDBICustomDataset }
 
+function TDBICustomDataset.GetFieldClass(FieldType: TFieldType): TFieldClass;
+begin
+  Result := inherited GetFieldClass(FieldType);
+
+  case FieldType of
+    db.ftBytes:    Result := TDBIBytesField;
+{$ifdef DelphiXE3}
+    db.ftExtended: Result := TDBIExtendedField;
+{$endif}
+  end;
+end;  { GetFieldClass }
+
+
 {$ifdef fpc}
+constructor TDBICustomDataset.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+
+  FieldDefs.FPOAttachObserver(Self);
+end;
+
+
+destructor TDBICustomDataset.Destroy;
+begin
+  FieldDefs.FPODetachObserver(Self);
+
+  inherited Destroy;
+end;
 
 procedure TDBICustomDataset.CheckFieldCompatibility(Field: TField; FieldDef: TFieldDef);
 begin
-  raise Exception.Create('TDBICustomDataset:: CheckFieldCompatibility() Not implemented!');
+  raise EDBINotImplementedException.Create(Self, 'CheckFieldCompatibility::8130');
 end;
 
 
@@ -8160,8 +8303,17 @@ begin
 {$endif}
 end;
 
+procedure TDBICustomDataset.FPOObservedChanged(ASender: TObject;
+  Operation: TFPObservedOperation; Data: Pointer);
+begin
+  if (Operation = ooChange) then begin
+    DefChanged(Data);
+  end;
+end;
 
-function TDBICustomDataset.GetFieldData(FieldNo: Integer; Buffer: Pointer): Boolean;
+
+function TDBICustomDataset.GetFieldData(FieldNo: Integer;
+  Buffer: TDBIValueBuffer): Boolean;
 begin
   Result := GetFieldData(FieldByNumber(FieldNo), Buffer);
 end;
@@ -8205,69 +8357,9 @@ end;
 
 procedure TDBICustomDataset.SetDataSetField(const Value: TDataSetField);
 begin
-  raise Exception.Create('TDBICustomDataset.SetDataSetField() Not implemented!');
+  raise EDBINotImplementedException.Create(Self, 'SetDatasetField::8345');
 end;
-
 {$endif}
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 02/04/01 15:22:02.<P>
-}
-procedure TDBICustomDataset.Error(
-  E: Exception;
-  const Caller: String;
-  const Reference: String;
-  const ErrMsg: String;
-  Args: array of const
-  );
-var
-  Address: Pointer;
-
-{$ifdef DebugExceptions}
-  function GetUnitName: String;
-  begin
-    Result := String(TypInfo.GetTypeData(Self.ClassInfo)^.UnitName);
-  end;
-{$endif}
-
-var
-  DebugInfo: String;
-  ErrorInfo: String;
-
-begin
-  asm
-    mov eax, [ebp + 4] // get return address
-    mov Address, eax
-  end;
-
-  ErrorInfo := '';
-{$ifdef DebugExceptions}
-  if Assigned(E) then begin
-    ErrorInfo := Format(SDebugException, [E.ClassName, E.Message]);
-  end;
-
-  DebugInfo := GetUnitName + '::' + Self.ClassName + '::' + Caller + '::' + Reference + #13;
-{$else}
-  DebugInfo := '';
-{$endif}
-
-  raise EDBIException.CreateFmt(DebugInfo + ErrMsg + ErrorInfo, Args) at Address;
-end;  { Error }
-
-
-function TDBICustomDataset.GetFieldClass(FieldType: TFieldType): TFieldClass;
-begin
-  Result := inherited GetFieldClass(FieldType);
-
-  case FieldType of
-    db.ftBytes:    Result := TDBIBytesField;
-{$ifdef DelphiXE3}
-    db.ftExtended: Result := TDBIExtendedField;
-{$endif}
-  end;
-end;  { GetFieldClass }
 
 
 
@@ -8303,7 +8395,7 @@ begin
   Result := '';
   Size := GetDataSize;
   Assert(Size <= 255);
-  FillChar(Bytes, 255, #0);
+  FillChar(Bytes{%H-}, 255, #0);
 {$warnings off}
   GetData(@Bytes);
 {$warnings on}
@@ -8312,7 +8404,6 @@ begin
       Result := Result + IntToHex(Bytes[Index], 2);
     end;
   end;
-//##JVR  Result := Format('0x%8.8x', [B, ]);
 end;
 
 

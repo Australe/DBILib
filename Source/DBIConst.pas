@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -41,8 +41,37 @@ const
   DBIComponentPage = 'Data Access';
 
 type
-  EDBIException = class(Exception);
+  TDBIObjectClass = class of TObject;
 
+  EDBICustomException = class(Exception)
+  protected
+    class function GetDebugInfo(const Context: String): String; overload; virtual;
+    class function GetDebugInfo(Sender: TObject; const Context: String): String; overload; virtual;
+    class function GetDebugInfo(Sender: TDBIObjectClass; const Context: String): String; overload;
+    class function GetExceptionInfo(E: Exception): String;
+    class function GetUnitName(Sender: TObject): String; overload;
+    class function GetUnitName(Sender: TDBIObjectClass): String; overload;
+
+  public
+    constructor Create(const Context, Msg: String; Args: array of const); overload;
+
+    constructor Create(Sender: TObject; const Context: String); overload;
+    constructor Create(Sender: TObject; const Context, Msg: String; Args: array of const); overload;
+    constructor Create(Sender: TObject; E: Exception; const Context, Msg: String; Args: array of const); overload;
+
+    constructor Create(Sender: TDBIObjectClass; const Context, Msg: String; Args: array of const); overload;
+    constructor Create(Sender: TDBIObjectClass; E: Exception; const Context, Msg: String; Args: array of const); overload;
+  end;
+
+  EDBIException = class(EDBICustomException);
+
+  EDBINotImplementedException = class(EDBIException)
+  protected
+    class function GetDebugInfo(Sender: TObject; const Context: String): String; overload; override;
+  end;
+
+
+type
   // Metadata modes
   TDBIMetaDataMode = (mdHeaderOnly, mdNew, mdAll);
 
@@ -135,7 +164,7 @@ type
     ) of object;
 
 type
-  TDBIDataFormat = (dfDefault, dfXbase, dfXbasePlus, dfCDS, dfCSV, dfPSV, dfINI);
+  TDBIDataFormat = (dfDefault, dfXbase, dfXbasePlus, dfXML, dfCSV, dfPSV, dfINI);
   TDBIOpenMode = (omOpen, omCreateDataset, omClose);
 
 const
@@ -163,6 +192,139 @@ type
 
 
 implementation
+
+uses
+  TypInfo;
+
+{$ifdef fpc}
+  {$define DebugExceptions True}
+{$endif}
+
+
+{ EDBINotImplementedException }
+
+class function EDBINotImplementedException.GetDebugInfo(Sender: TObject; const Context: String): String;
+begin
+  Result := inherited GetDebugInfo(Sender, Context) + 'Not Implemented Yet!';
+end;
+
+
+
+
+
+{ EDBICustomException }
+
+constructor EDBICustomException.Create(const Context, Msg: String; Args: array of const);
+begin
+  inherited CreateFmt(GetDebugInfo(Context) + Msg, Args);
+end;
+
+
+constructor EDBICustomException.Create(Sender: TObject; const Context: String);
+begin
+  inherited Create(GetDebugInfo(Sender, Context));
+end;
+
+
+constructor EDBICustomException.Create(Sender: TObject; const Context, Msg: String; Args: array of const);
+begin
+  inherited CreateFmt(GetDebugInfo(Sender, Context) + Msg, Args);
+end;
+
+
+constructor EDBICustomException.Create(Sender: TObject; E: Exception; const Context, Msg: String; Args: array of const);
+begin
+  inherited CreateFmt(GetDebugInfo(Sender, Context) + Msg + GetExceptionInfo(E), Args);
+end;
+
+
+constructor EDBICustomException.Create(Sender: TDBIObjectClass; const Context, Msg: String; Args: array of const);
+begin
+  inherited CreateFmt(GetDebugInfo(Sender, Context) + Msg, Args);
+end;
+
+
+constructor EDBICustomException.Create(Sender: TDBIObjectClass; E: Exception; const Context, Msg: String; Args: array of const);
+begin
+  inherited CreateFmt(GetDebugInfo(Sender, Context) + Msg + GetExceptionInfo(E), Args);
+end;
+
+
+class function EDBICustomException.GetDebugInfo(const Context: String): String;
+begin
+{$ifdef DebugExceptions}
+  Result := Context + #13;
+{$else}
+  Result := '';
+{$endif}
+end;
+
+
+class function EDBICustomException.GetDebugInfo(Sender: TObject; const Context: String): String;
+begin
+{$ifdef DebugExceptions}
+  if Assigned(Sender) then begin
+    Result := String(GetUnitName(Sender)) + '::' + Sender.ClassName + '::' + Context + #13;
+  end
+  else begin
+    Result := Context + #13;
+  end;
+{$else}
+  Result := '';
+{$endif}
+end;
+
+
+class function EDBICustomException.GetDebugInfo(Sender: TDBIObjectClass; const Context: String): String;
+begin
+{$ifdef DebugExceptions}
+  if Assigned(Sender) then begin
+    Result := String(GetUnitName(Sender)) + '::' + Sender.ClassName + '::' + Context + #13;
+  end
+  else begin
+    Result := Context + #13;
+  end;
+{$else}
+  Result := '';
+{$endif}
+end;
+
+
+class function EDBICustomException.GetExceptionInfo(E: Exception): String;
+const
+  DebugException = #13#13'raised exception %s with message'#13'%s';
+
+begin
+{$ifdef DebugExceptions}
+  if Assigned(E) then begin
+    Result := Format(DebugException, [E.ClassName, E.Message]);
+  end;
+{$else}
+  Result := '';
+{$endif}
+end;
+
+
+class function EDBICustomException.GetUnitName(Sender: TObject): String;
+begin
+  Result := '';
+  if Assigned(Sender) then begin
+    Result := String(TypInfo.GetTypeData(Sender.ClassInfo)^.UnitName);
+  end;
+end;
+
+
+class function EDBICustomException.GetUnitName(Sender: TDBIObjectClass): String;
+begin
+  Result := '';
+  if Assigned(Sender) then begin
+    Result := String(TypInfo.GetTypeData(Sender.ClassInfo)^.UnitName);
+  end;
+end;
+
+
+
+
 
 end.
 

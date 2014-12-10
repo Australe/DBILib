@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : native api code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBICDSUnitTests;
 
@@ -59,7 +59,11 @@ type
 
   published
     procedure FilterGad;
+    procedure Streaming;
+    procedure UpdateBooks;
 
+  public
+    procedure ObjectTypes;
   end;
 
 
@@ -73,6 +77,7 @@ uses
   Dialogs,
   DB,
   DBIConst,
+  DBIComponents,
   DBIDataset,
   DBIXbaseDatasets;
 
@@ -128,6 +133,16 @@ begin
 end;
 
 
+procedure TDBICDSUnitTests.ObjectTypes;
+const
+  TableName = 'cCreateEntity.xml';
+
+begin
+  // Run Object Tests
+  TEntityData.CDSCreateEntity(DataPath(TableName));
+end;
+
+
 {$ifdef omTesting}
 procedure TDBICDSUnitTests.Fail(msg: string; errorAddr: Pointer = nil);
 begin
@@ -137,6 +152,18 @@ begin
     raise ETestFailed.Create(msg) at errorAddr;
 end;
 {$endif}
+
+
+class function TDBICDSUnitTests.FilePath(const AFilename: TFileName): TFileName;
+begin
+  // cd ../../../Data
+  Result := ExtractFileDir(ParamStr(0));
+  Result := ExtractFileDir(Result);
+{$ifndef omTesting}
+  Result := ExtractFileDir(Result);
+{$endif}
+  Result := ExtractFileDir(Result) + '\Data\' + AFilename;
+end;
 
 
 procedure TDBICDSUnitTests.Setup;
@@ -151,6 +178,72 @@ begin
 end;
 
 
+type
+  TCDSStreamingComponent = class(TDBIPersistenceAdapter)
+  private
+    FCDS: TDBIClientDataset;
+  protected
+    function GetRootComponent: TComponent; override;
+  end;
+
+  function TCDSStreamingComponent.GetRootComponent: TComponent;
+  begin
+    if not Assigned(FCDS) then begin
+      FCDS := TDBIClientDataset.Create(Self);
+    end;
+    Result := FCDS;
+  end;
+
+procedure TDBICDSUnitTests.Streaming;
+const
+  TableName = 'cStreamBooks.xml';
+
+var
+  Adapter: TCDSStreamingComponent;
+  FieldData: TBookFields;
+  CDS: TDBIClientDataset;
+
+begin
+  FieldData := TBookData.GetFields;
+
+  Adapter := TCDSStreamingComponent.Create(nil);
+  try
+    // Create a new Dataset
+    TBookData.CDSCreateTable(DataPath(TableName));
+
+    CDS := Adapter.RootComponent as TDBIClientDataset;
+    try
+      CDS.Name := ChangeFileExt(TableName, '');
+      TBookData.CreateFieldDefs(CDS);
+
+      // Verify Data was written correctly to file
+      CDS.LoadFromFile(DataPath(TableName));
+      TBookData.AssertValues(CDS);
+
+      // Stream the Dataset out to File
+      Adapter.SaveToFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+      CDS.Close;
+    finally
+      CDS.Free;
+    end;
+  finally
+    FreeAndNil(Adapter);
+  end;
+
+  Adapter := TCDSStreamingComponent.Create(nil);
+  try
+    // Stream the Dataset Back in
+    Adapter.LoadFromFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+    CDS := Adapter.RootComponent as TDBIClientDataset;
+
+    TBookData.VerifyFields(CDS, @FieldData, Length(FieldData));
+    TBookData.AssertValues(CDS);
+  finally
+    FreeAndNil(Adapter);
+  end;
+end;
+
+
 procedure TDBICDSUnitTests.Teardown;
 begin
 
@@ -158,15 +251,32 @@ begin
 end;
 
 
-class function TDBICDSUnitTests.FilePath(const AFilename: TFileName): TFileName;
+procedure TDBICDSUnitTests.UpdateBooks;
+const
+  TableName = 'cUpdateBooks.xml';
+
+var
+  CDS: TDBIClientDataset;
+
 begin
-  // cd ../../../Data
-  Result := ExtractFileDir(ParamStr(0));
-  Result := ExtractFileDir(Result);
-{$ifndef omTesting}
-  Result := ExtractFileDir(Result);
-{$endif}
-  Result := ExtractFileDir(Result) + '\Data\' + AFilename;
+  TBookData.DeleteTables(DataPath(TableName));
+
+  TBookData.CDSUpdateTable(DataPath(TableName));
+
+  // Open Dataset
+  CDS := TDBIClientDataset.Create(nil);
+  try
+    CDS.LoadFromFile(DataPath(TableName));
+
+    TBookData.CheckFields(CDS, fcCheckAll);
+    TBookData.UpdateValues(CDS);
+    TBookData.ReviseFields(CDS);
+
+    CDS.SaveToFile(DataPath(TableName));
+    CDS.Close;
+  finally
+    CDS.Free;
+  end;
 end;
 
 

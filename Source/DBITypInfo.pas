@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,7 +22,7 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBITypInfo;
 
@@ -120,10 +120,10 @@ type
 implementation
 
 uses
-{$ifdef DELPHI6}
-  RtlConsts,
-{$endif}
 {$ifndef fpc}
+  {$ifdef DELPHI6}
+  RtlConsts,
+  {$endif}
   Consts,
 {$endif}
   SysUtils,
@@ -465,7 +465,7 @@ end;
 }
 function GetFieldTypeName(const DataType: TFieldType): String;
 begin
-  Result := GetEnumName(TypeInfo(TFieldType), Ord(DataType));
+  Result := TypInfo.GetEnumName(TypeInfo(TFieldType), Ord(DataType));
 end;
 
 
@@ -496,7 +496,7 @@ class procedure TDBIProperties.GetProperties(AInstance: TObject; Strings: TStrin
         tkInt64: Result := IntToStr(GetInt64Prop(AInstance, PropInfo));
         tkEnumeration: Result := GetEnumProp(AInstance, PropInfo);
         tkChar, tkWChar: Result := Chr(GetOrdProp(AInstance, PropInfo));
-        tkSet: Result := GetSetProp(AInstance, PropInfo);
+        tkSet: Result := GetSetProp(AInstance, PropInfo, False);
       else
         raise Exception.CreateFmt(
           'Property "%s" of type "%s" not supported',

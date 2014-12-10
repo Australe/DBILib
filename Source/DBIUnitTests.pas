@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -22,13 +22,13 @@
   ______________________________________________________________________________
 }
 
+{#omcodecop off : jvr : dbilib}
+
 unit DBIUnitTests;
 
-{#omcodecop off : jvr : native api code}
+{$I DBICompilers.inc}
 
 interface
-
-{$I DBICompilers.inc}
 
 uses
   Classes, Contnrs,
@@ -112,6 +112,7 @@ type
     Precision: Integer;
     Required: Boolean;
     ReadOnly: Boolean;
+    FieldKind: TFieldKind;
   end;
 
   TFieldRecords = array[0..127] of TFieldRecord;
@@ -120,11 +121,32 @@ type
   TFieldTypes = set of TFieldType;
 
 type
+  TDBIFieldCheck = (
+    fcFieldName,
+    fcFieldKind,
+    fcFieldType,
+    fcFieldSize,
+    fcPrecision,
+    fcRequired,
+    fcReadOnly,
+    fcSkipFieldSizeString,
+    fcXbaseMapFieldTypes,
+    fcXmlMapFieldTypes
+    );
+  TDBIFieldChecks = set of TDBIFieldCheck;
+
+const
+  fcCheckAll = [fcFieldName..fcReadOnly];
+
+
+type
   TDBIUnitTest = class(TPersistent)
   protected
     class procedure AddFieldDefs(FieldDefs: TFieldDefs; PFieldData: PFieldRecords; const Count: Word);
     class procedure BuildFields(ADataset: TDataset; PFieldData: PFieldRecords; const Count: Word);
     class procedure BuildFieldDefs(ADataset: TDataset; PFieldData: PFieldRecords; const Count: Word);
+
+    class function CheckFieldProps(PFieldData: PFieldRecord; PFieldProps: DBIIntfConsts.pDSFLDDesc): Boolean;
 
     class function CreateXbaseDataset: TDBIXbaseDataset;
     class function GetRecordCount: Integer; virtual;
@@ -134,11 +156,33 @@ type
     class procedure FieldProps(ADataset: TDBIObjectListDataset; PFieldData: PFieldRecords; const Count: Word); overload;
     class procedure FieldProps(ADataset: TDBIXbaseDataset; PFieldData: PFieldRecords; const Count: Word); overload;
 
+    class function GetDataTypeName(const Value: TFieldType): String;
+    class function GetFieldKindName(const Value: TFieldKind): String;
+
   public
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); virtual; abstract;
     class procedure AssertBlanks(ADataset: TDataset);
     class procedure AssertValues(ADataset: TDataset); virtual;
     class procedure BlankValuesOfType(ADataset: TDataset;  const DataTypes: TFieldTypes);
+
+    class procedure CheckField(
+      AField: TField;
+      FieldRecord: TFieldRecord;
+      const CheckingOptions: TDBIFieldChecks
+      );
+
+    class procedure CheckFields(
+      ADataset: TDataset;
+      const CheckingOptions: TDBIFieldChecks
+      ); overload; virtual;
+
+    class procedure CheckFields(
+      ADataset: TDataset;
+      PFieldData: PFieldRecords;
+      const Count: Word;
+      const CheckingOptions: TDBIFieldChecks
+      ); overload;
+
     class procedure CheckValues(ADataset: TDataset; Index: Integer); virtual; abstract;
     class procedure ClearValues(ADataset: TDataset);
     class procedure CreateFields(ADataset: TDataset); virtual; abstract;
@@ -148,7 +192,6 @@ type
     class procedure OccupyValues(ADataset: TDataset); virtual;
     class function PreFillValues(ADataset: TDataset; Index: Integer): Boolean; virtual;
     class procedure RefillValues(ADataset: TDataset); virtual;
-//##JVR    class procedure UpdateValues(ADataset: TDataset); virtual; abstract;
     class procedure VerifyFields(ADataset: TDataset; PFieldData: PFieldRecords; const Count: Word); virtual;
 
     class procedure DeleteTables(const AFileName: String); virtual;
@@ -159,6 +202,8 @@ type
 {$endif}    
     class procedure ODSCreateTable(AFileName: String); virtual;
     class procedure XDSCreateTable(AFileName: String); virtual;
+
+    class procedure RegisterDBClasses;
   end;
 
 
@@ -190,6 +235,12 @@ type
 
   public
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
+
+    class procedure CheckFields(
+      ADataset: TDataset;
+      const CheckingOptions: TDBIFieldChecks
+      ); overload; override;
+
     class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
@@ -251,6 +302,12 @@ type
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
     class procedure CheckAscending(ADataset: TDataset; const AKeyName: String);
     class procedure CheckDescending(ADataset: TDataset; const AKeyName: String);
+
+    class procedure CheckFields(
+      ADataset: TDataset;
+      const CheckingOptions: TDBIFieldChecks
+      ); overload; override;
+
     class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
@@ -266,7 +323,9 @@ type
 
     class procedure ReviseFields(ADataset: TDataset);
     class procedure UpdateValues(ADataset: TDataset);
-
+{$ifndef fpc}
+    class procedure CDSUpdateTable(const AFileName: String);
+{$endif}
     class procedure ODSUpdateTable(const AFileName: String);
     class procedure XDSUpdateTable(const AFileName: String);
 
@@ -337,6 +396,13 @@ type
 
   public
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
+    class procedure AssignValues(ADataset: TDataset; Index: Integer; GadRecord: TGadRecord);
+
+    class procedure CheckFields(
+      ADataset: TDataset;
+      const CheckingOptions: TDBIFieldChecks
+      ); overload; override;
+
     class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
@@ -395,6 +461,12 @@ type
 
   public
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
+
+    class procedure CheckFields(
+      ADataset: TDataset;
+      const CheckingOptions: TDBIFieldChecks
+      ); overload; override;
+
     class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
@@ -448,6 +520,12 @@ type
 
   public
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
+
+    class procedure CheckFields(
+      ADataset: TDataset;
+      const CheckingOptions: TDBIFieldChecks
+      ); overload; override;
+
     class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
@@ -492,6 +570,12 @@ type
 
   public
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
+
+    class procedure CheckFields(
+      ADataset: TDataset;
+      const CheckingOptions: TDBIFieldChecks
+      ); overload; override;
+
     class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
@@ -525,6 +609,12 @@ type
     FValue: String;
 
   protected
+    class function AddFieldDef(
+      const FieldName: String;
+      const Datatype: TFieldType;
+      ADataset: TDataset
+      ): TFieldDef;
+
     class procedure BuildDataset(ADataset: TDataset);
     class function GetRecordCount: Integer; override;
     class function GetRecords: TStringRecords;
@@ -535,6 +625,12 @@ type
 
   public
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
+
+    class procedure CheckFields(
+      ADataset: TDataset;
+      const CheckingOptions: TDBIFieldChecks
+      ); overload; override;
+
     class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
@@ -646,9 +742,18 @@ type
 
   public
     class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
+
+    class procedure CheckFields(
+      ADataset: TDataset;
+      const CheckingOptions: TDBIFieldChecks
+      ); overload; override;
+
     class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
 
-    class procedure ODSCreateEntity;
+{$ifndef fpc}
+    class procedure CDSCreateEntity(const TableName: String);
+{$endif}
+    class procedure ODSCreateEntity(const TableName: String);
     class procedure CreateFields(ADataset: TDataset); override;
     class procedure CreateFieldDefs(ADataset: TDataset); override;
 
@@ -684,7 +789,10 @@ implementation
 {$endif}
 
 uses
-  Windows, PSAPI, SysUtils, Dialogs, Forms, DBIConst, DBITypInfo, DBIUtils, DBIDataset;
+{$ifndef fpc}
+  PSAPI,
+{$endif}
+  Windows, SysUtils, TypInfo, Dialogs, Forms, DBIConst, DBITypInfo, DBIUtils, DBIDataset;
 
 
 { Helpers }
@@ -693,21 +801,21 @@ function AddField(const FieldName: String; const Datatype: TFieldType; Adataset:
 begin
   Result := nil;
   case DataType of
-    ftBCD: Result := TBCDField.Create(ADataset);
-    ftBoolean: Result := TBooleanField.Create(ADataset);
-    ftCurrency: Result := TCurrencyField.Create(ADataset);
-    ftDate: Result := TDateField.Create(ADataset);
-    ftDateTime: Result := TDateTimeField.Create(ADataset);
-    ftFloat: Result := TFloatField.Create(ADataset);
-    ftInteger: Result := TIntegerField.Create(ADataset);
-    ftMemo: Result := TMemoField.Create(ADataset);
-    ftString: Result := TStringField.Create(ADataset);
-    ftWideString: Result := TWideStringField.Create(ADataset);
-    ftWord: Result := TWordField.Create(ADataset);
+    db.ftBCD: Result := TBCDField.Create(ADataset);
+    db.ftBoolean: Result := TBooleanField.Create(ADataset);
+    db.ftCurrency: Result := TCurrencyField.Create(ADataset);
+    db.ftDate: Result := TDateField.Create(ADataset);
+    db.ftDateTime: Result := TDateTimeField.Create(ADataset);
+    db.ftFloat: Result := TFloatField.Create(ADataset);
+    db.ftInteger: Result := TIntegerField.Create(ADataset);
+    db.ftMemo: Result := TMemoField.Create(ADataset);
+    db.ftString: Result := TStringField.Create(ADataset);
+    db.ftWideString: Result := TWideStringField.Create(ADataset);
+    db.ftWord: Result := TWordField.Create(ADataset);
 {$ifdef DELPHI2009}
-    ftSingle: Result := TSingleField.Create(ADataset);
+    db.ftSingle: Result := TSingleField.Create(ADataset);
 
-    ftExtended:
+    db.ftExtended:
       if (ADataset is TDBIDataset) then begin
         Result := TDBIExtendedField.Create(ADataset);
       end
@@ -728,61 +836,6 @@ begin
   Result.Dataset := ADataset;
 end;
 
-
-function AddFieldDef(const FieldName: String; const Datatype: TFieldType; ADataset: TDataset): TFieldDef;
-begin
-  Result := ADataset.FieldDefs.AddFieldDef;
-  Result.Name := FieldName;
-  Result.DataType := Datatype;
-end;
-
-
-
-function CheckField(
-  PFieldData: PFieldRecord;
-  PFieldProps: DBIIntfConsts.pDSFLDDesc
-  ): Boolean;
-{$ifdef DebugInfo}
-var
-  iFldType: Word;
-
-begin
-  if (PFieldProps^.iFldType = fldUniCode) then begin
-    iFldType := fldWideString;
-  end
-  else begin
-    iFldType := PFieldProps^.iFldType;
-  end;
-
-  Result := CompareText(String(PFieldProps^.szName), PFieldData^.FieldName) = 0;
-
-  // Float types
-  if (PFieldProps^.iFldType = fldFLOAT) then begin
-    Result := Result and (FldSubTypeMap[ftCurrency] = PFieldProps^.iFldSubType);
-  end
-
-  // Blob types
-  else if (PFieldProps^.iFldType = fldBLOB) then begin
-    Result := Result and (FldSubTypeMap[ftMemo] = PFieldProps^.iFldSubType);
-  end
-
-  // Otherwise
-  else begin
-    Result := Result and (DBIIntfConsts.DataTypeMap[iFldType] = PFieldData^.FieldType);
-  end;
-
-  if (PFieldData^.FieldType = ftWideString) then begin
-    Result := Result and (PFieldProps^.iUnits1 = 2 * PFieldData^.FieldSize);
-  end
-  else if (PFieldData^.FieldType = ftString) then begin
-    Result := Result and (PFieldProps^.iUnits1 = PFieldData^.FieldSize);
-  end;
-{$else}
-begin
-  Result := True;
-{$endif}
-  Assert(Result, PFieldData^.FieldName + ' is not equal to the predefined Field');
-end;
 
 
 {$ifndef fpc}
@@ -836,7 +889,7 @@ end;
 
 procedure Equalz(const Str1: String; const Str2: AnsiString);
 begin
-  Assert(Str1 = String(Str2));
+  Assert(AnsiCompareStr(Str1, String(Str2)) = 0 );
 end;
 
 
@@ -897,6 +950,22 @@ begin
 end;
 
 
+class procedure TEntityData.CheckFields(
+  ADataset: TDataset;
+  const CheckingOptions: TDBIFieldChecks
+  );
+var
+  FieldData: TEntityFields;
+  Index: Integer;
+
+begin
+  FieldData := GetFields;
+  for Index := Low(FieldData) to High(FieldData) do begin
+    CheckField(ADataset.Fields[Index], FieldData[Index], CheckingOptions);
+  end;
+end;
+
+
 class procedure TEntityData.CheckValues(ADataset: TDataset; Index: Integer);
 var
   EntityData: TEntityRecords;
@@ -905,8 +974,10 @@ var
   Field: TField;
 {$endif}
   Fields: TFields;
-//##DEBUGIT  Today: TDateTime;
-//##DEBUGIT  DateTimeString: array[0..1] of String;
+{$ifdef DEBUGIT}
+  Today: TDateTime;
+  DateTimeString: array[0..1] of String;
+{$endif}
 
 begin
   EntityData := TEntityData.GetRecords;
@@ -951,10 +1022,50 @@ begin
 end;
 
 
-class procedure TEntityData.ODSCreateEntity;
+{$ifndef fpc}
+class procedure TEntityData.CDSCreateEntity(const TableName: String);
+var
+  CDS: TDBIClientDataset;
+  FieldData: TEntityFields;
+
+begin
+  // Create a new ClientDataset, add data, and verify
+  CDS := TDBIClientDataset.Create(nil);
+  try
+    CreateFieldDefs(CDS);
+    CDS.CreateDataset;
+    CDS.SaveToFile(TableName);
+
+    FieldData := GetFields;
+    CheckFields(CDS, fcCheckAll);
+    VerifyFields(CDS, @FieldData, Length(FieldData));
+
+    OccupyValues(CDS);
+    AssertValues(CDS);
+  finally
+    CDS.Free;
+  end;
+
+
+  // Open a new ClientDataset, add data, and verify
+  CDS := TDBIClientDataset.Create(nil);
+  try
+    CDS.Open;
+
+    CheckFields(CDS, fcCheckAll);
+    VerifyFields(CDS, @FieldData, Length(FieldData));
+    OccupyValues(CDS);
+    AssertValues(CDS);
+  finally
+    CDS.Free;
+  end;
+end;
+{$endif}
+
+
+class procedure TEntityData.ODSCreateEntity(const TableName: String);
 var
   ODS: TDBIObjectListDataset;
-  FieldData: TEntityFields;
 
 begin
   // Create a new ObjectlistDataset, add data, and verify
@@ -963,10 +1074,9 @@ begin
     ODS.ClassTypeName := Self.ClassName;
     CreateFieldDefs(ODS);
     ODS.CreateDataset;
+    ODS.SaveToFile(TableName);
 
-    FieldData := GetFields;
-    VerifyFields(ODS, @FieldData, Length(FieldData));
-
+    CheckFields(ODS, fcCheckAll);
     OccupyValues(ODS);
     AssertValues(ODS);
   finally
@@ -980,7 +1090,7 @@ begin
     ODS.ClassTypeName := Self.ClassName;
     ODS.Open;
 
-    VerifyFields(ODS, @FieldData, Length(FieldData));
+    CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcReadOnly, fcSkipFieldSizeString]);
     OccupyValues(ODS);
     AssertValues(ODS);
   finally
@@ -1049,15 +1159,15 @@ end;
 class function TEntityData.GetFields: TEntityFields;
 const
   CData: TEntityFields = (
-    (FieldName: 'ID';       FieldType: ftInteger;  FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; ),
-    (FieldName: 'Name';     FieldType: ftString;   FieldSize: 20; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Business'; FieldType: ftBoolean;  FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; ),
+    (FieldName: 'ID';       FieldType: ftInteger;  FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Name';     FieldType: ftString;   FieldSize: 20; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Business'; FieldType: ftBoolean;  FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkData ),
 {$ifndef fpc}
-    (FieldName: 'Address';  FieldType: ftADT;      FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; ),
+    (FieldName: 'Address';  FieldType: ftADT;      FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
 {$else}
-    (FieldName: 'Address';  FieldType: ftString;   FieldSize: 30; Precision: 0; Required: False; ReadOnly: False; ),
+    (FieldName: 'Address';  FieldType: ftString;   FieldSize: 30; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
 {$endif}
-    (FieldName: 'Created';  FieldType: ftDateTime; FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; )
+    (FieldName: 'Created';  FieldType: ftDateTime; FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData )
     );
 begin
   Result := CData;
@@ -1146,12 +1256,12 @@ end;
 class function TAddressData.GetFields: TAddressFields;
 const
   CData: TAddressFields = (
-    (FieldName: 'ID';      FieldType: ftInteger; FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; ),
-    (FieldName: 'First';   FieldType: ftString;  FieldSize: 20; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Last';    FieldType: ftString;  FieldSize: 25; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Address'; FieldType: ftString;  FieldSize: 30; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'City';    FieldType: ftString;  FieldSize: 25; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Code';    FieldType: ftWord;    FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; )
+    (FieldName: 'ID';      FieldType: ftInteger; FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'First';   FieldType: ftString;  FieldSize: 20; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Last';    FieldType: ftString;  FieldSize: 25; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Address'; FieldType: ftString;  FieldSize: 30; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'City';    FieldType: ftString;  FieldSize: 25; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Code';    FieldType: ftWord;    FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData )
     );
 begin
   Result := CData;
@@ -1242,6 +1352,14 @@ end;
 
 { TStringData }
 
+class function TStringData.AddFieldDef(const FieldName: String; const Datatype: TFieldType; ADataset: TDataset): TFieldDef;
+begin
+  Result := ADataset.FieldDefs.AddFieldDef;
+  Result.Name := FieldName;
+  Result.DataType := Datatype;
+end;
+
+
 class procedure TStringData.ApplyValues(ADataset: TDataset; Index: Integer);
 var
   StringData: TStringRecords;
@@ -1263,6 +1381,23 @@ begin
   else if (ADataset is TClientDataset) then begin
     (ADataset as TClientDataset).CreateDataset;
 {$endif}
+  end;
+end;
+
+
+class procedure TStringData.CheckFields(
+  ADataset: TDataset;
+  const CheckingOptions: TDBIFieldChecks
+  );
+var
+  Index: Integer;
+  FieldData: TStringFields;
+
+begin
+  FieldData := GetFields;
+
+  for Index := Low(FieldData) to High(FieldData) do begin
+    CheckField(ADataset.Fields[Index], FieldData[Index], CheckingOptions);
   end;
 end;
 
@@ -1340,7 +1475,7 @@ end;
 
 function TStringData.GetUserName: WideString;
 begin
-  Result := DBIUtils.DBIGetUserName;
+  Result := TDBIHostInfo.GetUserName;
 end;
 
 
@@ -1353,13 +1488,13 @@ end;
 class function TStringData.GetFields: TStringFields;
 const
   CData: TStringFields = (
-    (FieldName: 'ID';          FieldType: ftInteger;       FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; ),
-    (FieldName: 'Environment'; FieldType: ftUnicodeString; FieldSize: 20; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'FullName';    FieldType: ftUnicodeString; FieldSize: 40; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Value';       FieldType: ftAnsiString;    FieldSize: 60; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Application'; FieldType: ftDefaultString; FieldSize: 32; Precision: 0; Required: False; ReadOnly: True;  ),
-    (FieldName: 'Path';        FieldType: ftDefaultString; FieldSize: 64; Precision: 0; Required: False; ReadOnly: True;  ),
-    (FieldName: 'UserName';    FieldType: ftUnicodeString; FieldSize: 32; Precision: 0; Required: False; ReadOnly: True;  )
+    (FieldName: 'ID';          FieldType: ftInteger;       FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Environment'; FieldType: ftUnicodeString; FieldSize: 20; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'FullName';    FieldType: ftUnicodeString; FieldSize: 40; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Value';       FieldType: ftAnsiString;    FieldSize: 60; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Application'; FieldType: ftDefaultString; FieldSize: 32; Precision: 0; Required: False; ReadOnly: True;  FieldKind: fkData ),
+    (FieldName: 'Path';        FieldType: ftDefaultString; FieldSize: 64; Precision: 0; Required: False; ReadOnly: True;  FieldKind: fkData ),
+    (FieldName: 'UserName';    FieldType: ftUnicodeString; FieldSize: 32; Precision: 0; Required: False; ReadOnly: True;  FieldKind: fkData )
     );
 begin
   Result := CData;
@@ -1460,12 +1595,13 @@ begin
   for Index := 0 to ADataset.Fields.Count-1 do begin
     if ADataset.Fields[Index] is TStringField then begin
       ADataset.FieldDefs[Index].Size := 0;
-//      ADataset.Fields[Index].Size := 0;
+//##JVR      ADataset.Fields[Index].Size := 0;
     end;
   end;
 
   BuildDataset(ADataset);
   FieldData := GetFields;
+  CheckFields(ADataset, fcCheckAll);
   VerifyFields(ADataset, @FieldData, Length(FieldData));
   AssertValues(ADataset);
 end;
@@ -1485,6 +1621,23 @@ begin
   ADataset.FieldByName('_Double').AsFloat := FloatData[Index]._Double;
   ADataset.FieldByName('_Extended').AsFloat := FloatData[Index]._Extended;
   ADataset.FieldByName('_Currency').AsCurrency := FloatData[Index]._Currency;
+end;
+
+
+class procedure TFloatData.CheckFields(
+  ADataset: TDataset;
+  const CheckingOptions: TDBIFieldChecks
+  );
+var
+  Index: Integer;
+  FieldData: TFloatFields;
+
+begin
+  FieldData := GetFields;
+
+  for Index := Low(FieldData) to High(FieldData) do begin
+    CheckField(ADataset.Fields[Index], FieldData[Index], CheckingOptions);
+  end;
 end;
 
 
@@ -1538,10 +1691,10 @@ end;
 class function TFloatData.GetFields: TFloatFields;
 const
   CData: TFloatFields = (
-    (FieldName: '_Single';   FieldType: ftFloat4;     FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_Double';   FieldType: ftFloat;      FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_Extended'; FieldType: ftFloatIEEE;  FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_Currency'; FieldType: ftCurrency;   FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; )
+    (FieldName: '_Single';   FieldType: ftFloat4;     FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_Double';   FieldType: ftFloat;      FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_Extended'; FieldType: ftFloatIEEE;  FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_Currency'; FieldType: ftCurrency;   FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData )
   );
 begin
   Result := CData;
@@ -1589,6 +1742,23 @@ begin
 
   Int54Field := ADataset.FieldByName('_Int64') as TLargeIntField;
   Int54Field.AsLargeInt := OrdinalData[Index]._Int64;
+end;
+
+
+class procedure TOrdinalData.CheckFields(
+  ADataset: TDataset;
+  const CheckingOptions: TDBIFieldChecks
+  );
+var
+  Index: Integer;
+  FieldData: TOrdinalFields;
+
+begin
+  FieldData := GetFields;
+
+  for Index := Low(FieldData) to High(FieldData) do begin
+    CheckField(ADataset.Fields[Index], FieldData[Index], CheckingOptions);
+  end;
 end;
 
 
@@ -1652,14 +1822,14 @@ end;
 class function TOrdinalData.GetFields: TOrdinalFields;
 const
   CData: TOrdinalFields = (
-    (FieldName: '_Byte';      FieldType: ftUnsigned8;  FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_Word';      FieldType: ftUnsigned16; FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_LongWord';  FieldType: ftUnsigned32; FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_Cardinal';  FieldType: ftUnsigned32; FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_ShortInt';  FieldType: ftSigned8;    FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_SmallInt';  FieldType: ftSigned16;   FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_LongInt';   FieldType: ftSigned32;   FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: '_Int64';     FieldType: ftLargeInt;   FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; )
+    (FieldName: '_Byte';      FieldType: ftUnsigned8;  FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_Word';      FieldType: ftUnsigned16; FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_LongWord';  FieldType: ftUnsigned32; FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_Cardinal';  FieldType: ftUnsigned32; FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_ShortInt';  FieldType: ftSigned8;    FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_SmallInt';  FieldType: ftSigned16;   FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_LongInt';   FieldType: ftSigned32;   FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_Int64';     FieldType: ftLargeInt;   FieldSize: 0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData )
     );
 begin
   Result := CData;
@@ -1669,14 +1839,14 @@ end;
 class function TOrdinalData.GetRecords: TOrdinalRecords;
 const
   CData: TOrdinalRecords = (
-    ( _Byte:   0; _Word: $0000; _LongWord: $00000000; _Cardinal: $FFFFFFFF; _ShortInt:  127; _SmallInt:  32767; _LongInt:  2147483647; _Int64: $7FFFFFFFFFFFFFFF; ),
+    ( _Byte:   0; _Word: $0000; _LongWord: $00000000; _Cardinal: $7FFFFFFF; _ShortInt:  127; _SmallInt:  32767; _LongInt:  2147483647; _Int64: $7FFFFFFFFFFFFFFF; ),
     ( _Byte:  15; _Word: $000F; _LongWord: $000000FF; _Cardinal: $01000000; _ShortInt:   63; _SmallInt:  16383; _LongInt:  1073741823; _Int64:  $888888888888888; ),
     ( _Byte:  31; _Word: $0010; _LongWord: $00000100; _Cardinal: $00FFFFFF; _ShortInt:   31; _SmallInt:   8191; _LongInt:   536870911; _Int64:   $91A2B3C4D5E6F8; ),
     ( _Byte:  63; _Word: $00FF; _LongWord: $0000FFFF; _Cardinal: $00010000; _ShortInt:    0; _SmallInt:      0; _LongInt:           0; _Int64:    $9B5837385BA10; ),
     ( _Byte: 127; _Word: $0100; _LongWord: $00010000; _Cardinal: $0000FFFF; _ShortInt:   -1; _SmallInt:     -1; _LongInt:          -1; _Int64:     $A5B36E19FB56; ),
     ( _Byte: 160; _Word: $0FFF; _LongWord: $00FFFFFF; _Cardinal: $00000100; _ShortInt:  -32; _SmallInt:  -8192; _LongInt:  -536870911; _Int64:      $B0BF645FFB0; ),
     ( _Byte: 223; _Word: $1000; _LongWord: $01000000; _Cardinal: $000000FF; _ShortInt:  -64; _SmallInt: -16384; _LongInt: -1073741823; _Int64:       $BC87E28883; ),
-    ( _Byte: 255; _Word: $FFFF; _LongWord: $FFFFFFFF; _Cardinal: $00000000; _ShortInt: -128; _SmallInt: -32768; _LongInt: -2147483647; _Int64:                 0; )
+    ( _Byte: 255; _Word: $FFFF; _LongWord: $7FFFFFFF; _Cardinal: $00000000; _ShortInt: -128; _SmallInt: -32768; _LongInt: -2147483647; _Int64:                 0; )
     );
 begin
   Result := CData;
@@ -1709,6 +1879,23 @@ begin
   ADataset.FieldByName('_8Point0').AsFloat := NumericData[Index]._8Point0;
   ADataset.FieldByName('_8Point2').AsFloat := NumericData[Index]._8Point2;
   ADataset.FieldByName('_8Point3').AsFloat := NumericData[Index]._8Point3;
+end;
+
+
+class procedure TNumericData.CheckFields(
+  ADataset: TDataset;
+  const CheckingOptions: TDBIFieldChecks
+  );
+var
+  Index: Integer;
+  FieldData: TNumericFields;
+
+begin
+  FieldData := GetFields;
+
+  for Index := Low(FieldData) to High(FieldData) do begin
+    CheckField(ADataset.Fields[Index], FieldData[Index], CheckingOptions);
+  end;
 end;
 
 
@@ -1751,13 +1938,13 @@ end;
 class function TNumericData.GetFields: TNumericFields;
 const
   CData: TNumericFields = (
-    (FieldName: 'ID';       FieldType: ftWord; FieldSize: 0; Precision: 2; Required: True;  ReadOnly: False; ),
-    (FieldName: '_2Point0'; FieldType: ftBCD;  FieldSize: 0; Precision: 2; Required: False; ReadOnly: False; ),
-    (FieldName: '_4Point0'; FieldType: ftBCD;  FieldSize: 0; Precision: 4; Required: False; ReadOnly: False; ),
-    (FieldName: '_4Point1'; FieldType: ftBCD;  FieldSize: 1; Precision: 4; Required: False; ReadOnly: False; ),
-    (FieldName: '_8Point0'; FieldType: ftBCD;  FieldSize: 0; Precision: 8; Required: False; ReadOnly: False; ),
-    (FieldName: '_8Point2'; FieldType: ftBCD;  FieldSize: 2; Precision: 8; Required: False; ReadOnly: False; ),
-    (FieldName: '_8Point3'; FieldType: ftBCD;  FieldSize: 3; Precision: 8; Required: False; ReadOnly: False; )
+    (FieldName: 'ID';       FieldType: ftWord; FieldSize: 0; Precision: 2; Required: True;  ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_2Point0'; FieldType: ftBCD;  FieldSize: 0; Precision: 2; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_4Point0'; FieldType: ftBCD;  FieldSize: 0; Precision: 4; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_4Point1'; FieldType: ftBCD;  FieldSize: 1; Precision: 4; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_8Point0'; FieldType: ftBCD;  FieldSize: 0; Precision: 8; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_8Point2'; FieldType: ftBCD;  FieldSize: 2; Precision: 8; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: '_8Point3'; FieldType: ftBCD;  FieldSize: 3; Precision: 8; Required: False; ReadOnly: False; FieldKind: fkData )
   );
 begin
   Result := CData;
@@ -1794,22 +1981,8 @@ var
   GadData: TGadRecords;
 
 begin
-  Sleep(5);
-  Today := Now;
   GadData := TGadData.GetRecords;
-  
-  ADataset.FieldByName('ID').AsInteger := Index;
-  ADataset.FieldByName('Age').AsInteger := GadData[Index].Age;
-  ADataset.FieldByName('Gender').AsString := String(GadData[Index].Gender);
-  ADataset.FieldByName('YieldRate').AsFloat := GadData[Index].YieldRate;
-  ADataset.FieldByName('Value').AsInteger := GadData[Index].Value;
-{$ifdef DELPHI6}
-  ADataset.FieldByName('Comment').AsString := TGadData.GetComment;
-{$endif}
-  ADataset.FieldByName('Status').AsString := String(GadData[Index].Status);
-  ADataset.FieldByName('Created').AsDateTime := Today;
-//##JVR  ADataset.FieldByName('Created').AsString := GadData[Index].Created;
-  ADataset.FieldByName('Date').AsDateTime := Trunc(Today);
+  AssignValues(ADataset, Index, GadData[Index]);
 
   // We post the record here to force the Created datetime value
   // to be stored prior to proceeding.
@@ -1818,6 +1991,45 @@ begin
 
   Today := ADataset.FieldByName('Created').AsDateTime;
   ADataset.FieldByName('Time').AsString := FormatDateTime('hh:nn:ss.zzz', Today);
+end;
+
+
+class procedure TGadData.AssignValues(ADataset: TDataset; Index: Integer; GadRecord: TGadRecord);
+var
+  Today: TDateTime;
+
+begin
+  Today := Now;
+
+  ADataset.FieldByName('ID').AsInteger := Index;
+  ADataset.FieldByName('Age').AsInteger := GadRecord.Age;
+  ADataset.FieldByName('Gender').AsString := String(GadRecord.Gender);
+  ADataset.FieldByName('YieldRate').AsFloat := GadRecord.YieldRate;
+  ADataset.FieldByName('Value').AsInteger := GadRecord.Value;
+{$ifdef DELPHI6}
+  ADataset.FieldByName('Comment').AsString := TGadData.GetComment;
+{$endif}
+  ADataset.FieldByName('Status').AsString := String(GadRecord.Status);
+  ADataset.FieldByName('Created').AsDateTime := Today;
+//##JVR  ADataset.FieldByName('Created').AsString := GadRecord.Created;
+  ADataset.FieldByName('Date').AsDateTime := Trunc(Today);
+end;
+
+
+class procedure TGadData.CheckFields(
+  ADataset: TDataset;
+  const CheckingOptions: TDBIFieldChecks
+  );
+var
+  Index: Integer;
+  FieldData: TGadFields;
+
+begin
+  FieldData := GetFields;
+
+  for Index := Low(FieldData) to High(FieldData) do begin
+    CheckField(ADataset.Fields[Index], FieldData[Index], CheckingOptions);
+  end;
 end;
 
 
@@ -1858,7 +2070,7 @@ end;
 
 procedure TGadData.DoValidation;
 begin
-  DatabaseError('Validation failed - no reason!');
+  DatabaseError('Validation failed!');
 end;
 
 
@@ -1871,16 +2083,16 @@ end;
 class function TGadData.GetFields: TGadFields;
 const
   CData: TGadFields = (
-    (FieldName: 'ID';         FieldType: ftWord;       FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; ),
-    (FieldName: 'Age';        FieldType: ftInteger;    FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Gender';     FieldType: ftString;     FieldSize:  1; Precision: 0; Required: True;  ReadOnly: False; ),
-    (FieldName: 'YieldRate';  FieldType: ftFloat;      FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Value';      FieldType: ftFloat;      FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Comment';    FieldType: ftWideString; FieldSize: 20; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Status';     FieldType: ftString;     FieldSize:  6; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Date';       FieldType: ftDate;       FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Time';       FieldType: ftString;     FieldSize: 12; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Created';    FieldType: ftDateTime;   FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; )
+    (FieldName: 'ID';         FieldType: ftWord;       FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Age';        FieldType: ftInteger;    FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Gender';     FieldType: ftString;     FieldSize:  1; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'YieldRate';  FieldType: ftFloat;      FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Value';      FieldType: ftFloat;      FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Comment';    FieldType: ftWideString; FieldSize: 20; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Status';     FieldType: ftString;     FieldSize:  6; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Date';       FieldType: ftDate;       FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Time';       FieldType: ftString;     FieldSize: 12; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Created';    FieldType: ftDateTime;   FieldSize:  0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData )
     );
 begin
   Result := CData;
@@ -2048,6 +2260,7 @@ begin
     ODS.CreateDataset;
 
     FieldData := GetFields;
+    CheckFields(ODS, fcCheckAll);
     VerifyFields(ODS, @FieldData, Length(FieldData));
     AssertValues(ODS);
 
@@ -2061,18 +2274,15 @@ begin
 
       XDS.LoadFromDataset(ODS);
 
+      CheckFields(XDS, fcCheckAll);
       VerifyFields(XDS, @FieldData, Length(FieldData));
       AssertValues(XDS);
-{##JVR
-      XDS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfCDS);
-      XDS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
-//}
     finally
       XDS.Free;
     end;
 
     ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfCDS);
+    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
 
     ODS.Close;
   finally
@@ -2091,7 +2301,7 @@ end;
 procedure TGadData.SetGender(const Value: TDBIString);
 begin
   if (Value <> 'M') and (Value <> 'F') then begin
-    raise Exception.Create('Illegal gender value, values [F, M] permited');
+    DatabaseError('Illegal gender value, values [F, M] permited');
   end;
 
   FGender := Value;
@@ -2293,6 +2503,23 @@ begin
 end;
 
 
+class procedure TBookData.CheckFields(
+  ADataset: TDataset;
+  const CheckingOptions: TDBIFieldChecks
+  );
+var
+  Index: Integer;
+  FieldData: TBookFields;
+
+begin
+  FieldData := GetFields;
+
+  for Index := Low(FieldData) to High(FieldData) do begin
+    CheckField(ADataset.Fields[Index], FieldData[Index], CheckingOptions);
+  end;
+end;
+
+
 class procedure TBookData.CheckValues(ADataset: TDataset; Index: Integer);
 var
   NewBooks: TBookRecords;
@@ -2342,17 +2569,17 @@ end;
 class function TBookData.GetFields: TBookFields;
 const
   CData: TBookFields = (
-    (FieldName: 'Sequence';  FieldType: ftInteger;  FieldSize:   0; Precision: 0; Required: True;  ReadOnly: False; ),
-    (FieldName: 'Name';      FieldType: ftString;   FieldSize:  50; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Author';    FieldType: ftString;   FieldSize:  50; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Purchased'; FieldType: ftDate;     FieldSize:   0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Price';     FieldType: ftCurrency; FieldSize:   0; Precision: 2; Required: False; ReadOnly: False; ),
-    (FieldName: 'Currency';  FieldType: ftString;   FieldSize:   3; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Rating';    FieldType: ftInteger;  FieldSize:   0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Approved';  FieldType: ftBoolean;  FieldSize:   0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Comments';  FieldType: ftString;   FieldSize: 250; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Notes';     FieldType: ftMemo;     FieldSize:   0; Precision: 0; Required: False; ReadOnly: False; ),
-    (FieldName: 'Details';   FieldType: ftMemo;     FieldSize:   0; Precision: 0; Required: False; ReadOnly: False; )
+    (FieldName: 'Sequence';  FieldType: ftInteger;  FieldSize:   0; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Name';      FieldType: ftString;   FieldSize:  50; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Author';    FieldType: ftString;   FieldSize:  50; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Purchased'; FieldType: ftDate;     FieldSize:   0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Price';     FieldType: ftCurrency; FieldSize:   0; Precision: 2; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Currency';  FieldType: ftString;   FieldSize:   3; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Rating';    FieldType: ftInteger;  FieldSize:   0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Approved';  FieldType: ftBoolean;  FieldSize:   0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Comments';  FieldType: ftString;   FieldSize: 250; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Notes';     FieldType: ftMemo;     FieldSize:   0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Details';   FieldType: ftMemo;     FieldSize:   0; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData )
   );
 begin
   Result := CData;
@@ -2599,18 +2826,48 @@ begin
 end;
 
 
+{$ifndef fpc}
+class procedure TBookData.CDSUpdateTable(const AFileName: String);
+var
+  CDS: TDBIClientDataset;
+
+begin
+  CDSCreateTable(AFileName);
+
+  // Open Dataset
+  CDS := TDBIClientDataset.Create(nil);
+  try
+    CDS.LoadFromFile(AFileName);
+    TBookData.CheckFields(CDS, fcCheckAll);
+    TBookData.AssertValues(CDS);
+
+    // Update Data
+    TBookData.UpdateValues(CDS);
+    TBookData.ReviseFields(CDS);
+
+    CDS.SaveToFile(AFileName);
+    CDS.SaveToFile(ChangeFileExt(AFileName, '.xml'), dbclient.dfXML);
+    CDS.Close;
+  finally
+    CDS.Free;
+  end;
+end;
+{$endif}
+
+
 class procedure TBookData.ODSUpdateTable(const AFileName: String);
 var
-  ODS: TObjectListDataset;
+  ODS: TDBIObjectListDataset;
 
 begin
   ODSCreateTable(AFileName);
 
   // Open Dataset
-  ODS := TObjectListDataset.Create(nil);
+  ODS := TDBIObjectListDataset.Create(nil);
   try
     ODS.ClassTypeName := TBookData.ClassName;
     ODS.LoadFromFile(AFileName);
+    TBookData.CheckFields(ODS, fcCheckAll);
     TBookData.AssertValues(ODS);
 
     // Update Data
@@ -2618,7 +2875,7 @@ begin
     TBookData.ReviseFields(ODS);
 
     ODS.SaveToFile(AFileName);
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfCDS);
+    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
     ODS.Close;
   finally
     ODS.Free;
@@ -2695,9 +2952,9 @@ end;
 class procedure TBookData.XDSUpdateTable(const AFileName: String);
 var
 {$ifndef fpc}
-  CDS: TClientDataset;
+  CDS: TDBIClientDataset;
 {$endif}
-  XDS: TXbaseDataset;
+  XDS: TDBIXbaseDataset;
 
 begin
   DeleteTables(AFileName);
@@ -2705,7 +2962,7 @@ begin
   XDSCreateTable(AFileName);
 
   // Update Data
-  XDS := TXbaseDataset.Create(nil);
+  XDS := TDBIXbaseDataset.Create(nil);
   try
     XDS.FileName := AFileName;
     XDS.Open;
@@ -2713,7 +2970,7 @@ begin
     TBookData.UpdateValues(XDS);
     TBookData.ReviseFields(XDS);
 
-    XDS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfCDS);
+    XDS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
     XDS.Close;
   finally
     XDS.Free;
@@ -2726,7 +2983,7 @@ begin
   Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.cds')));
 
 {$ifndef fpc}
-  CDS := TClientDataset.Create(nil);
+  CDS := TDBIClientDataset.Create(nil);
   try
     CDS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
 
@@ -2756,6 +3013,23 @@ begin
   ADataset.FieldByName('Comment').AsString := BinaryData[Index].Comment;
   ADataset.FieldByName('Notes').AsString := BinaryData[Index].Notes;
   ADataset.FieldByName('Created').AsDateTime := Now;
+end;
+
+
+class procedure TBinaryData.CheckFields(
+  ADataset: TDataset;
+  const CheckingOptions: TDBIFieldChecks
+  );
+var
+  Index: Integer;
+  FieldData: TBinaryFields;
+
+begin
+  FieldData := GetFields;
+
+  for Index := Low(FieldData) to High(FieldData) do begin
+    CheckField(ADataset.Fields[Index], FieldData[Index], CheckingOptions);
+  end;
 end;
 
 
@@ -2830,10 +3104,10 @@ end;
 class function TBinaryData.GetFields: TBinaryFields;
 const
   CData: TBinaryFields = (
-    (FieldName: 'ID';      FieldType: ftInteger;  FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; ),
-    (FieldName: 'Comment'; FieldType: ftMemo;     FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; ),
-    (FieldName: 'Notes';   FieldType: ftMemo;     FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; ),
-    (FieldName: 'Created'; FieldType: ftDateTime; FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; )
+    (FieldName: 'ID';      FieldType: ftInteger;  FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Comment'; FieldType: ftMemo;     FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Notes';   FieldType: ftMemo;     FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Created'; FieldType: ftDateTime; FieldSize: 0;  Precision: 0; Required: False;  ReadOnly: False; FieldKind: fkData )
     );
 
 begin
@@ -2920,18 +3194,22 @@ const
       ID: 0;
       Comment: 'Blob record one';
       Notes: CBlobData1;
+      Created: DBIZeroDateTime;
     ), (
       ID: 1;
       Comment: 'Blob record two';
       Notes: CBlobData2;
+      Created: DBIZeroDateTime;
     ), (
       ID: 2;
       Comment: 'Blob record three';
       Notes: CBlobData1;
+      Created: DBIZeroDateTime;
     ), (
       ID: 3;
       Comment: 'Blob record four';
       Notes: CBlobData2;
+      Created: DBIZeroDateTime;
     )
   );
 
@@ -2979,16 +3257,16 @@ begin
       else if (ADataset is TObjectListDataset) then begin
         case Field.Datatype of
 {$ifdef DELPHI2009}
-          ftByte,
+          db.ftByte,
 {$endif}
-          ftWord,
-          ftInteger: Success := Field.AsInteger = 0;
+          db.ftWord,
+          db.ftInteger: Success := Field.AsInteger = 0;
 
 {$ifdef DELPHI2009}
-          ftSingle,
-          ftExtended,
+          db.ftSingle,
+          db.ftExtended,
 {$endif}
-          ftFloat:   Success := Field.AsFloat = 0;
+          db.ftFloat:   Success := Field.AsFloat = 0;
         end;
       end
 
@@ -3111,6 +3389,11 @@ begin
     else begin
       Field.Size := PFieldData^[Index].FieldSize;
     end;
+
+    if (PFieldData^[Index].FieldKind <> fkData) then begin
+      Field.FieldKind := PFieldData^[Index].FieldKind;
+      Field.Calculated := Field.FieldKind = fkCalculated;
+    end;
   end;
 end;
 
@@ -3120,7 +3403,7 @@ class procedure TDBIUnitTest.BuildFieldDefs(ADataset: TDataset; PFieldData: PFie
   function GetNullFieldSize: Word;
   var
     Index: Word;
-    
+
   begin
     Result := 0;
 
@@ -3166,6 +3449,228 @@ begin
 {$ifdef UseDebugInfo}
     ShowMessageFmt('Added Fielddef "%s"', [FieldDef.Name]);
 {$endif}
+  end;
+end;
+
+
+class function TDBIUnitTest.CheckFieldProps(
+  PFieldData: PFieldRecord;
+  PFieldProps: DBIIntfConsts.pDSFLDDesc
+  ): Boolean;
+{$ifndef DebugInfo}
+var
+  iFldType: Word;
+
+begin
+  if (PFieldProps^.iFldType = fldUniCode) then begin
+    iFldType := fldWideString;
+  end
+  else begin
+    iFldType := PFieldProps^.iFldType;
+  end;
+
+  Result := CompareText(String(PFieldProps^.szName), PFieldData^.FieldName) = 0;
+
+  // Currency types
+  if (PFieldData^.FieldType = ftCurrency) then begin
+    Result := Result and (DBIIntfConsts.DataTypeMap[iFldType] = ftFloat);
+    Result := Result and (FldSubTypeMap[ftCurrency] = PFieldProps^.iFldSubType);
+  end
+
+  // DateTime
+  else if (PFieldData^.FieldType = ftDateTime) then begin
+//##JVR    Result := Result and (DBIIntfConsts.DataTypeMap[iFldType] = ftFloat);
+    Result := Result and (FldSubTypeMap[ftDateTime] = PFieldProps^.iFldSubType);
+  end
+
+
+  // Blob types
+  else if (PFieldProps^.iFldType = fldBLOB) then begin
+    Result := Result and (FldSubTypeMap[ftMemo] = PFieldProps^.iFldSubType);
+  end
+
+  // Otherwise
+  else begin
+    Result := Result and (DBIIntfConsts.DataTypeMap[iFldType] = PFieldData^.FieldType);
+  end;
+
+  if (PFieldData^.FieldType = ftWideString) then begin
+    Result := Result and (PFieldProps^.iUnits1 = 2 * PFieldData^.FieldSize);
+  end
+  else if (PFieldData^.FieldType = ftString) then begin
+    Result := Result and (PFieldProps^.iUnits1 = PFieldData^.FieldSize);
+  end;
+{$else}
+begin
+  Result := True;
+{$endif}
+  Assert(Result, PFieldData^.FieldName + ' is not equal to the predefined Field');
+end;
+
+
+class procedure TDBIUnitTest.CheckField(
+  AField: TField;
+  FieldRecord: TFieldRecord;
+  const CheckingOptions: TDBIFieldChecks
+  );
+
+  function GetPredefinedSize: Integer;
+  begin
+    Result := FieldRecord.FieldSize;
+{##JVR
+    if (AField.Dataset is TXbaseDataset) then begin
+      case FieldRecord.FieldType of
+        ftBlob: Result := sizeofBlob;
+        ftMemo: Result := sizeofMemo;
+      end;
+    end;
+//}
+  end;
+
+
+  function GetPredefinedFieldType: TFieldType;
+  begin
+    Result := FieldRecord.FieldType;
+
+    // XML
+    if (fcXmlMapFieldTypes in CheckingOptions) then begin
+      case FieldRecord.FieldType of
+        ftUnknown: Result := ftUnknown;
+{$ifdef Delphi2009}
+        ftFloat4:     Result := ftFloat;
+        ftFloatIEEE:  Result := ftFloat;
+{$endif}
+      end;
+    end
+
+    // Xbase
+    else if (fcXbaseMapFieldTypes in CheckingOptions) then begin
+      case FieldRecord.FieldType of
+{$ifdef Delphi2009}
+        ftSigned8:    Result := ftSmallint;
+        ftSigned16:   Result := ftInteger;
+        ftSigned32:   Result := ftInteger;
+        ftUnsigned8:  Result := ftSmallint;
+        ftUnsigned16: Result := ftInteger;
+        ftUnsigned32: Result := ftInteger;
+        ftFloat4:     Result := ftFloat;
+        ftFloatIEEE:  Result := ftFloat;
+{$else}
+        ftSigned16:   Result := ftInteger;
+        ftUnsigned16: Result := ftInteger;
+        ftUnsigned32: Result := ftInteger;
+{$endif}
+        ftUnicodeString: Result := ftString;
+      end;
+    end;
+  end;
+
+begin
+  // FieldName
+  if (fcFieldname in CheckingOptions) then begin
+    Assert(CompareText(AField.FieldName, FieldRecord.FieldName) = 0,
+      Format(
+        '[%s] fieldname is not equal to the predefined FieldName "%s"',
+        [AField.FieldName, FieldRecord.FieldName]
+        )
+      );
+  end;
+
+  // FieldKind
+  if (fcFieldKind in CheckingOptions) then begin
+    Assert(AField.FieldKind = FieldRecord.FieldKind,
+      Format(
+        '[%s] fieldkind "%s" is not equal to the predefined fieldkind "%s"',
+        [AField.FieldName, GetFieldKindName(AField.FieldKind), GetFieldKindName(FieldRecord.FieldKind)]
+        )
+      );
+  end;
+
+  // FieldType
+  if (fcFieldType in CheckingOptions) then begin
+    Assert(AField.DataType = GetPredefinedFieldType,
+      Format(
+        '[%s] fieldtype "%s" is not equal to the predefined fieldtype "%s"',
+        [AField.FieldName, GetDataTypeName(AField.DataType), GetDataTypeName(GetPredefinedFieldType)]
+        )
+      );
+  end;
+
+  // FieldSize
+  if (fcFieldSize in CheckingOptions) and (AField.Datatype <> db.ftADT) and
+     not (fcSkipFieldSizeString in CheckingOptions) then
+  begin
+    Assert(AField.Size = GetPredefinedSize,
+      Format(
+        '[%s] fieldsize "%d" is not equal to the predefined fieldsize "%d"',
+        [AField.FieldName, AField.Size, FieldRecord.FieldSize]
+        )
+      );
+  end;
+
+{$ifdef CheckPrecision}
+  // Precision
+  if (fcPrecision in CheckingOptions) then begin
+    Assert(AField.Precision = FieldRecord.Precision,
+      Format(
+        '[%s] precision "%d" is not equal to the predefined precision "%d"',
+        [AField.FieldName, AField.Precision, FieldRecord.Precision]
+        )
+      );
+  end;
+{$endif}
+
+  // ReadOnly
+  if (fcReadOnly in CheckingOptions) then begin
+    Assert(AField.Readonly = FieldRecord.Readonly,
+      Format(
+        '[%s] readonly "%d" is not equal to the predefined readonly "%d"',
+        [AField.FieldName, Ord(AField.Readonly), Ord(FieldRecord.Readonly)]
+        )
+      );
+  end;
+
+  // Required
+  if (fcRequired in CheckingOptions) then begin
+    Assert(AField.Required = FieldRecord.Required,
+      Format(
+        '[%s] required "%d" is not equal to the predefined required "%d"',
+        [AField.FieldName, Ord(AField.Required), Ord(FieldRecord.Required)]
+        )
+      );
+  end;
+
+end;
+
+
+class procedure TDBIUnitTest.CheckFields(
+  ADataset: TDataset;
+  const CheckingOptions: TDBIFieldChecks
+  );
+begin
+  raise Exception.Create('CheckFields() is not implemented in derived class');
+end;
+
+
+class procedure TDBIUnitTest.CheckFields(
+  ADataset: TDataset;
+  PFieldData: PFieldRecords;
+  const Count: Word;
+  const CheckingOptions: TDBIFieldChecks
+  );
+var
+  Index: Integer;
+
+begin
+  Assert(Count = ADataset.FieldCount,
+    Format(
+      'FieldCount "%d" is not equal to the predefined Count "%d"',
+      [ADataset.FieldCount, Count]
+      )
+    );
+
+  for Index := 0 to Count-1 do begin
+    CheckField(ADataset.Fields[Index], PFieldData^[Index], CheckingOptions);
   end;
 end;
 
@@ -3247,7 +3752,6 @@ class procedure TDBIUnitTest.FieldProps(
   const Count: Word
   );
 var
-//##JVR  Data: TStringDataList;
   CursorProps: DSIntf.DSProps;
   FieldProps: DBClient.TFieldDescList;
   Index: Integer;
@@ -3258,22 +3762,10 @@ begin
 
   SetLength(FieldProps, CursorProps.iFields);
   Assert(ADataset.DSBase.GetFieldDescs(DSIntf.PDSFldDesc(FieldProps)) = 0);
-  for Index := 0 to Count-1 do begin
-    CheckField(@(PFieldData^[Index]), @FieldProps[Index]);
-  end;
-{##JVR
-  Data := TStringDataList.Create;
-  try
-    Data.Add(Format('--- TClientDataset field definitions ---', []));
-    for Index := 0 to CursorProps.iFields-1 do begin
-      Data.AddProps(FieldProps[Index]);
-    end;
 
-    ShowMessage(Data.Text);
-  finally
-    Data.Free;
+  for Index := 0 to Count-1 do begin
+    CheckFieldProps(@(PFieldData^[Index]), @FieldProps[Index]);
   end;
-//}
 end;
 {$endif}
 
@@ -3283,34 +3775,19 @@ class procedure TDBIUnitTest.FieldProps(
   const Count: Word
   );
 var
-//##JVR  Data: TStringDataList;
   CursorProps: DBIIntfConsts.DSProps;
   FieldProps: DBIIntfConsts.TFieldDescList;
   Index: Integer;
 
 begin
   Assert(ADataset.DSBase.GetProps(CursorProps) = 0);
-//##JVR  Assert(CursorProps.iFields = ADataset.Fields.Count);
 
   SetLength(FieldProps, CursorProps.iFields);
   Assert(ADataset.DSBase.GetFieldDescs(DBIIntfConsts.PDSFldDesc(FieldProps)) = 0);
+
   for Index := 0 to Count-1 do begin
-    CheckField(@(PFieldData^[Index]), @FieldProps[Index]);
+    CheckFieldProps(@(PFieldData^[Index]), @FieldProps[Index]);
   end;
-{##JVR
-  Data := TStringDataList.Create;
-  try
-    Data.Add(Format('--- TObjectListDataset field definitions ---', []));
-
-    for Index := 0 to CursorProps.iFields-1 do begin
-      Data.AddProps(FieldProps[Index]);
-    end;
-
-    ShowMessage(Data.Text);
-  finally
-    Data.Free;
-  end;
-//}
 end;
 
 
@@ -3320,34 +3797,19 @@ class procedure TDBIUnitTest.FieldProps(
   const Count: Word
   );
 var
-//##JVR  Data: TStringDataList;
   CursorProps: DBIIntfConsts.DSProps;
   FieldProps: DBIIntfConsts.TFieldDescList;
   Index: Integer;
 
 begin
   Assert(ADataset.DSBase.GetProps(CursorProps) = 0);
-//##JVR  Assert(CursorProps.iFields = ADataset.Fields.Count);
 
   SetLength(FieldProps, CursorProps.iFields);
   Assert(ADataset.DSBase.GetFieldDescs(DBIIntfConsts.PDSFldDesc(FieldProps)) = 0);
 
   for Index := 0 to Count-1 do begin
-    CheckField(@(PFieldData^[Index]), @FieldProps[Index]);
+    CheckFieldProps(@(PFieldData^[Index]), @FieldProps[Index]);
   end;
-{##JVR
-  Data := TStringDataList.Create;
-  try
-    Data.Add(Format('--- TXBaseDataset field definitions ---', []));
-    for Index := 0 to CursorProps.iFields-1 do begin
-      Data.AddProps(FieldProps[Index]);
-    end;
-
-    ShowMessage(Data.Text);
-  finally
-    Data.Free;
-  end;
-//}
 end;
 
 
@@ -3376,6 +3838,18 @@ begin
 {$else}
 begin
 {$endif}
+end;
+
+
+class function TDBIUnitTest.GetDataTypeName(const Value: TFieldType): String;
+begin
+  Result := TypInfo.GetEnumName(TypeInfo(TFieldType), Ord(Value));
+end;
+
+
+class function TDBIUnitTest.GetFieldKindName(const Value: TFieldKind): String;
+begin
+  Result := TypInfo.GetEnumName(TypeInfo(TFieldKind), Ord(Value));
 end;
 
 
@@ -3427,11 +3901,6 @@ end;
 
 
 class procedure TDBIUnitTest.VerifyFields(ADataset: TDataset; PFieldData: PFieldRecords; const Count: Word);
-{##JVR
-var
-  Data: TStringDataList;
-  Index: Integer;
-//}
 begin
   Assert(ADataset.FieldCount = Count, Format('Field Count %d <> Expected Count %d', [ADataset.FieldCount, Count]));
 
@@ -3445,22 +3914,10 @@ begin
 {$endif}
   else if ADataset is TDBIXBaseDataset then begin
     FieldProps(ADataset as TDBIXBaseDataset, PFieldData, Count);
+  end
+  else begin
+    raise Exception.CreateFmt('Dataset is of a type "%s", unable to verify fields for this type', [ADataset.ClassName]);
   end;
-
-{##JVR
-  Data := TStringDataList.Create;
-  try
-    Data.Add(Format('--- TObjectListDataset fields ---', []));
-
-    for Index := 0 to ADataset.Fields.Count-1 do begin
-      Data.AddProps(ADataset.Fields[Index]);
-    end;
-
-    ShowMessage(Data.Text);
-  finally
-    Data.Free;
-  end;
-//}
 end;
 
 
@@ -3476,10 +3933,11 @@ begin
     CDS.CreateDataset;
 
 //##JVR    VerifyFields(CDS, @FieldData, Length(FieldData));
+    CheckFields(CDS, fcCheckAll);
     OccupyValues(CDS);
     AssertValues(CDS);
 
-    CDS.SaveToFile(ChangeFileExt(AFileName, '.xml'), dfXML);
+    CDS.SaveToFile(ChangeFileExt(AFileName, '.xml'), dbclient.dfXML);
     CDS.Close;
   finally
     CDS.Free;
@@ -3505,10 +3963,13 @@ begin
     ODS.CreateDataset;
 
 //##JVR    VerifyFields(ODS);
+    CheckFields(ODS, fcCheckAll);
     OccupyValues(ODS);
 
+    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
+    CheckFields(ODS, fcCheckAll);
+
     ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfCDS);
     AssertValues(ODS);
 
     // Load Memory XBaseDataset from ObjectListDataset and verify data
@@ -3517,8 +3978,11 @@ begin
       XDS.FileName := ChangeFileExt(ChangeFileExt(AFileName, '') + 'a', '.dbf');
       CreateFieldDefs(XDS);
       XDS.CreateDataset;
+
 //##JVR      VerifyFields(XDS);
+      CheckFields(XDS, fcCheckAll);
       XDS.LoadFromDataset(ODS);
+      CheckFields(XDS, fcCheckAll);
       AssertValues(XDS);
 
       ClearValues(XDS);
@@ -3534,7 +3998,7 @@ begin
 
     AFileName := ChangeFileExt(ChangeFileExt(AFileName, '') + 'b', '.dbf');
     ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfCDS);
+    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
     ODS.SaveToFile(ChangeFileExt(AFileName, '.csv'), dfCSV);
     ODS.Close;
   finally
@@ -3550,6 +4014,7 @@ begin
     ODS.CreateDataset;
 
     ODS.LoadFromFile(AFileName);
+    CheckFields(ODS, fcCheckAll);
 //##JVR    VerifyFields(ODS);
     AssertValues(ODS);
 
@@ -3572,6 +4037,7 @@ begin
   try
     XDS.LoadFromFile(AFileName);
 //##JVR    VerifyFields(XDS);
+    CheckFields(XDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXBaseMapFieldTypes]);
     AssertValues(XDS);
     XDS.Close;
   finally
@@ -3584,6 +4050,7 @@ begin
   try
     ODS.ClassTypeName := Self.ClassName;
     ODS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
+    CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
     AssertValues(ODS);
 
     ODS.Close;
@@ -3591,13 +4058,14 @@ begin
     ODS.Free;
   end;
 
-//(*##JVR
+
   // Load the table into a ObjectListDataset from an CSV file and verify data
   ODS := TDBIObjectListDataset.Create(nil);
   try
     ODS.ClassTypeName := Self.ClassName;
     CreateFieldDefs(ODS);
     ODS.CreateDataset;
+    CheckFields(ODS, fcCheckAll);
 
     ODS.LoadFromFile(ChangeFileExt(AFileName, '.csv'));
     AssertValues(ODS);
@@ -3606,13 +4074,14 @@ begin
   finally
     ODS.Free;
   end;
-//*)
+
 
   // Load the table into a ClientDataset and verify data
 {$ifndef fpc}
   CDS := TDBIClientDataset.Create(nil);
   try
     CDS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
+    CheckFields(CDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
     AssertValues(CDS);
     CDS.SaveToFile(ChangeFileExt(AFileName, '.xml'));
 
@@ -3621,6 +4090,7 @@ begin
     try
       CreateFieldDefs(XDS);
       XDS.CreateDataset;
+      CheckFields(XDS, fcCheckAll);
       XDS.LoadFromDataset(CDS);
       AssertValues(XDS);
       XDS.Close;
@@ -3633,20 +4103,20 @@ begin
     CDS.Free;
   end;
 
-//{##JVR
+
   // Create a new ObjectlistDataset, add data, and verify
   ODS := TDBIObjectListDataset.Create(nil);
   try
     ODS.ClassTypeName := Self.ClassName;
 
     ODS.LoadFromFile(ChangeFileExt(AFileName, '.xml'));
+    CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
     AssertValues(ODS);
 
     ODS.Close;
   finally
     ODS.Free;
   end;
-//}
 {$endif}
 end;
 
@@ -3667,11 +4137,12 @@ begin
     XDS.FileName := ChangeFileExt(AFileName, '.dbf');
     XDS.CreateDataset;
 
-//##JVR    VerifyFields(XDS);
+    CheckFields(XDS, fcCheckAll);
     OccupyValues(XDS);
     AssertValues(XDS);
 
-    XDS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfCDS);
+    XDS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
+    XDS.SaveToFile(ChangeFileExt(AFileName, '.xml'), dfXML);
 
     XDS.Close;
   finally
@@ -3683,6 +4154,7 @@ begin
   XDS := TDBIXBaseDataset.Create(nil);
   try
     XDS.LoadFromFile(AFileName);
+    CheckFields(XDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXbaseMapFieldTypes]);
     AssertValues(XDS);
 
     ClearValues(XDS);
@@ -3691,7 +4163,7 @@ begin
     XDS.SaveToFile(ChangeFileExt(AFileName, '.nulls.dbf'));
 
     RefillValues(XDS);
-    AssertValues(Xds);
+    AssertValues(XDS);
 
     XDS.Close;
   finally
@@ -3704,6 +4176,7 @@ begin
   CDS := TDBIClientDataset.Create(nil);
   try
     CDS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
+    CheckFields(CDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
 
     AssertValues(CDS);
 
@@ -3712,6 +4185,89 @@ begin
     CDS.Free;
   end;
 {$endif}
+end;
+
+
+class procedure TDBIUnitTest.RegisterDBClasses;
+begin
+{$ifndef fpc}
+  Classes.RegisterClass(TClientDataset);
+  Classes.RegisterClass(TDBIClientDataset);
+{$endif}
+  Classes.RegisterClass(TComponentDataset);
+  Classes.RegisterClass(TObjectListDataset);
+  Classes.RegisterClass(TStringsDataset);
+  Classes.RegisterClass(TXbaseDataset);
+
+  Classes.RegisterClass(TAutoincField);
+  Classes.RegisterClass(TADTField);
+{$ifndef fpc}
+  Classes.RegisterClass(TAggregateField);
+  Classes.RegisterClass(TArrayField);
+{$endif}
+  Classes.RegisterClass(TBCDField);
+  Classes.RegisterClass(TBinaryField);
+  Classes.RegisterClass(TBlobField);
+  Classes.RegisterClass(TBooleanField);
+{$ifdef Delphi2010}
+  Classes.RegisterClass(TByteField);
+{$endif}
+  Classes.RegisterClass(TBytesField);
+  Classes.RegisterClass(TCurrencyField);
+  Classes.RegisterClass(TDatasetField);
+  Classes.RegisterClass(TDateField);
+  Classes.RegisterClass(TDateTimeField);
+{$ifdef Delphi2010}
+  Classes.RegisterClass(TExtendedField);
+{$endif}
+  Classes.RegisterClass(TFloatField);
+{$ifdef Delphi6}
+  Classes.RegisterClass(TFMTBCDField);
+{$endif}
+  Classes.RegisterClass(TGraphicField);
+  Classes.RegisterClass(TGuidField);
+{$ifndef fpc}
+  Classes.RegisterClass(TIDispatchField);
+  Classes.RegisterClass(TInterfaceField);
+{$endif}
+  Classes.RegisterClass(TIntegerField);
+  Classes.RegisterClass(TLargeintField);
+{$ifdef Delphi2010}
+  Classes.RegisterClass(TLongWordField);
+{$endif}
+  Classes.RegisterClass(TMemoField);
+  Classes.RegisterClass(TNumericField);
+  Classes.RegisterClass(TObjectField);
+{$ifndef fpc}
+  Classes.RegisterClass(TReferenceField);
+{$endif}
+{$ifdef Delphi2010}
+  Classes.RegisterClass(TShortintField);
+{$endif}
+{$ifdef Delphi2010}
+  Classes.RegisterClass(TSingleField);
+{$endif}
+  Classes.RegisterClass(TSmallintField);
+{$ifndef fpc}
+  {$ifdef Delphi6}
+  Classes.RegisterClass(TSqlTimeStampField);
+  {$endif}
+{$endif}
+{$ifdef DelphiXE2}
+  Classes.RegisterClass(TSqlTimeStampOffsetField);
+{$endif}
+  Classes.RegisterClass(TStringField);
+  Classes.RegisterClass(TTimeField);
+{$ifdef Delphi2010}
+  Classes.RegisterClass(TUnsignedAutoincField);
+{$endif}
+  Classes.RegisterClass(TVarBytesField);
+  Classes.RegisterClass(TVariantField);
+{$ifdef Delphi2006}
+  Classes.RegisterClass(TWideMemoField);
+{$endif}
+  Classes.RegisterClass(TWideStringField);
+  Classes.RegisterClass(TWordField);
 end;
 
 
@@ -3732,6 +4288,7 @@ end;
 
 
 class function TDBIUnitTests.GetProcessMemoryUsage: Int64;
+{$ifndef fpc}
 var
   PMC: PPROCESS_MEMORY_COUNTERS;
   SizeOfPMC: Integer;
@@ -3752,6 +4309,11 @@ begin
     FreeMem(PMC);
   end;
 end;
+{$else}
+begin
+  Result := 0;
+end;
+{$endif}
 
 
 function TDBIUnitTests.GetParent: TomTestSuite;
@@ -3778,7 +4340,7 @@ function TDBIClientDataset.GetFieldClass(FieldType: TFieldType): TFieldClass;
 begin
   Result := inherited GetFieldClass(FieldType);
 {$ifdef DELPHI2009}
-  if (FieldType = ftExtended) then begin
+  if (FieldType = db.ftExtended) then begin
     Result := TDBIExtendedField;
   end;
 {$endif}
@@ -3795,6 +4357,8 @@ initialization
   Classes.RegisterClass(TOrdinalData);
   Classes.RegisterClass(TStringData);
   Classes.RegisterClass(TEntityData);
+
+  TDBIUnitTest.RegisterDBClasses;
 
 {$ifdef omTesting}
   TomTestMastery.RegisterTestSuite(TDBIUnitTests);

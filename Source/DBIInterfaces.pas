@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2013, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -38,37 +38,23 @@
   ______________________________________________________________________________
 }
 
-{#omcodecop off : jvr : dbilib code}
+{#omcodecop off : jvr : dbilib}
 
 unit DBIInterfaces;
 
 {$I DBICompilers.inc}
 
-{$ifdef fpc}
-  {$asmmode intel}
-  {$mode delphi}
-{$endif}
-
-{ .$define _AGGREGATES True}
-
 interface
 
 uses
   Classes, SysUtils, TypInfo, DBIIntfConsts, DB, Contnrs, DBIConst, DBIStrings,
-  DBIUTils, DBIFilters, DBIIndices;
+  DBIUtils, DBIFilters, DBIIndices;
 
 type
   TDBIFieldDef = class(TFieldDef)
-{$ifdef fpc}
-  protected
-    function GetChildDefs: TFieldDefs;
-    procedure SetChildDefs(Value: TFieldDefs);
-
   public
-    function HasChildDefs: Boolean;
-
-    property ChildDefs: TFieldDefs read GetChildDefs write SetChildDefs stored HasChildDefs;
-{$endif}
+    class function ChildDefs(FieldDef: TFieldDef): TFieldDefs;
+    class function HasChildDefs(FieldDef: TFieldDef): Boolean;
   end;
 
 
@@ -331,7 +317,7 @@ const
     0,                                 // fldUNKNOWN
     0,                                 // fldZSTRING
     1,                                 // fldDATE
-    1,                                 // fldBLOB
+    0,                                 // fldBLOB
     1,                                 // fldBOOL
     1,                                 // fldINT16
     1,                                 // fldINT32
@@ -905,19 +891,6 @@ type
 
 
 type
-  TDBICustomObject = class(TPersistent)
-  protected
-    procedure Error(
-      E: Exception;
-      const Caller: String;
-      const Reference: String;
-      const ErrMsg: String;
-      Args: array of const
-      );
-  end;
-
-
-type
   TDBIConnectionStatus = (csNoChange, csDeactivate);
   TDBIDataConnectionMode = (cmData, cmFields);
   TDBIDataChangeEventType = (
@@ -962,7 +935,7 @@ type
     DataInfo: PDataInfo
     ) of object;
 
-  TDBIDataConnection = class(TDBICustomObject)
+  TDBIDataConnection = class(TPersistent)
   private
     FOwner: TObject;
     FActive: Boolean;
@@ -1043,7 +1016,6 @@ type
     property RecordCount: Integer index DSAttr(dsRecAll) read GetCount;
 {$endif}
     property CanModify: Boolean read FCanModify write FCanModify;
-    property FileName: TFileName read GetFileName write SetFileName;
     property Indices: TDBIIndexList read FIndices;
     property NullFlags: TDBINullFlags read FNullFlags;
     property StreamMode: TDBIStreamMode read FStreamMode;
@@ -1143,6 +1115,7 @@ type
     property Exclusive: Boolean index csDeActivate read FExclusive write SetExclusive;
     property FieldCount: Integer read GetFieldCount write SetFieldCount;
     property FieldProps: TFieldDescList read FFieldProps write SetFieldProps;
+    property FileName: TFileName read GetFileName write SetFileName;
     property LogicalBufferSize: Integer read GetLogicalBufferSize write SetLogicalBufferSize;
     property Mode: TDBIDataConnectionMode read FMode write SetMode;
     property Modified: Boolean read FModified write FModified;
@@ -1154,7 +1127,7 @@ type
 
 
 
-  TDBILock = class(TObject)
+  TDBILock = class(TPersistent)
   private
     FDataConnection: TDBIDataConnection;
     FLockData: TDBILockData;
@@ -1180,7 +1153,7 @@ type
   end;  { TDBIRecordLock }
 
 
-  TDBILockList = class(TDBICustomObject)
+  TDBILockList = class(TPersistent)
   private
     FLocks: TList;
     FDataConnection: TDBIDataConnection;
@@ -1223,6 +1196,7 @@ type
 
     </CODE>
   }
+{$typeinfo on}
   TDBIBase = class(TInterfacedObject, IDBIBase)
   private
     FDataConnection: TDBIDataConnection;// Object that takes care of the raw data access
@@ -1235,14 +1209,6 @@ type
     FLocks: TDBILockList;               // List of Locks
 
   protected
-    procedure Error(
-      E: Exception;
-      const Caller: String;
-      const Reference: String;
-      const ErrMsg: String;
-      Args: array of const
-      );
-
     function CreateDefaultIndex: Integer;
 
     // Callback routine to deal with actions initiated by the DataConnection
@@ -1282,6 +1248,7 @@ type
     function EncodeFieldDescs(FieldDefs: TFieldDefs): DBIResult;
 
   end;  { TDBIBase }
+{$typeinfo off}
 
 
   // ___________________________________________________________________________
@@ -1304,6 +1271,7 @@ type
 
     </CODE>
   }
+{$typeinfo on}
   TDBICursor = class(TInterfacedObject, IDBICursor)
   private
     FDSBase: IDBIBase;                  // Dataset associated with cursor
@@ -1326,14 +1294,6 @@ type
 
     function InternalSetLock(const Position: Integer; const Lock: Boolean): DBIResult;
     function SetFilterLock(LockData: TDBILockData): DBIResult;
-
-    procedure Error(
-      E: Exception;
-      const Caller: String;
-      const Reference: String;
-      const ErrMsg: String;
-      Args: array of const
-      );
 
     function CheckPosition(const Direction: Integer): DBIResult;
     function GetActiveIndex: TDBIndex;
@@ -1516,6 +1476,7 @@ type
     property ActiveIndex: TDBIndex read GetActiveIndex;
 
   end;  { TDBICursor }
+{$typeinfo off}
 
 
 implementation
@@ -1619,7 +1580,8 @@ begin
     Inc(FLogicalBufferSize, FieldCount);
 
   except
-    Error(nil, 'AddField', '1020', 'Failed to create new field "%s"',
+    raise EDBIException.Create(Self, 'AddField::1585',
+      'Failed to create new field "%s"',
       [TDBIFieldName(pFldDes^.szName)]
       );
   end;  { try..except }
@@ -1733,9 +1695,9 @@ var
     Inc(Count, FieldDefs.Count);
 
     for Index := 0 to FieldDefs.Count - 1 do begin
-      with TDBIFieldDef(FieldDefs[Index]) do begin
-        if HasChildDefs then begin
-          GetFieldDefCount(ChildDefs, Count);
+      with FieldDefs[Index] do begin
+        if TDBIFieldDef.HasChildDefs(FieldDefs[Index]) then begin
+          GetFieldDefCount(TDBIFieldDef.ChildDefs(FieldDefs[Index]), Count);
         end;
       end;  { with }
     end;  { for }
@@ -1800,23 +1762,41 @@ var
     );
   var
     FieldNo: Integer;
+    FieldDef: TFieldDef;
 
   begin
     // Loop through the field definitions and create a corresponding field description
     for FieldNo := 0 to FieldDefs.Count - 1 do begin
-      with TDBIFieldDef(FieldDefs[FieldNo]) do begin
-        EncodeFieldDesc(FieldDescs[DescNo], TDBIString(Name), DataType, Size, Precision, False, Attributes);
-        Inc(DescNo);
-        // If we have child definitions then process them
-        if HasChildDefs then begin
-          if (DataType = ftDataSet) then begin
-            GetFieldDefCount(ChildDefs, FieldDescs[DescNo-1].iUnits2);
-          end;
-          EncodeFieldDescs(ChildDefs, FieldDescs, DescNo);
+      FieldDef := FieldDefs[FieldNo];
+
+      // Added for fpc
+      if (FieldDef.Required) then begin
+        FieldDef.Attributes := FieldDef.Attributes + [faRequired];
+      end;
+
+      EncodeFieldDesc(
+        FieldDescs[DescNo],
+        TDBIString(FieldDef.Name),
+        FieldDef.DataType,
+        FieldDef.Size,
+        FieldDef.Precision,
+        False,
+        FieldDef.Attributes
+        );
+
+      Inc(DescNo);
+
+      // If we have child definitions then process them
+      if TDBIFieldDef.HasChildDefs(FieldDef) then begin
+        if (FieldDef.DataType = ftDataSet) then begin
+          GetFieldDefCount(TDBIFieldDef.ChildDefs(FieldDef), FieldDescs[DescNo-1].iUnits2);
         end;
-      end;  { with }
-    end;  { for }
-  end;  { EncodeFieldDescs }
+        EncodeFieldDescs(TDBIFieldDef.ChildDefs(FieldDef), FieldDescs, DescNo);
+      end;
+
+    end;
+  end;
+
 
 begin
   FieldDefCount := 0;
@@ -2010,7 +1990,7 @@ begin
   end;
 
   if (Position < 0) or (Position >= Length(FFieldProps{FieldPropsFLDDesc})) then begin
-    Error(nil, 'GetFieldRecord', '1610', 'Record "%d" out of legal range', [Position]);
+    raise EDBIException.Create(Self, 'GetFieldRecord::1978', 'Record "%d" out of legal range', [Position]);
   end;
 
   // If buffer is nil then we only want the status
@@ -2028,7 +2008,7 @@ end;  { GetFieldRecord }
 function TDBIDataConnection.GetFieldSize(pFldDes: pDSFLDDesc): Integer;
 begin
   if (pFldDes^.iUnits1) <= 0 then begin
-    if (pFldDes^.iFldType in [fldDATE..fldDATETIME, fldINT8, fldUINT8]) then begin
+    if (pFldDes^.iFldType in [fldDATE, fldBOOL..fldDATETIME, fldINT8, fldUINT8]) then begin
       pFldDes^.iUnits1 := 1;
     end;
   end;
@@ -2083,7 +2063,7 @@ begin
   end;  { case }
 
   if (Result <= 0) then begin
-    Error(nil, 'GetFieldSize', '1600', 'Unknown Data Type "%d"', [pFldDes^.iFldType]);
+    raise EDBIException.Create(Self, 'GetFieldSize::2050', 'Unknown Data Type "%d"', [pFldDes^.iFldType]);
   end;
 end;  { GetFieldSize }
 
@@ -2214,7 +2194,7 @@ var
         end;
 
         else begin
-          Error(nil, 'LoadBufferFromFields', '1675', 'Field type not Supported', []);
+          raise EDBIException.Create(Self, 'LoadBufferFromFields::2185', 'Field type not Supported', []);
         end;
 
       end; { case }
@@ -2308,10 +2288,7 @@ procedure TDBIDataConnection.LoadFromStream(
 begin
   Assert(AStream <> nil);
 
-  Close;
-  Release;
-
-  FFileName := '';
+  FileName := '';
   SetStreamMode(smLoadFromStream, AStream <> nil);
 end;  { LoadFromStream }
 
@@ -2378,8 +2355,9 @@ begin
     FDataEventCallBackList.Delete(ItemIndex);
   end
   else begin
-    Error(nil, 'RemoveDataEventCallBack', '1675',
-      'Attempted to remove a non-existent data event notify callback', []);
+    raise EDBIException.Create(Self, 'RemoveDataEventCallBack::2345',
+      'Attempted to remove a non-existent data event notify callback', []
+      );
   end;
 end;  { RemoveDataEventCallBack }
 
@@ -2404,23 +2382,20 @@ procedure TDBIDataConnection.SaveToFile(
   AFileName: String;
   const Format: TDBIDataFormat
   );
-const
-  Caller = 'SaveToFile';
-
 var
   Stream: TStream;
 
 begin
   if (AFileName = '') then begin
-    Error(nil, Caller, '1360', 'Invalid FileName', []);
+    raise EDBIException.Create(Self, 'SaveToFile::2375', 'Invalid FileName', []);
   end;
 
   if not Active then begin
-    Error(nil, Caller, '1365', 'DataConnection not active', []);
+    raise EDBIException.Create(Self, 'SaveToFile::2380', 'DataConnection not active', []);
   end;
 
-  if (Format = dfCDS) then begin
-    Error(nil, Caller, '1370', 'Saving to XML not Supported Yet!', []);
+  if (Format = dfXML) then begin
+    raise EDBIException.Create(Self, 'SaveToFile::2385', 'Saving to XML not Supported Yet!', []);
   end;
 
   Stream := TDBIFileStream.CreateFileStream(AFileName, fmCreate);
@@ -2478,9 +2453,6 @@ end;  { SetFieldCount }
   Jvr - 20/12/2000 15:00:59 - Now updates Field & null offsets + LogicalBufferSize<P>
 }
 procedure TDBIDataConnection.SetFieldProps(const Fields: TFieldDescList);
-const
-  Caller = 'SetFieldProps';
-
 var
   FieldNo: Integer;
 
@@ -2511,7 +2483,7 @@ begin
     Inc(FLogicalBufferSize, FieldCount);
 
   except
-    Error(nil, Caller, '2495', 'Failed to set dataset field properties', []);
+    raise EDBIException.Create(Self, 'SetFieldProps::2475', 'Failed to set dataset field properties', []);
   end;  { try..except }
 end;  { SetFieldProps }
 
@@ -2713,10 +2685,6 @@ end;  { Create }
                               !Messy! but necessary <P>
 }
 destructor TDBILockList.Destroy;
-const
-  Caller = 'Destroy';
-  ErrLocksHanging = '%s left %d lock(s) hanging, the last locked resource ID = %d';
-
 var
   LockItem: TDBILock;
 
@@ -2725,11 +2693,11 @@ begin
     if (FLocks.Count > 0) then begin
       try
         LockItem := TDBILock(FLocks[FLocks.Count-1]);
-        Error(nil, Caller, '1955', ErrLocksHanging, [
-          LockItem.FDataConnection.Classname,
-          FLocks.Count,
-          LockItem.FLockData.iResource
-          ]);
+
+        raise EDBIException.Create(Self, 'Destroy::2685',
+         '%s left %d lock(s) hanging, the last locked resource ID = %d',
+         [LockItem.FDataConnection.Classname, FLocks.Count, LockItem.FLockData.iResource]
+         );
 
       finally
         ClearAll;
@@ -2835,9 +2803,6 @@ end;  { Locked }
   Jvr - 16/04/2002 16:47:15.<P>
 }
 function TDBILockList.Remove(ALockData: TDBILockData): DBIResult;
-const
-  Caller = 'Remove';
-
 var
   LockItem: TDBILock;
 
@@ -2873,7 +2838,7 @@ begin
 
       // Otherwise something is really wrong
       else begin
-        Error(nil, Caller, '2065', SystemErrorMessageParam, []);
+        raise EDBIException.Create(Self, 'Remove::2830', SystemErrorMessageParam, []);
       end;
     end
 
@@ -3011,7 +2976,7 @@ begin
 
   FDataConnection := ADataConnection;
   FEmbeddedDataConnections := TObjectList.Create;
-  FIndices := ADataConnection.FIndices; //##JVRTDBIndexList.Create;
+  FIndices := ADataConnection.FIndices;
   FLocks := TDBILockList.Create(ADataConnection);
 
   // Register a callback method to deal with the (e.g Indices) on all dataevents
@@ -3336,9 +3301,6 @@ end;  { RemoveIndex }
   Jvr - 26/10/2000 14:15:27<P>
 }
 function TDBIBase.GetProp(eProp: TDBIBaseProperty; piPropValue: PDBIPropValue): DBIResult;
-const
-  Caller = 'GetProp';
-
 begin
   Result := DBIERR_NONE;
   Assert(Assigned(FDataConnection));
@@ -3360,9 +3322,13 @@ begin
       pDSAttr(piPropValue)^ := DSAttr(Byte((FDSProps.iUnused[auxStatusFilter])));
     end;  { basepropCHANGEINDEX_VIEW }
 
+    basepropXML_STREAMMODE: begin
+      PLongWord(piPropValue)^ := FDSProps.iUnused[auxXmlStreamMode];
+    end;  { basepropXML_STREAMMODE }
+
     else begin
-      Error(nil,
-        Caller, '3420', 'Getting property of type "%s" not supported!',
+      raise EDBIException.Create(Self, 'GetProp::3325',
+        'Getting property of type "%s" not supported!',
         [GetEnumName(TypeInfo(TDBIBaseProperty), Ord(eProp))]
         );
     end;  { Default }
@@ -3375,9 +3341,6 @@ end;  { GetProp }
   Jvr - 01/03/2013 14:18:39<P>
 }
 function TDBIBase.GetDataProp(eProp: TDBIBaseProperty; pPropData: PDBIPropData): DBIResult;
-const
-  Caller = 'GetDataProp';
-
 begin
   Result := DBIERR_NONE;
   Assert(Assigned(FDataConnection));
@@ -3400,8 +3363,8 @@ begin
     end;  { basepropLOCKLIST }
 
     else begin
-      Error(nil,
-        Caller, '3455', 'Getting property of type "%s" not supported!',
+      raise EDBIException.Create(Self, 'GetDataProp::3365',
+        'Getting property of type "%s" not supported!',
         [GetEnumName(TypeInfo(TDBIBaseProperty), Ord(eProp))]
         );
     end;  { Default }
@@ -3414,14 +3377,13 @@ end;  { GetProp }
   Jvr - 26/10/2000 14:24:21<P>
 }
 function TDBIBase.SetProp(eProp: TDBIBaseProperty; iPropValue: TDBIPropValue): DBIResult;
-const
-  Caller = 'SetProp';
-
 begin
   Result := DBIERR_NONE;
   Assert(Assigned(FDataConnection));
 
   case eProp of
+    basepropDATAHASCHANGED: { ##JVR - Warning - Not Implemented Yet! } ;
+
     basepropREADONLY: begin
       FDataConnection.SetReadOnly(csNoChange, Boolean(iPropValue));
     end;  { dbipropREADONLY }
@@ -3436,11 +3398,14 @@ begin
 
     basepropCHANGEINDEX_VIEW: begin
       FDSProps.iUnused[auxStatusFilter] := iPropValue;
-    end;  { sourcepropCHANGEINDEX_VIEW }
+    end;  { basepropCHANGEINDEX_VIEW }
+
+    basepropXML_STREAMMODE: begin
+      FDSProps.iUnused[auxXmlStreamMode] := iPropValue;
+    end;  { basepropXML_STREAMMODE }
 
     else begin
-      Error(nil,
-        Caller, '3495',
+      raise EDBIException.Create(Self, 'SetProp::3400',
         'Setting property of type "%s" not supported.',
         [GetEnumName(TypeInfo(TDBIBaseProperty), Ord(eProp))]
         );
@@ -3461,11 +3426,7 @@ end;  { SetProp }
   Jvr - 01/03/2013 14:23:14<P>
 }
 function TDBIBase.SetDataProp(eProp: TDBIBaseProperty; pPropData: PDBIPropData): DBIResult;
-const
-  Caller = 'SetDataProp';
-
 begin
-  Result := DBIERR_NONE;
   Assert(Assigned(FDataConnection));
 
   case eProp of
@@ -3479,8 +3440,7 @@ begin
     end;  { basepropRESOURCELOCK }
 
     else begin
-      Error(nil,
-        Caller, '3530',
+      raise EDBIException.Create(Self, 'SetDataProp::3425',
         'Setting property of type "%s" not supported.',
         [GetEnumName(TypeInfo(TDBIBaseProperty), Ord(eProp))]
         );
@@ -3488,7 +3448,7 @@ begin
 
     // Notify the attached cursors that a property has changed
     FDataConnection.NotifyDataEventCallBacks(
-      TDBIClientData(pPropData), dbiBasePropChanged, Pointer(eProp)
+      TDBIClientData(pPropData), dbiBasePropChanged, PLongWord(eProp)
       );
   end;  { case }
 end;  { SetProp }
@@ -3660,49 +3620,10 @@ begin
 
 
     else begin
-      Error(nil, 'DataEventNotify', '2925', 'Illegal data event type', []);
+      raise EDBIException.Create(Self, 'DataEventNotify::3615', 'Illegal data event type', []);
     end;  { Default }
   end;  { case }
 end;  { DataEventNotify }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 01/11/2000 15:14:26<P>
-}
-procedure TDBIBase.Error(
-  E: Exception;
-  const Caller: String;
-  const Reference: String;
-  const ErrMsg: String;
-  Args: array of const
-  );
-var
-  Address: Pointer;
-
-var
-  DebugInfo: String;
-  ErrorInfo: String;
-
-begin
-  asm
-    mov eax, [ebp + 4] // get return address
-    mov Address, eax
-  end;
-
-  ErrorInfo := '';
-{$ifdef DebugExceptions}
-  if Assigned(E) then begin
-    ErrorInfo := Format(SDebugException, [E.ClassName, E.Message]);
-  end;
-
-  DebugInfo := 'DBIInterfaces::' + Self.ClassName + '::' + Caller + '::' + Reference + #13;
-{$else}
-  DebugInfo := '';
-{$endif}
-
-  raise EDBIException.CreateFmt(DebugInfo + ErrMsg + ErrorInfo, Args) at Address;
-end;  { Error }
 
 
 
@@ -3735,7 +3656,7 @@ begin
   Result := DBIERR_NONE;
 
   if (DataSet = nil) then begin
-    Error(nil, 'InitCursor', '580', 'DBInterface not initialised properly', []);
+    raise EDBIException.Create(Self, 'InitCursor::3650', 'DBInterface not initialised properly', []);
   end;
 
   // Initialise the FRecInfoOffset to cause an exception if not set
@@ -3780,7 +3701,7 @@ begin
   Result := DBIERR_NONE;
 
   if (Cursor = nil) then begin
-    Error(nil, 'CloneCursor', '2130', 'DBICursor not initialised properly', []);
+    raise EDBIException.Create(Self, 'CloneCursor::3695', 'DBICursor not initialised properly', []);
   end;
 
   Cursor.GetDataProp(cursorpropDSBASE, PDBIPropData(@FDSBase));
@@ -3840,7 +3761,7 @@ function TDBICursor.GetIndexDescs(
 
 begin
   if (Length(FIndices.Descs) <= 0) then begin
-    Error(nil, 'GetIndexDescs', '1715', 'Indices not initialised', []);
+    raise EDBIException.Create(Self, 'GetIndexDescs::1715', 'Indices not initialised', []);
   end;
 
   if bCurrentOnly then begin
@@ -3852,11 +3773,11 @@ begin
       This is probably the way to do it
       IdxDesc := PDSIDXDesc(@(FIndices.Descs))^;
     }
-    Result := DBIERR_NOTINDEXED;
     { TODO 5 -oJvr -cTDBICursor.GetIndexDescs() :
       Not implemented Yet! - function returns: Index Description
+      Result := DBIERR_NOTINDEXED;
     }
-    Error(nil, 'GetIndexDescs', '1730', 'Not implemented Yet!', []);
+    raise EDBIException.Create(Self, 'GetIndexDescs::3770', 'Not implemented Yet!', []);
   end;  { if }
 end;  { GetIndexDescs }
 
@@ -3889,9 +3810,6 @@ end;  { GetFieldDescs }
   <P>
 }
 function TDBICursor.GetCurrentRecord(pRecBuf: Pointer): DBIResult;
-const
-  Caller = 'GetCurrentRecord';
-
 var
   RecordPosition: Integer;
 //##JVR  RecordAttribute: DSAttr;
@@ -3920,7 +3838,7 @@ begin
     try
       // Just a check to make sure that it's ok to reuse dsRecOrg
       if (PRecordInfo^.Attribute and dsRecLockReset) = dsRecOrg then begin
-        Error(nil, Caller, '3050',
+        raise EDBIException.Create(Self, 'GetCurrentRecord::3835',
           'dsRecOrg [%s], is overloaded in it''s use.',
           ['Original record (was changed)']
           );
@@ -3962,8 +3880,7 @@ begin
 
   except
     on E: Exception do
-      Error(E, Caller, '2910', 'Failed to get data for current record', []);
-//##JVR      Error(E, Caller, '2910', 'Failed to get data for current record', []);
+      raise EDBIException.Create(Self, 'GetCurrentRecord::3875', 'Failed to get data for current record', []);
   end;  { try..except }
 end;  { GetCurrentRecord }
 
@@ -4170,7 +4087,6 @@ var
   PRecBuf: TDBIRecordBuffer;
 
 begin
-  Result := DBIERR_NONE;
   PRecBuf := nil;
 //##JVR  RecordAttribute := dsRecUnmodified;
   DataInfo.Attribute := dsRecUnModified;
@@ -4193,7 +4109,7 @@ begin
 //##JVR      until (RecordAttribute and StatusFilter) = RecordAttribute;
   except
     on E: Exception do
-      Error(E, 'MoveRelative', '2525', 'Failed to move to next record in dataset', []);
+      raise EDBIException.Create(Self, E, 'MoveRelative::4105', 'Failed to move to next record in dataset', []);
   end;
 end;  { MoveRelative }
 
@@ -4350,7 +4266,7 @@ begin
       Pointer(@KeyValues[Index][0]), IsBlank);
 
     if FDSLocateProps.bDescending[Index] then begin
-      Error(nil, 'GetRecordForKey', '3505', 'Descending searches not implemented Yet!', []);
+      raise EDBIException.Create(Self, 'GetRecordForKey::4250', 'Descending searches not implemented Yet!', []);
     end;
   end;  { for }
 
@@ -4398,7 +4314,7 @@ begin
 
       for Index := 0 to FieldCount - 1 do begin
         // Get Value and Compare with KeyValue
-        FillChar(Buffer, SizeOf(Buffer), 0);
+        FillChar(Buffer{%H-}, SizeOf(Buffer), 0);
         GetField(pRecBuf, FDSLocateProps.iKeyFields[Index],
           Pointer(@Buffer[0]), IsBlank);
         Found := DoCompare(FDSLocateProps.iKeyFields[Index], KeyValues[Index],
@@ -4432,29 +4348,53 @@ function TDBICursor.GetField(
   pFldBuf: Pointer;
   out bBlank: LongBool
   ): DBIResult;
+var
+  PFieldData: PDBIByte;
+  PRecordData: TDBIRecordBuffer;
+  Size: Word;
+
 begin
   Result := DBIERR_NONE;
-  bBlank := False;
 
-  { DONE 5 -oJvr -cTDBICursor.GetField() : NullFlags }
+  // Setup Data buffers
+  PFieldData := pFldBuf;
+  PRecordData := pRecBuf;
+  Inc(PRecordData, FFieldProps[iFieldNo-1].iFldOffsInRec);
+  Size := FFieldProps[iFieldNo-1].iFldLen;
+
   // Nulls only supported if iNullOffsInRec > Zero
-  if (FFieldProps[iFieldNo-1].iNullOffsInRec > 0) then begin
-    bBlank := Boolean(Byte(TDBIRecordBuffer(pRecBuf)[FFieldProps[iFieldNo-1].iNullOffsInRec]));
-  end;
+  bBlank :=
+    (FFieldProps[iFieldNo-1].iNullOffsInRec > 0) and
+    Boolean(Byte(TDBIRecordBuffer(pRecBuf)[FFieldProps[iFieldNo-1].iNullOffsInRec]));
 
   // If FieldBuffer parameter is nil, then only return a True or False value
   // in bBlank indicating if the field is Blank or not
   if (pFldBuf <> nil) and not bBlank then begin
-    Inc(TDBIRecordBuffer(pRecBuf), FFieldProps[iFieldNo-1].iFldOffsInRec);
+    // Clear the field buffer to all #0's - We don't want corrupt field data!
+    FillChar(pFldBuf^, Size, 0);
 
     case FFieldProps[iFieldNo-1].iFldType of
       fldWIDESTRING, fldUNICODE: begin
-        PWord(pFldBuf)^ := Length(PWideChar(pRecBuf)) * 2;
-        Move(pRecBuf^, (PDBIByte(pFldBuf) + SizeOf(Word))^, PWord(pFldBuf)^);
+        // For unicode strings, the First-Two-Bytes, of the field buffer, are reserved for the Data-size
+        PWord(PFieldData)^ := Length(PWideChar(PRecordData)) * SizeOf(WideChar);
+        Size := PWord(PFieldData)^;
+        Inc(PFieldData, SizeOf(Word));
       end;
-    else
-      Move(pRecBuf^, pFldBuf^, FFieldProps[iFieldNo-1].iFldLen);
+
+      fldZSTRING: begin
+        Size := StrLen(PAnsiChar(PRecordData));
+      end;
     end;
+
+    if (Size > FFieldProps[iFieldNo-1].iFldLen) then begin
+      raise EDBIException.Create(Self, 'GetField::4385',
+        'Field: "%s", Data-size "%d" exceeds the Field-size "%d"',
+        [FFieldProps[iFieldNo-1].szName, Size, FFieldProps[iFieldNo-1].iFldLen]
+        );
+    end;
+
+    // Copy data from record buffer to field buffer
+    Move(PRecordData^, PFieldData^, Size);
   end;
 end;  { GetField }
 
@@ -4471,58 +4411,58 @@ function TDBICursor.PutField(
   pFldBuf: Pointer
   ): DBIResult;
 var
-  Offset: Integer;
-  IsBlank: Boolean;
+  PFieldData: PDBIByte;
+  PRecordData: TDBIRecordBuffer;
   Size: Word;
-  PData: PDBIByte;
 
 begin
   Result := DBIERR_NONE;
-  Offset := FFieldProps[iFieldNo-1].iFldOffsInRec;
+
+  // Setup Data buffers
+  PFieldData := pFldBuf;
+  PRecordData := pRecBuf;
+  Inc(PRecordData, FFieldProps[iFieldNo-1].iFldOffsInRec);
   Size := FFieldProps[iFieldNo-1].iFldLen;
-  PData := pFldBuf;
+
+  // If iNullOffsInRec is Zero or less then Nulls are not supported
+  if (FFieldProps[iFieldNo-1].iNullOffsInRec > 0) then begin
+    // Set the Null-Flag for this field - if the field buffer is nil, then the field is blank.
+    Byte(TDBIRecordBuffer(pRecBuf)[FFieldProps[iFieldNo-1].iNullOffsInRec]) := Ord(pFldBuf = nil);
+  end;
 
   // Clear the field in the record buffer to all #0's - We don't want corrupt field data!
-  FillChar(TDBIRecordBuffer(pRecBuf)[Offset], Size, 0);
+  FillChar(PRecordData^, Size, 0);
 
-  // If the field buffer is nil then the field is blank.
-  IsBlank := (pFldBuf = nil);
-
-  // Otherwise transfer the data from the fieldbuffer to the record buffer
-  if not IsBlank then begin
+  // If we have field data then transfer the data from the fieldbuffer to the record buffer
+  if Assigned(pFldBuf) then begin
     case FFieldProps[iFieldNo-1].iFldType of
       fldWIDESTRING, fldUNICODE: begin
-        Size := PWord(pFldBuf)^;
-        Inc(PData, SizeOf(Word));
+        // For unicode strings, the First-Two-Bytes, of the field buffer, are reserved for the data-size
+        Size := PWord(PFieldData)^;
+        Inc(PFieldData, SizeOf(Word));
+      end;
+
+      fldZSTRING: begin
+        Size := StrLen(PAnsiChar(PFieldData));
       end;
     end;
 
-    Move(PData^, TDBIRecordBuffer(pRecBuf)[Offset], Size);
-    { TODO 1 -oJvr -cTDBICursor.PutField(Testing only) :
-      This is for testing only to make sure that the recordbuffer matches the
-      Stored data. In the future we may need to implement this to provide
-      Write-Through functionality (e.g. when using objects and object lists.
-    }
+    if (Size > FFieldProps[iFieldNo-1].iFldLen) then begin
+      raise EDBIException.Create(Self, 'PutField::4445',
+      'Field: "%s", Data-size "%d" exceeds the Field-size "%d"',
+      [FFieldProps[iFieldNo-1].szName, Size, FFieldProps[iFieldNo-1].iFldLen]
+      );
+    end;
+
+    // Copy data from field buffer to record buffer
+    Move(PFieldData^, PRecordData^, Size);
 
     // Update pRecBuf from the DataConnection Edit-source (Validation object?)
     DataConnection.SyncRecordBuffer(pRecBuf^, True);
   end;
 
-  { DONE 5 -oJvr -cTDBICursor.PutField() : NullFlags }
-  // Set the Null-Flag for this field to the 'IsBlank' value
-  // If iNullOffsInRec is Zero or less then Nulls are not supported
-  if (FFieldProps[iFieldNo-1].iNullOffsInRec > 0) then begin
-    Byte(TDBIRecordBuffer(pRecBuf)[FFieldProps[iFieldNo-1].iNullOffsInRec]) := Ord(IsBlank);
-  end;
-
-
   // Update Indices Modification List
   FIndices.AddUpdatedField(@(FFieldProps[iFieldNo-1]));
-{##JVR
-  if (FIndices.FieldsUpdated.IndexOf(TObject(@(FFieldProps[iFieldNo-1]))) = -1) then begin
-    FIndices.FieldsUpdated.Add(TObject(@(FFieldProps[iFieldNo-1])));
-  end;
-}
 end;  { PutField }
 
 
@@ -4655,7 +4595,7 @@ begin
     DataConnection.SyncRecordBuffer(pRecBuf^, True);
   except
     on E: Exception do
-      Error(E, 'InitRecord', '1060', 'Failed to Initialise Record Buffer', []);
+      raise EDBIException.Create(Self, E, 'InitRecord::4590', 'Failed to Initialise Record Buffer', []);
   end;
 end;  { InitRecord }
 
@@ -4779,7 +4719,9 @@ begin
   end;  { if }
 
   // This should never happen ???
-  Assert(RecNo = (RecordPosition + 1), 'New Record Number should equal the physical record count');
+  if (RecNo <> (RecordPosition + 1)) then begin
+    raise EDBIException.Create(Self, 'InsertRecord::4715', 'New Record Number should equal the physical record count', []);
+  end;
 
 {##JVR - Update the indices
   RecNo := FIndices.InsertIndicesItem(RecNo, FSelectedIndex, pRecBuf);
@@ -4804,18 +4746,18 @@ end;  { RevertRecord }
 {**
   Jvr - 22/03/2001 23:46:40<P>
 }
-function TDBICursor.AddFilter(
+function TDBICursor.{%H-}AddFilter(
   pcanExpr: Pointer;
   iLen: LongWord;
   var hFilter: hDSFilter
   ): DBIResult;
 begin
-  Result := DBIERR_NONE;
-
   { TODO 5 -oJvr -cTDBICursor.AddFilter() :
     AddFilter - Not Implemented Yet!
+
+    Result := DBIERR_NONE;
   }
-  Error(nil, 'AddFilter', '3000', 'Not Implemented Yet!', []);
+  raise EDBINotImplementedException.Create(Self, 'AddFilter::4750');
 end;  { AddFilter }
 
 
@@ -4907,7 +4849,7 @@ var
       GetField(pRecBuf, Index+1, //FDSLocateProps.iKeyFields[Index],
         Pointer(@KeyValues[Index][0]), IsBlank);
 
-        ShowMessage(String(TDBIRecordBuffer(Pointer(@KeyValues[Index][0]))));
+        TDBIDebugInfo.Display(String(TDBIRecordBuffer(Pointer(@KeyValues[Index][0]))), []);
     end;  { for }
 //*)
 
@@ -4916,7 +4858,7 @@ var
     FillChar(KeyValues[0], SizeOf(KeyValues[0]), 0);
     GetField(pRecBuf, FieldID, Pointer(@KeyValues[0][0]), IsBlank);
 
-    ShowMessage(String(TDBIString(TDBIMsgBuffer(Pointer(@KeyValues[0][0])))));
+    TDBIDebugInfo.Display(String(TDBIString(TDBIMsgBuffer(Pointer(@KeyValues[0][0])))), []);
   end;
 
 
@@ -4931,7 +4873,7 @@ begin
   k1 := TDBIString(TDBIParamBuffer(pKey1));
   k2 := TDBIString(TDBIParamBuffer(pKey2));
 
-  ShowMessageFmt(
+  TDBIDebugInfo.Display(
     'Field Count: %d'#13'Key1: %s'#13'Inc Key1: %s'#13'Key2: %s'#13'Inc key2: %s',
     [iFields, k1, TrueOrFalse[bKey1Incl], k2, TrueOrFalse[bKey2Incl]]
     );
@@ -4951,7 +4893,7 @@ begin
   { TODO 5 -oJvr -cTDBICursor.DropRange() :
     DropRange - Not Implemented Yet!
   }
-  ShowMessage('TDBICursor::DropRange::4725::Not Implemented Yet!');
+  TDBIDebugInfo.Display('TDBICursor::DropRange::4725::Not Implemented Yet!', []);
 //  Error(nil, 'DropRange', '3020', 'Not Implemented Yet!', []);
 end;  { DropRange }
 
@@ -5098,14 +5040,12 @@ end;  { UseIndexOrder }
 {**
   Jvr - 04/12/2000 12:19:23<P>
 }
-function TDBICursor.SetNotifyCallBack(
+function TDBICursor.{%H-}SetNotifyCallBack(
   iClientData: TDBIClientData;
   pfCallBack: pfCHANGECallBack
   ): DBIResult;
 begin
-  Result := DBIERR_NONE;
-
-  Error(nil, 'SetNotifyCallBack', '4790', 'Not implemented Yet!', []);
+  raise EDBINotImplementedException.Create(Self, 'SetNotifyCallBack::5045');
 end;  { SetNotifyCallBack }
 
 
@@ -5153,7 +5093,7 @@ begin
   Result := DBIERR_NONE;
 
 //{##AGGREGATES
-  ShowMessageFmt(
+  TDBIDebugInfo.Display(
     'DBIInterfaces::TDBICursor::AddAggregate::4895::Not implemented Yet!'#13 +
     'GroupLevel = "%d", Parser.DataSize = "%d", Parser.FilterDara = "Do not care", Aggregate Handle = "Integer()"',
     [iFlds, icanLen, pCanExpr]
@@ -5173,7 +5113,7 @@ function TDBICursor.DropAggregate(hAgg: hDSAggregate): DBIResult;
 begin
   Result := DBIERR_NONE;
 
-  ShowMessageFmt('DBIInterfaces::TDBICursor::DropAggregate::4905::Not implemented Yet!', []);
+  TDBIDebugInfo.Display('DBIInterfaces::TDBICursor::DropAggregate::4905::Not implemented Yet!', []);
 end;  { DropAggregate }
 
 
@@ -5273,7 +5213,7 @@ function TDBICursor.LinkCursors(
 begin
   Result := DBIERR_NONE;
 
-  ShowMessageFmt('DBIInterfaces::TDBICursor::LinkCursors::4965::Not implemented Yet!', []);
+  TDBIDebugInfo.Display('DBIInterfaces::TDBICursor::LinkCursors::4965::Not implemented Yet!', []);
 end;  { LinkCursors }
 
 
@@ -5477,8 +5417,6 @@ end;  { SetLock }
   Jvr - 05/06/2002 20:42:42.<P>
 }
 function TDBICursor.SetFilterLock(LockData: TDBILockData): DBIResult;
-const
-  Caller = 'SetFilterLock';
 
   function LockRecords: DBIResult;
   var
@@ -5537,6 +5475,7 @@ const
     end;  { for }
   end;  { UnlockRecords }
 
+
 begin
   Result := DBIERR_NONE;
 
@@ -5545,12 +5484,13 @@ begin
   Assert(Boolean(LockData.bLocked) in [False..True]);
 
   if (ActiveIndex.Filter = nil) then begin
-    Error(nil, Caller, '4355',
-      'No Filter active, ltFilterLock can not be applied', []);
+    raise EDBIException.Create(Self, 'SetFilterLock::5480',
+      'No Filter active, ltFilterLock can not be applied', []
+      );
   end;
 
   if LockData.bLocked and (LockData.iResource <= 0) then begin
-    Error(nil, Caller, '4365',
+    raise EDBIException.Create(Self, 'SetFilterLock::5485',
       'The specified maximum filter lock count of %d is illegal, ' +
       'ltFilterLock can not be applied',
       [LockData.iResource]
@@ -5558,7 +5498,7 @@ begin
   end;
 
   if LockData.bLocked and (ActiveIndex.Count > LockData.iResource) then begin
-    Error(nil, Caller, '4375',
+    raise EDBIException.Create(Self, 'SetFilterLock::5495',
       'Filtered RecordCount = %d, ' +
       'This exceeds the specified maximum filter lock count of %d, ' +
       'ltFilterLock can not be applied',
@@ -5567,7 +5507,7 @@ begin
   end;
 
   if LockData.bLocked and FLocks.FullLocked then begin
-    Error(nil, Caller, '4380',
+    raise EDBIException.Create(Self, 'SetFilterLock::5505',
       'A fulllock has been applied to this dataset, ' +
       'ltFilterLock can not be applied when other locks are pending',
       []
@@ -5575,7 +5515,7 @@ begin
   end;
 
   if LockData.bLocked and (FLocks.Count > 0) then begin
-    Error(nil, Caller, '4385',
+    raise EDBIException.Create(Self, 'SetFilterLock::5510',
       '"%d" locks pending, ' +
       'ltFilterLock can not be applied when other locks are pending',
       [FLocks.Count]
@@ -5583,7 +5523,7 @@ begin
   end;
 
   if LockData.bLocked and FFilterLock then begin
-    Error(nil, Caller, '4390',
+    raise EDBIException.Create(Self, 'SetFilterLock::5520',
       'Filterlock already applied, ' +
       'ltFilterLock can not be applied when other locks are pending',
       []
@@ -5591,21 +5531,12 @@ begin
   end;
 
   if not (LockData.bLocked or FFilterLock) then begin
-    Error(nil, Caller, '4395',
+    raise EDBIException.Create(Self, 'SetFilterLock::5530',
       'No Filterlock pending, ' +
       'ltFilterLock can not be removed when it has not been applied',
       []
       );
   end;
-
-{##JVR
-  if LockData.bLocked and (ActiveIndex.Count <= 0) then begin
-    Error(nil, Caller, '4370',
-      '"%d" Records in Filtered Dataset, ltFilterLock can not be applied',
-      [ActiveIndex.Count]
-      );
-  end;
-}
 
   { DONE -oJvr -cSetFilterLock :
     We should be able to put the dataset in filter lock mode
@@ -5635,9 +5566,6 @@ end;  { SetFilterLock }
   Jvr - 27/10/2000 14:24:44<P>
 }
 function TDBICursor.GetProp(eProp: TDBICursorProperty; piPropValue: PDBIPropValue): DBIResult;
-const
-  Caller = 'GetProp';
-
 begin
   Result := DBIERR_NONE;
 
@@ -5655,8 +5583,8 @@ begin
     end;  { cursorpropRECINFO_OFFSET }
 
     else begin
-      Error(nil,
-        Caller, '5710', 'Getting property of type "%s" not supported!',
+      raise EDBIException.Create(Self, 'GetProp::5580',
+        'Getting property of type "%s" not supported!',
         [GetEnumName(TypeInfo(TDBICursorProperty), Ord(eProp))]
         );
     end;  { Default }
@@ -5665,9 +5593,6 @@ end;  { GetProp }
 
 
 function TDBICursor.GetDataProp(eProp: TDBICursorProperty; pPropData: PDBIPropData): DBIResult;
-const
-  Caller = 'GetDataProp';
-
 var
   PLockData: PDBILockData;
 
@@ -5692,7 +5617,7 @@ begin
     end;  { cursorpropRESOURCELOCK }
 
     else begin
-      Error(nil, Caller, '5745',
+      raise EDBIException.Create(Self, 'GetDataProp::5615',
         'Getting property DATA of type "%s" not supported!',
         [GetEnumName(TypeInfo(TDBICursorProperty), Ord(eProp))]
         );
@@ -5706,9 +5631,6 @@ end;  { GetProp }
   Jvr - 05/06/2002 17:56:55.<P>
 }
 function TDBICursor.SetProp(eProp: TDBICursorProperty; iPropValue: TDBIPropValue): DBIResult;
-const
-  Caller = 'SetProp';
-
 begin
   Result := DBIERR_NONE;
 
@@ -5718,8 +5640,8 @@ begin
     end;  { cursorpropRECINFO_OFFSET }
 
   else
-    Error(nil,
-      Caller, '5775', 'Setting property of type "%s" not supported!',
+    raise EDBIException.Create(Self, 'SetProp::5640',
+      'Setting property of type "%s" not supported!',
       [GetEnumName(TypeInfo(TDBICursorProperty), Ord(eProp))]
       );
   end;
@@ -5731,15 +5653,10 @@ end;
   Jvr - 01/03/2013 14:13:12.<P>
 }
 function TDBICursor.SetDataProp(eProp: TDBICursorProperty; pPropData: PDBIPropData): DBIResult;
-const
-  Caller = 'SetDataProp';
-
 var
   PLockData: PDBILockData;
 
 begin
-  Result := DBIERR_NONE;
-
   case eProp of
     cursorpropRESOURCELOCK: begin
       PLockData := pPropData;
@@ -5755,51 +5672,12 @@ begin
     end;
 
   else
-    Error(nil,
-      Caller, '5805', 'Setting property of type "%s" not supported!',
+    raise EDBIException.Create(Self, 'SetDataProp::5670',
+      'Setting property of type "%s" not supported!',
       [GetEnumName(TypeInfo(TDBICursorProperty), Ord(eProp))]
       );
   end;
 end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 21/11/2000 14:34:05<P>
-}
-procedure TDBICursor.Error(
-  E: Exception;
-  const Caller: String;
-  const Reference: String;
-  const ErrMsg: String;
-  Args: array of const
-  );
-var
-  Address: Pointer;
-
-var
-  DebugInfo: String;
-  ErrorInfo: String;
-
-begin
-  asm
-    mov eax, [ebp + 4] // get return address
-    mov Address, eax
-  end;
-
-  ErrorInfo := '';
-{$ifdef DebugExceptions}
-  if Assigned(E) then begin
-    ErrorInfo := Format(SDebugException, [E.ClassName, E.Message]);
-  end;
-
-  DebugInfo := 'DBIInterfaces::' + Self.ClassName + '::' + Caller + '::' + Reference + #13;
-{$else}
-  DebugInfo := '';
-{$endif}
-
-  raise EDBIException.CreateFmt(DebugInfo + ErrMsg + ErrorInfo, Args) at Address;
-end;  { Error }
 
 
 // _____________________________________________________________________________
@@ -5865,77 +5743,29 @@ end;  { SetPosition }
 
 
 
-{ TDBICustomObject }
-
-// _____________________________________________________________________________
-{**
-  Jvr - 16/04/2002 17:06:17.<P>
-}
-procedure TDBICustomObject.Error(
-  E: Exception;
-  const Caller: String;
-  const Reference: String;
-  const ErrMsg: String;
-  Args: array of const
-  );
-var
-  Address: Pointer;
-
-{$ifdef DebugExceptions}
-  function GetUnitName: String;
-  begin
-    Result := String(TypInfo.GetTypeData(Self.ClassInfo)^.UnitName);
-  end;
-{$endif}
-
-var
-  DebugInfo: String;
-  ErrorInfo: String;
-
-begin
-  asm
-    mov eax, [ebp + 4] // get return address
-    mov Address, eax
-  end;
-
-  ErrorInfo := '';
-{$ifdef DebugExceptions}
-  if Assigned(E) then begin
-    ErrorInfo := Format(SDebugException, [E.ClassName, E.Message]);
-  end;
-
-  DebugInfo := GetUnitName + '::' + Self.ClassName + '::' + Caller + '::' + Reference + #13;
-{$else}
-  DebugInfo := '';
-{$endif}
-
-  raise EDBIException.CreateFmt(DebugInfo + ErrMsg + ErrorInfo, Args) at Address;
-end;  { Error }
-
-
-
-
-
 { TDBIFieldDef }
 
-{$ifdef fpc }
-function TDBIFieldDef.GetChildDefs: TFieldDefs;
+class function TDBIFieldDef.ChildDefs(FieldDef: TFieldDef): TFieldDefs;
 begin
-  raise Exception.Create('TDBIFieldDef.GetChildDefs() Not implemented!');
-end;
-
-function TDBIFieldDef.HasChildDefs: Boolean;
-begin
-  Result := False; //##JVR (FChildDefs <> nil) and (FChildDefs.Count > 0);
-end;
-
-procedure TDBIFieldDef.SetChildDefs(Value: TFieldDefs);
-begin
-  raise Exception.Create('TDBIFieldDef.SetChildDefs() Not implemented!');
-end;
+{$ifdef fpc}
+  Result := nil;
+{$else}
+  Result := FieldDef.ChildDefs;
 {$endif}
+end;
+
+
+class function TDBIFieldDef.HasChildDefs(FieldDef: TFieldDef): Boolean;
+begin
+{$ifdef fpc}
+  Result := False; //##JVR (FChildDefs <> nil) and (FChildDefs.Count > 0);
+{$else}
+  Result := FieldDef.HasChildDefs;
+{$endif}
+end;
 
 
 end.
+
 
 

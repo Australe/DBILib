@@ -12,6 +12,11 @@
   {$DEFINE VCL}
   {. $DEFINE _AGGREGATES}
 
+  {$IFDEF FPC}
+    {$ASMMODE INTEL}
+    {$MODE DELPHI}
+  {$ENDIF}
+
   //##JVR - Temporary Fix
   {$IFNDEF MSWINDOWS}
     {$DEFINE MSWINDOWS}
