@@ -594,8 +594,8 @@ type
     function GetRecordSize: Word; override;
 {$ifdef _UNUSED}
     function GetRemoteServer: TCustomRemoteServer; virtual;
-    function GetStateFieldValue(State: TDataSetState; Field: TField): Variant; override;
 {$endif}
+    function GetStateFieldValue(State: TDataSetState; Field: TField): Variant; override;
     function InitKeyBuffer(Buffer: PKeyBuffer): PKeyBuffer;
     procedure InitRecord(Buffer: TDBIRecordBuffer); override;
     procedure InternalAddRecord(Buffer: TDBIRecordData; Append: Boolean); overload; override;
@@ -912,12 +912,7 @@ type
 {$ifdef _AGGREGATES}
     function GetDebugInfo: String;
 {$endif}
-    function GetStateFieldValue(State: TDataSetState; Field: TField): Variant; override;
 
-    { DONE 5 -oJvr -cTDBIDataSet.IndexRecord():
-      Special case
-      I'm not sure this is the right way to do this!
-    }
 //##JVR    procedure UpdateIndicesForRecord(RecNo: Integer);
 
     function IsSequenced: Boolean; override;
@@ -926,7 +921,6 @@ type
       ADataset: TDataset;
       LoadModes: TDBILoadModes = [lmDisableSourceEvents]
     );
-
 
     function Locked(LockType: TDBILockType; const Value: Integer = 0): Boolean;
     function Lock(
@@ -3796,12 +3790,6 @@ begin
 {$ifdef DELPHI2009}
   else if FieldDesc.iFldType = fldDATETIMEOFFSET then
     LType := ftTimeStampOffset
-  else if FieldDesc.iFldType = fldINT8 then
-    LType := ftShortint
-  else if FieldDesc.iFldType = fldUINT8 then
-    LType := ftByte
-  else if FieldDesc.iFldType = fldSINGLE then
-    LType := TFieldType.ftSingle
 {$endif}
   else
     LType := ftUnknown;
@@ -3830,7 +3818,7 @@ begin
     fldFLOAT, fldFLOATIEEE:
       if FieldDesc.iFldSubType = fldstMONEY then LType := ftCurrency;
 
-    {$ifdef DELPH6} fldFMTBCD, {$endif} fldBCD:
+    {$ifdef DELPHI6} fldFMTBCD, {$endif} fldBCD:
       begin
         LSize := Abs(FieldDesc.iUnits2);
         LPrecision := FieldDesc.iUnits1;
@@ -7365,18 +7353,12 @@ begin
         FDataset.Check(FDataSet.DSCursor.GetAggregateDesc(FHAggregate, FFldDesc));
         SetLength(FDataBuffer, FFldDesc.iFldLen);
         if FFldDesc.iFldType < MAXLOGFLDTYPES then
-          FDataType := DataTypeMap[FFldDesc.iFldType] 
+          FDataType := DataTypeMap[FFldDesc.iFldType]
         else if FFldDesc.iFldType = fldUNICODE then
           FDataType := ftWideString
 {$ifdef DELPHI2009}
         else if FFldDesc.iFldType = fldDATETIMEOFFSET then
           FDataType := ftTimeStampOffset
-        else if FFldDesc.iFldType = fldSINGLE then
-          FDataType := TFieldType.ftSingle
-        else if FFldDesc.iFldType = fldINT8 then
-          FDataType := TFieldType.ftShortint
-        else if FFldDesc.iFldType = fldUINT8 then
-          FDataType := TFieldType.ftByte
 {$endif}          
         else
           FDataType := ftUnknown;

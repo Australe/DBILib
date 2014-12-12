@@ -390,7 +390,7 @@ const
                                          { of the FILTERED dataset }
 
 const
-{Do not localize }
+{ Do not localize }
   szUNIQUE_KEY       = 'UNIQUE_KEY';  { Series of unique keys to enforce on the client }
   szPRIMARY_KEY      = 'PRIMARY_KEY'; { Primary key used in RowRequest and for key information }
   szDEFAULT_ORDER    = 'DEFAULT_ORDER'; { Index used for the default ordering of the dataset }
@@ -430,6 +430,7 @@ const
   szMINVALUE         = 'MINVALUE'; { Minimum value for the field }
   szMAXVALUE         = 'MAXVALUE'; { Maximum value for the field }
 
+{$ifdef _UNUSED}
   szstMEMO           = 'Text';
   szstWideMEMO       = 'WideText';
   szstBINARY         = 'Binary';
@@ -447,8 +448,6 @@ const
   szstACCOLEOBJ      = 'AccessOle';
   szstHMEMO          = 'HMemo';
   szstHBINARY        = 'HBinary';
-
-  fldstReference     = 70;
 
   dsfldUNKNOWN       = 0;           { Unknown }
   dsfldINT           = 1;           { signed integer }
@@ -493,6 +492,7 @@ const
 
   dsCASCADEDELETES   = 1;
   dsCASCADEUPDATES   = 2;
+{$endif}
 
 { Field Types (Logical) - Originally from BDE.PAS }
   fldUNKNOWN         = 0;
@@ -526,7 +526,7 @@ const
   fldINT8            = 28;              { 8 bit signed number as defined in alctypes.h }
   fldUINT8           = 29;              { Unsigned 8 bit integer (Byte) as defined in alctypes.h }
 
-  MAXLOGFLDTYPES     = 27;              { Number of logical fieldtypes }
+  MAXLOGFLDTYPES     = 30;              { Number of logical fieldtypes }
 
 
 { Additional (non-BDE fieldtypes }
@@ -571,6 +571,9 @@ const
 
 { fldINT32 subtype }
   fldstAUTOINC       = 29;
+
+{ fldTABLE subtype }
+  fldstReference     = 70;
 
 const
   // Dataset TFieldType Aliases
@@ -688,7 +691,6 @@ const
 //}
 
 
-// DELPHI5
   FieldTypeMap: TFieldMap = (
     fldUNKNOWN, fldZSTRING, fldINT16, fldINT32, fldUINT16, fldBOOL, // 0..5
     fldFLOAT, fldFLOAT, fldBCD, fldDATE, fldTIME, fldTIMESTAMP, fldBYTES, // 6..12
@@ -704,22 +706,6 @@ const
     {$endif}
     );
 
-(*##JVR
-  FieldTypeMap: TFieldMap = (
-    fldUNKNOWN, fldZSTRING, fldINT16, fldINT32, fldUINT16, fldBOOL, // 0..5
-    fldFLOAT, fldFLOAT, fldBCD, fldDATE, fldTIME, fldTIMESTAMP, fldBYTES, // 6..12
-    fldVARBYTES, fldINT32, fldBLOB, fldBLOB, fldBLOB, fldBLOB, fldBLOB, // 13..19
-    fldBLOB, fldBLOB, fldCURSOR, fldZSTRING  // 20..23
-   {$ifdef DELPHI2006} , fldWIDESTRING {$else} , fldZSTRING {$endif} , fldINT64, fldADT, // 24..26
-    fldArray, fldREF, fldTABLE, fldBLOB, fldBLOB, fldUNKNOWN, fldUNKNOWN, // 27..33
-    fldUNKNOWN, fldZSTRING {$ifdef DELPHI6} , fldDATETIME, fldFMTBCD {$endif} // 36..37
-    {$ifdef DELPHI2006} , fldWIDESTRING, fldBLOB {$ifndef fpc}, fldDATETIME, fldZSTRING {$endif} {$endif} // 38..41
-    {$ifdef DELPHIXE2} ,
-    fldUINT32, fldINT8, fldUINT8, fldFLOATIEEE, fldUnknown, fldUnknown, fldUnknown, //42..48
-    fldDATETIMEOFFSET, fldUNKNOWN, fldSINGLE // 49..51
-    {$endif}
-    );
-//*)
   FldSubTypeMap: array[TFieldType] of Word = (
     0, 0, 0, 0, 0, 0, 0, fldstMONEY, 0, 0, 0, 0, 0, 0, fldstAUTOINC,
     fldstBINARY, fldstMEMO, fldstGRAPHIC, fldstFMTMEMO, fldstOLEOBJ,
@@ -736,7 +722,7 @@ const
     ftWord, ftUnsigned32, ftFloatIEEE, ftVarBytes, ftUnknown, ftUnknown,
     ftLargeInt, ftLargeInt, ftADT, ftArray, ftReference, ftDataSet,
     {$ifdef DELPHI6} ftTimeStamp, ftFMTBcd, {$else} ftDateTime, ftUnknown, {$endif}
-    ftWideString
+    ftWideString, {$ifdef DELPHI2009} ftSingle, ftShortint, ftByte {$else} ftFloat, ftSmallint, ftSmallint {$endif}
     );
 
   BlobTypeMap: array[fldstMEMO..fldstBFILE] of TFieldType = (
@@ -984,13 +970,12 @@ const
 
 
 
-{ TODO 1 -ojvr -cFuture functionality :
-This following section is to be the field definitions for a dataset to access
-the Field definitions of a specified dataset.
-Ideally we should be able to look at every derived dataset's field-definitions
-in a table. (create & edit as well)
-}
+{ This following section are the field definitions for a dataset to access
+  the Field definitions of a specified dataset.
 
+  Ideally we should be able to look at every derived dataset's field-definitions
+  in a table. (create & edit as well)
+}
 const
   FieldNameSize = SizeOf(MIDASNAME);
 
@@ -1413,8 +1398,10 @@ resourcestring
 {                            Error Categories                                }
 {============================================================================}
 
-//function ErrCat(rslt: Word): Word;
-//function ErrCode(rslt: Word): Word;
+{
+  function ErrCat(rslt: Word): Word;
+  function ErrCode(rslt: Word): Word;
+}
 
 const
   ERRCAT_NONE                   = 0;      {  0   No error }
