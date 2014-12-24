@@ -90,10 +90,12 @@ const
     'Save to fi&le...'
     );
 
-  SClientDataFilter = 'Client Dataset (*.cds)|*.cds|XML Files (*.xml)|*.xml|All Files (*.*)|*.*';
   SPipeSeperatedDataFilter = 'PSV files (*.psv)|*.psv|All Files (*.*)|*.*';
+  SPipeSeperatedDataExtension = 'psv';
   SXbaseDataFilter = 'Xbase files (*.dbf)|*.dbf|All Files (*.*)|*.*';
-
+  SXbaseDataExtension = 'dbf';
+  SXmlDataFilter = 'Client Dataset (*.cds)|*.cds|XML Files (*.xml)|*.xml|All Files (*.*)|*.*';
+  SXmlDataExtention = 'xml';
 
 
 { TODSDesigner }
@@ -110,7 +112,7 @@ type
 
 procedure TODSDesigner.BeginUpdateFieldDefs;
 begin
-(*##JVR
+{$ifdef _UNUSED}
   FPacketRecords := 0;
   if not DataSet.Active then
   begin
@@ -119,17 +121,17 @@ begin
     if FPacketRecords <> 0 then
       (DataSet as TDBICustomListDataset).PacketRecords := 0;
   end;
-//*)
+{$endif}
   inherited BeginUpdateFieldDefs;
 end;
 
 procedure TODSDesigner.EndUpdateFieldDefs;
 begin
   inherited EndUpdateFieldDefs;
-(*##JVR
+{$ifdef _UNUSED}
   if FPacketRecords <> 0 then
     (DataSet as TClientDataSet).PacketRecords := FPacketRecords;
-//*)
+{$endif}
 end;
 
 function TODSDesigner.SupportsAggregates: Boolean;
@@ -191,11 +193,11 @@ begin
 end;  { ExecuteVerb }
 
 
-{$ifndef fpc}
 // _____________________________________________________________________________
 {**
   Jvr - 11/10/2008 17:15:22 - Initial code.<br />
 }
+{$ifndef fpc}
 function TObjectListDatasetEditor.GetDSDesignerClass: TDSDesignerClass;
 begin
   Result := TODSDesigner;
@@ -211,19 +213,22 @@ class function TObjectListDatasetEditor.GetFileName: String;
 const
   OpenFileTitle = 'Open';
 
-begin
-  with TOpenDialog.Create(nil) do begin
-    try
-      Title := OpenFileTitle;
-      DefaultExt := '.dbf';
-      Filter := sXbaseDataFilter;
+var
+  OpenDialog: TOpenDialog;
 
-      if Execute then begin
-        Result := FileName;
+begin
+ OpenDialog := TOpenDialog.Create(nil);
+    try
+      OpenDialog.Title := OpenFileTitle;
+      OpenDialog.DefaultExt := SXmlDataExtention;
+      OpenDialog.Filter := SXmlDataFilter;
+
+      if OpenDialog.Execute then begin
+        Result := OpenDialog.FileName;
       end;
 
     finally
-      Free;
+      OpenDialog.Free;
     end;
   end;
 end;  { GetFileName }
@@ -303,16 +308,16 @@ begin
     try
       Options := Options + [ofOverwritePrompt];
       if (DataFormat = dfXbase) then begin
-        DefaultExt := 'dbf';
-        Filter := sXbaseDataFilter;
+        DefaultExt := SXbaseDataExtension;
+        Filter := SXbaseDataFilter;
       end
       else if (DataFormat = dfXML) then begin
-        DefaultExt := 'xml';
-        Filter := sClientDataFilter;
+        DefaultExt := SXmlDataExtension;
+        Filter := SXmlDataFilter;
       end
       else if (DataFormat = dfPSV) then begin
-        DefaultExt := 'psv';
-        Filter := sPipeSeperatedDataFilter;
+        DefaultExt := SPipeSeperatedDataExtension;
+        Filter := SPipeSeperatedDataFilter;
       end
       else begin
         raise EDBIException.Create(

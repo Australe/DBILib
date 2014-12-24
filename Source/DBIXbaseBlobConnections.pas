@@ -44,7 +44,7 @@ const
 
 const
   // dBase
-  dBaseFieldTerminator = #26;  //Char = SUB ($1A / 26)
+  dBaseFieldTerminator = #26;            //* Char = SUB ($1A / 26)
 
 
 type
@@ -124,6 +124,8 @@ type
     PHeader: Pointer;             //* Header Data for Blob file
 
   protected
+    procedure CreateBlobStream(const New: Boolean);
+
     function GetAttributes: TFieldAttributes;
 
     function GetHeaderBuf: Pointer; virtual;
@@ -148,13 +150,10 @@ type
   public
     constructor Create; virtual;
     destructor Destroy; override;
-
-    procedure CreateBlobStream(const New: Boolean);
     procedure CloseBlobStream;
     procedure OpenBlobStream;
     procedure NewBlobStream;
     procedure SaveToFile(AFileName: String);
-    procedure SaveToStream(AStream: TStream);
 
     // Blob methods
     procedure GetBlob(
@@ -171,6 +170,7 @@ type
       const Size: LongWord
       ): LongWord; virtual; abstract;
 
+  protected
     function WriteBlob(
       const Position: LongWord;
       const BlockCount: LongWord;
@@ -178,6 +178,9 @@ type
       PData: Pointer
       ): LongWord; virtual; abstract;
 
+    procedure SaveToStream(AStream: TStream);
+
+  public
     property Attributes: TFieldAttributes read GetAttributes;
     property Exclusive: Boolean read FExclusive write FExclusive;
     property StreamMode: TDBIStreamMode read FStreamMode write FStreamMode;
@@ -216,6 +219,7 @@ type
       const Size: LongWord
       ): LongWord; override;
 
+  protected
     function WriteBlob(
       const Position: LongWord;
       const BlockCount: LongWord;
@@ -254,6 +258,7 @@ type
       const Size: LongWord
       ): LongWord; override;
 
+  protected
     function WriteBlob(
       const Position: LongWord;
       const BlockCount: LongWord;
@@ -272,6 +277,58 @@ uses
 
 
 { TDBIDbaseBlobConnection }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 10/05/2005 14:11:52 - Initial code.<br>
+}
+procedure TDBIDbaseBlobConnection.DefaultMetaData;
+begin
+  inherited DefaultMetaData;
+
+  NextFreeBlock := DefaultDBaseBlobFileFirstBlock;
+  BlockSize := DefaultDBaseBlobFileBlockSize;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 09/02/2001 17:23:21.<P>
+}
+procedure TDBIDbaseBlobConnection.GetBlob(
+  const Position: LongWord;
+  const OffSet: LongWord;
+  PData: Pointer;
+  out Size: LongWord
+  );
+var
+  BlobInfo: TDBIFoxProBlobInfo;
+
+begin
+  Assert(Assigned(FBlobStream));
+  try
+    // Get the BlobSize
+    BlobInfo.Size := GetBlobSize(Position);
+
+    // If PData parameter is nil, then only return the Size value
+    // indicating the size of the data
+    if (PData = nil) {##JVR or (Size = 0)} or (BlobInfo.Size = 0) then begin
+      Size := BlobInfo.Size;
+      Exit;
+    end;
+
+    // Return the appropriate Size value
+    Size := Min(BlobInfo.Size, Size);
+
+    // No need to reposition, Getting the Blob Size already has done that.
+    FBlobStream.Read(PData^, Size);
+
+  except
+    on E: Exception do
+      raise EDBIException.Create(Self, E, 'GetBlob::325', 'Unable to Get Blob Data', []);
+  end;
+end;  { GetBlob }
+
 
 // _____________________________________________________________________________
 {**
@@ -326,98 +383,34 @@ end;  { GetBlobSize }
 
 // _____________________________________________________________________________
 {**
-  Jvr - 09/02/2001 17:23:21.<P>
+  This is fixed at 512 Bytes for DBase3+
+
+  Jvr - 29/12/2004 18:48:13 - Initial code.<br>
 }
-procedure TDBIDbaseBlobConnection.GetBlob(
-  const Position: LongWord;
-  const OffSet: LongWord;
-  PData: Pointer;
-  out Size: LongWord
-  );
-var
-  BlobInfo: TDBIFoxProBlobInfo;
-
+function TDBIDbaseBlobConnection.GetBlockSize: Word;
 begin
-  Assert(Assigned(FBlobStream));
-  try
-    // Get the BlobSize
-    BlobInfo.Size := GetBlobSize(Position);
-
-    // If PData parameter is nil, then only return the Size value
-    // indicating the size of the data
-    if (PData = nil) {##JVR or (Size = 0)} or (BlobInfo.Size = 0) then begin
-      Size := BlobInfo.Size;
-      Exit;
-    end;
-
-    // Return the appropriate Size value
-    Size := Min(BlobInfo.Size, Size);
-
-    // No need to reposition, Getting the Blob Size already has done that.
-    FBlobStream.Read(PData^, Size);
-
-  except
-    on E: Exception do
-      raise EDBIException.Create(Self, E, 'GetBlob::360', 'Unable to Get Blob Data', []);
-  end;
-end;  { GetBlob }
+  Result := DefaultDBaseBlobFileBlockSize;
+end;  { GetNextFreeBlock }
 
 
 // _____________________________________________________________________________
 {**
-  Jvr - 15/02/2001 17:38:48 - Write Blob data to the BlobStream.<P>
-
-  If PData is nil then clear the Block(s) specified at 'Position' specified
+  Jvr - 29/12/2004 18:26:37 - Initial code.<br>
 }
-function TDBIDbaseBlobConnection.WriteBlob(
-  const Position: LongWord;
-  const BlockCount: LongWord;
-  const Size: LongWord;
-  PData: Pointer
-  ): LongWord;
-var
-  PBlob: PDBIFoxProBlobField;
-
+function TDBIDbaseBlobConnection.GetHeaderSize: Integer;
 begin
-  Result := 0;                         // Memo is Blank
+  Result := SizeOf(TDBIDbase3BlobHeader);
+end;  { GetHeaderSize }
 
-  try
-    GetMem(PBlob, BlockCount * BlockSize);
-    try
-      FillChar(PBlob^, BlockCount * BlockSize, #0);
 
-      if Assigned(PData) then begin
-        Move(PData^, PBlob^.Data, Size);
-
-        // Add Field Terminating Markers 2x
-        PBlob^.Data[Size] := Byte(dbaseFieldTerminator);
-        PBlob^.Data[Size+1] := Byte(dbaseFieldTerminator);
-
-        Result := Position;            // Memo has data, is NOT blank
-      end;
-
-      { TODO 5 -ojvr -cDBIXBaseBlobConnections.WriteBlob() :
-        This needs attention fairly urgently!!!
-
-        This needs fixing I need to use a different structure for dbase Memos
-        At the moment the last eight bytes are garbage because I am writing the Data field
-        as if it were the full 512 bytes, thus minus the kind and size fields!!!!
-      }
-      FBlobStream.Seek(BlockSize * Position, soFromBeginning);
-      FBlobStream.Write(PBlob^.Data,  BlockCount * BlockSize);
-      FModified := True;
-
-    finally
-      FreeMem(PBlob);
-    end;
-  except
-    on E: Exception do
-      raise EDBIException.Create(Self, E, 'WriteBlob::415',
-        'Unable to write "%d" bytes ("%d blocks) at position "%d" to file "%s"',
-        [Size, BlockCount, Position, FFileName]
-        );
-  end;
-end;  { WriteBlob }
+// _____________________________________________________________________________
+{**
+  Jvr - 29/12/2004 18:42:28 - Initial code.<br>
+}
+function TDBIDbaseBlobConnection.GetNextFreeBlock: LongWord;
+begin
+  Result := PDBIDbase3BlobHeader(PHeader)^.NextFreeBlock;
+end;  { GetNextFreeBlock }
 
 
 // _____________________________________________________________________________
@@ -459,7 +452,7 @@ begin
 
     // New Block Count is Larger, or its a new Blob -> Append Memo to the end
     if (NewBlockCount > OldBlockCount) or (Position = 0) then begin
-      { TODO 3 -oJvr -cTDBIFoxProBlobConnection.PutBlob() :
+      { TODO 3 -oJvr -cTDBIDbaseBlobConnection.PutBlob() :
         We need to check if there are any free blocks immediately following the
         existing data blocks (creating a contiguous block)
         that have been marked as free (cleared)
@@ -467,27 +460,32 @@ begin
       }
       Assert(NewBlockCount > 0);
 
-      // Clear the old data first, only if it's NOT a new Blob
+      // Clear the old data first, only if it's NOT a new Blob - Returns 0 (Clear only)
       if (Position <> 0) then begin
-        {Result := }WriteBlob(Position, OldBlockCount, 0, nil);
+        Result := WriteBlob(Position, OldBlockCount, 0, nil);
+        if (Result <> 0) then begin
+          raise EDBIException.Create(Self, 'PutBlob::465', 'Unable to clear Blob Data', []);
+        end;
       end;
 
-      // Now write the new data
+      // Now write the new data - Return the position of the blob written
       Result := WriteBlob(NextFreeBlock, NewBlockCount, Size, PData);
       if (Result > 0) then begin
         // Now update the dbt file header
         NextFreeBlock := NextFreeBlock + NewBlockCount;
         FDirty := True;
         WriteMetaData;
+      end
+      else begin
+        raise EDBIException.Create(Self, 'PutBlob::475', 'Unable to write Blob Data', []);
       end;
     end
-
 
     // Data can fit into existing space, but needs the remaining blocks cleared
     else if (NewBlockCount < OldBlockCount) then begin
       Result := WriteBlob(Position, NewBlockCount, Size, PData);
 
-      { TODO 3 -oJvr -cTDBIFoxProBlobConnection.PutBlob() :
+      { TODO 3 -oJvr -cTDBIDbaseBlobConnection.PutBlob() :
         Clear the remaining blocks not used
       }
     end
@@ -496,46 +494,13 @@ begin
     else begin
       // If PData is nil then the Blob will be Cleared
       Result := WriteBlob(Position, NewBlockCount, Size, PData);
-    end;  { if }
+    end;
 
   except
     on E: Exception do
       raise EDBIException.Create(Self, E, 'PutBlob::500', 'Unable to write Blob Data', []);
   end;
 end;  { PutBlob }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 10/05/2005 14:11:52 - Initial code.<br>
-}
-procedure TDBIDbaseBlobConnection.DefaultMetaData;
-begin
-  inherited DefaultMetaData;
-
-  NextFreeBlock := DefaultDBaseBlobFileFirstBlock;
-  BlockSize := DefaultDBaseBlobFileBlockSize;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 29/12/2004 18:26:37 - Initial code.<br>
-}
-function TDBIDbaseBlobConnection.GetHeaderSize: Integer;
-begin
-  Result := SizeOf(TDBIDbase3BlobHeader);
-end;  { GetHeaderSize }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 29/12/2004 18:42:28 - Initial code.<br>
-}
-function TDBIDbaseBlobConnection.GetNextFreeBlock: LongWord;
-begin
-  Result := PDBIDbase3BlobHeader(PHeader)^.NextFreeBlock;
-end;  { GetNextFreeBlock }
 
 
 // _____________________________________________________________________________
@@ -550,17 +515,6 @@ end;  { SetNextFreeBlock }
 
 // _____________________________________________________________________________
 {**
-  This is fixed at 512 Bytes for DBase3+
-  Jvr - 29/12/2004 18:48:13 - Initial code.<br>
-}
-function TDBIDbaseBlobConnection.GetBlockSize: Word;
-begin
-  Result := DefaultDBaseBlobFileBlockSize;
-end;  { GetNextFreeBlock }
-
-
-// _____________________________________________________________________________
-{**
   Jvr - 29/12/2004 18:44:13 - Initial code.<br>
 }
 procedure TDBIDbaseBlobConnection.SetBlockSize(const Value: Word);
@@ -569,12 +523,112 @@ begin
 end;  { SetBlockSize }
 
 
+// _____________________________________________________________________________
+{**
+  Jvr - 15/02/2001 17:38:48 - Write Blob data to the BlobStream.<P>
+
+  If PData is nil then clear the Block(s) specified at 'Position' specified
+}
+function TDBIDbaseBlobConnection.WriteBlob(
+  const Position: LongWord;
+  const BlockCount: LongWord;
+  const Size: LongWord;
+  PData: Pointer
+  ): LongWord;
+var
+  PBlob: PDBIFoxProBlobField;
+
+begin
+  Result := 0;                         // Memo is Blank
+
+  try
+    GetMem(PBlob, BlockCount * BlockSize);
+    try
+      // Clear Allocated Memory
+      FillChar(PBlob^, BlockCount * BlockSize, #0);
+
+      // Write Data if the Data Pointer is referencing an address (not nil)
+      if Assigned(PData) then begin
+        Move(PData^, PBlob^.Data, Size);
+
+        // Add Field Terminating Markers 2x
+        PBlob^.Data[Size] := Byte(dbaseFieldTerminator);
+        PBlob^.Data[Size+1] := Byte(dbaseFieldTerminator);
+
+        Result := Position;            // Memo has data, is NOT blank
+      end;
+
+      { TODO 5 -ojvr -cDBIXBaseBlobConnections.WriteBlob() :
+        This needs attention fairly urgently!!!
+
+        This needs fixing I need to use a different structure for dbase Memos
+        At the moment the last eight bytes are garbage because I am writing the Data field
+        as if it were the full 512 bytes, thus minus the kind and size fields!!!!
+      }
+      FBlobStream.Seek(BlockSize * Position, soFromBeginning);
+      FBlobStream.Write(PBlob^.Data,  BlockCount * BlockSize);
+      FModified := True;
+
+    finally
+      FreeMem(PBlob);
+    end;
+  except
+    on E: Exception do
+      raise EDBIException.Create(Self, E, 'WriteBlob::575',
+        'Unable to write "%d" bytes ("%d blocks) at position "%d" to file "%s"',
+        [Size, BlockCount, Position, FFileName]
+        );
+  end;
+end;  { WriteBlob }
 
 
 
-// =============================================================================
-// 'TDBIFoxProBlobConnection' public implementation
-// =============================================================================
+
+
+{ TDBIFoxProBlobConnection }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 10/05/2005 14:20:55 - Initial code.<br>
+}
+procedure TDBIFoxProBlobConnection.DefaultMetaData;
+begin
+  inherited DefaultMetaData;
+
+  NextFreeBlock := DefaultFoxproBlobFileFirstBlock;
+  BlockSize := DefaultFoxproBlobFileBlockSize;
+end;  { DefaultMetaData }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 10/05/2005 14:04:22 - Initial code.<br>
+}
+function TDBIFoxProBlobConnection.GetBlockSize: Word;
+begin
+  Result := Swap(PDBIFoxProBlobHeader(GetHeaderBuf)^.BlockSize);
+end;
+
+function TDBIFoxProBlobConnection.GetHeaderSize: Integer;
+begin
+  Result := SizeOf(TDBIFoxProBlobHeader);
+end;
+
+function TDBIFoxProBlobConnection.GetNextFreeBlock: LongWord;
+begin
+  Result := SwapDWord(PDBIFoxProBlobHeader(GetHeaderBuf)^.NextFreeBlock);
+end;
+
+procedure TDBIFoxProBlobConnection.SetBlockSize(const Value: Word);
+begin
+  PDBIFoxProBlobHeader(GetHeaderBuf)^.BlockSize := Swap(Value);
+end;
+
+procedure TDBIFoxProBlobConnection.SetNextFreeBlock(const Value: LongWord);
+begin
+  PDBIFoxProBlobHeader(GetHeaderBuf)^.NextFreeBlock := SwapDWord(Value);
+end;
+
 
 // _____________________________________________________________________________
 {**
@@ -599,7 +653,7 @@ begin
 
     // If PData parameter is nil, then only return the Size value
     // indicating the size of the data
-    if (PData = nil) {##JVR or (Size = 0)} or (BlobInfo.Size = 0) then begin
+    if (PData = nil) or (BlobInfo.Size = 0) then begin
       Size := BlobInfo.Size;
       Exit;
     end;
@@ -612,65 +666,9 @@ begin
 
   except
     on E: Exception do
-      raise EDBIException.Create(Self, E, 'GetBlob::615', 'Unable to Get Blob Data', []);
-  end;  { try..except }
+      raise EDBIException.Create(Self, E, 'GetBlob::665', 'Unable to Get Blob Data', []);
+  end;
 end;  { GetBlob }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 15/02/2001 17:38:48 - Write Blob data to the BlobStream.<P>
-
-  If PData is nil then clear the Block(s) specified at 'Position' specified
-}
-function TDBIFoxProBlobConnection.WriteBlob(
-  const Position: LongWord;
-  const BlockCount: LongWord;
-  const Size: LongWord;
-  PData: Pointer
-  ): LongWord;
-const
-  // TFoxProDBIBlobKind = (FoxProBlobImage, FoxProBlobMemo, FoxProBlobObject);
-  FoxProBlobMemo = 1;
-
-var
-  PBlob: PDBIFoxProBlobField;
-
-begin
-  Result := 0;                         // Memo is Blank
-
-  try
-    GetMem(PBlob, BlockCount * BlockSize);
-    try
-      FillChar(PBlob^, BlockCount * BlockSize, #0);
-
-      if Assigned(PData) then begin
-        { TODO 3 -oJvr -cTDBIFoxProBlobConnection.PutBlob() :
-          FoxProBlobMemo is now a constant, but will in the future need to be
-          determined by the information coming from the datafile metadata
-        }
-        PBlob^.Kind := SwapDWord(FoxProBlobMemo);
-        PBlob^.Size := SwapDWord(Size);
-
-        Move(PData^, PBlob^.Data, Size);
-        Result := Position;            // Memo has data, is NOT blank
-      end;
-
-      FBlobStream.Seek(BlockSize * Position, soFromBeginning);
-      FBlobStream.Write(PBlob^,  BlockCount * BlockSize);
-      FModified := True;
-
-    finally
-      FreeMem(PBlob);
-    end;
-  except
-    on E: Exception do
-      raise EDBIException.Create(Self, E, 'WriteBlob::665',
-        'Unable to write "%d" bytes ("%d blocks) at position "%d" to file "%s"',
-        [Size, BlockCount, Position, FFileName]
-        );
-  end;  { try..except }
-end;  { WriteBlob }
 
 
 // _____________________________________________________________________________
@@ -724,21 +722,26 @@ begin
       }
       Assert(NewBlockCount > 0);
 
-      // Clear the old data first, only if it's NOT a new Blob
+      // Clear the old data first, only if it's NOT a new Blob - Returns 0 (Clear only)
       if (Position <> 0) then begin
-        {Result := }WriteBlob(Position, OldBlockCount, 0, nil);
+        Result := WriteBlob(Position, OldBlockCount, 0, nil);
+        if (Result <> 0) then begin
+          raise EDBIException.Create(Self, 'PutBlob::730', 'Unable to Clear Blob Data', []);
+        end;
       end;
 
-      // Now write the new data
+      // Now write the new data - Return the position of the blob written
       Result := WriteBlob(NextFreeBlock, NewBlockCount, Size, PData);
       if (Result > 0) then begin
         // Now update the fpt file header
         NextFreeBlock := NextFreeBlock + NewBlockCount;
         FDirty := True;
         WriteMetaData;
+      end
+      else if (Size > 0) then begin
+        raise EDBIException.Create(Self, 'PutBlob::740', 'Unable to write Blob Data', []);
       end;
     end
-
 
     // Data can fit into existing space, but needs the remaining blocks cleared
     else if (NewBlockCount < OldBlockCount) then begin
@@ -753,170 +756,91 @@ begin
     else begin
       // If PData is nil then the Blob will be Cleared
       Result := WriteBlob(Position, NewBlockCount, Size, PData);
-    end;  { if }
+    end;
 
   except
     on E: Exception do
-      raise EDBIException.Create(Self, E, 'PutBlob::760', 'Unable to write Blob Data', []);
-  end;  { try..except }
+      raise EDBIException.Create(Self, E, 'PutBlob::765', 'Unable to write Blob Data', []);
+  end;
 end;  { PutBlob }
 
 
-
-// =============================================================================
-// 'TDBIFoxProBlobConnection' protected implementation
-// =============================================================================
-
 // _____________________________________________________________________________
 {**
-  Jvr - 10/05/2005 14:20:55 - Initial code.<br>
+  Jvr - 15/02/2001 17:38:48 - Write Blob data to the BlobStream.<P>
+
+  If PData is nil then clear the Block(s) specified at 'Position' specified
 }
-procedure TDBIFoxProBlobConnection.DefaultMetaData;
-begin
-  inherited DefaultMetaData;
-
-  NextFreeBlock := DefaultFoxproBlobFileFirstBlock;
-  BlockSize := DefaultFoxproBlobFileBlockSize;
-end;  { DefaultMetaData }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 10/05/2005 14:04:22 - Initial code.<br>
-}
-function TDBIFoxProBlobConnection.GetBlockSize: Word;
-begin
-  Result := Swap(PDBIFoxProBlobHeader(GetHeaderBuf)^.BlockSize);
-end;
-
-function TDBIFoxProBlobConnection.GetHeaderSize: Integer;
-begin
-  Result := SizeOf(TDBIFoxProBlobHeader);
-end;
-
-function TDBIFoxProBlobConnection.GetNextFreeBlock: LongWord;
-begin
-  Result := SwapDWord(PDBIFoxProBlobHeader(GetHeaderBuf)^.NextFreeBlock);
-end;
-
-procedure TDBIFoxProBlobConnection.SetBlockSize(const Value: Word);
-begin
-  PDBIFoxProBlobHeader(GetHeaderBuf)^.BlockSize := Swap(Value);
-end;
-
-procedure TDBIFoxProBlobConnection.SetNextFreeBlock(const Value: LongWord);
-begin
-  PDBIFoxProBlobHeader(GetHeaderBuf)^.NextFreeBlock := SwapDWord(Value);
-end;
-
-
-
-
-
-// =============================================================================
-// 'TDBIXbaseBlobConnection' protected implementation
-// =============================================================================
-
-// _____________________________________________________________________________
-{**
-  This works but I'm not sure if this is the way I want to do it
-  It probably isn't an issue.
-
-  Jvr - 06/10/2005 13:27:38 - Initial code.<br>
-}
-function TDBIXbaseCustomBlobConnection.GetAttributes: TFieldAttributes;
+function TDBIFoxProBlobConnection.WriteBlob(
+  const Position: LongWord;
+  const BlockCount: LongWord;
+  const Size: LongWord;
+  PData: Pointer
+  ): LongWord;
 const
-  ReadOnlyAttrMap: array[Boolean] of TFieldAttributes = ([], [db.faReadOnly]);
+  // TFoxProDBIBlobKind = (FoxProBlobImage, FoxProBlobMemo, FoxProBlobObject);
+  FoxProBlobMemo = 1;
+
+var
+  PBlob: PDBIFoxProBlobField;
 
 begin
-  Assert(Assigned(Self));
-
-  Result := ReadOnlyAttrMap[
-    (FBlobStream is THandleStream) and FileIsReadOnly(FFilename)];
-end;  { GetFieldAttributes }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 30/12/2004 13:05:09 - Initial code.<br>
-}
-function TDBIXbaseCustomBlobConnection.GetHeaderBuf: Pointer;
-begin
-  Result := PHeader;
-end;  { GetHeaderBuf }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 29/06/2005 17:53:34 - Initial code.<br>
-}
-function TDBIXbaseCustomBlobConnection.GetFileMode: Word;
-begin
-  Result := OpenModes[ReadOnly] or ShareModes[Exclusive];
-end;  { GetFileMode }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 10/05/2005 14:09:30 - Initial code.<br>
-}
-procedure TDBIXbaseCustomBlobConnection.DefaultMetaData;
-begin
-  // Clear Header Data;
-  FillChar(GetHeaderBuf^, GetHeaderSize, #0);
-end;  { DefaultMetaData }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 09/02/2001 16:37:49.<P>
-}
-procedure TDBIXbaseCustomBlobConnection.ReadMetaData;
-begin
-  Assert(Assigned(FBlobStream));
+  Result := 0;                         // Memo is Blank
 
   try
-    FBlobStream.Seek(0, soFromBeginning);
-    FBlobStream.Read(GetHeaderBuf^, GetHeaderSize);
+    GetMem(PBlob, BlockCount * BlockSize);
+    try
+      FillChar(PBlob^, BlockCount * BlockSize, #0);
+
+      if Assigned(PData) then begin
+        { TODO 3 -oJvr -cTDBIFoxProBlobConnection.WriteBlob() :
+          FoxProBlobMemo is now a constant, but will in the future need to be
+          determined by the information coming from the datafile metadata
+        }
+        PBlob^.Kind := SwapDWord(FoxProBlobMemo);
+        PBlob^.Size := SwapDWord(Size);
+
+        Move(PData^, PBlob^.Data, Size);
+        Result := Position;            // Memo has data, is NOT blank
+      end;
+
+      FBlobStream.Seek(BlockSize * Position, soFromBeginning);
+      FBlobStream.Write(PBlob^,  BlockCount * BlockSize);
+      FModified := True;
+
+    finally
+      FreeMem(PBlob);
+    end;
   except
     on E: Exception do
-      raise EDBIException.Create(Self, E, 'ReadMetaData::885', 'Unable to Read Blob MetaData', []);
-  end;  { try..except }
-end;  { ReadMetaData }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 09/02/2001 16:39:14.<P>
-}
-procedure TDBIXbaseCustomBlobConnection.WriteMetaData;
-begin
-  if not FDirty then begin
-    Exit;
-  end;
-
-  Assert(Assigned(FBlobStream));
-  try
-    // Write the header to the stream
-    FBlobStream.Seek(0, soFromBeginning);
-    FBlobStream.Write(GetHeaderBuf^, GetHeaderSize);
-    FDirty := False;
-    FModified := True;
-
-  except
-    on E: Exception do
-      raise EDBIException.Create(Self, E, 'WriteMetaData::905',
-        'Unable to write "%d" bytes of MetaData to file "%s"',
-        [GetHeaderSize, FFileName]
+      raise EDBIException.Create(Self, E, 'WriteBlob::815',
+        'Unable to write "%d" bytes ("%d blocks) at position "%d" to file "%s"',
+        [Size, BlockCount, Position, FFileName]
         );
-  end;  { try..except }
-end;  { WriteMetaData }
+  end;
+end;  { WriteBlob }
 
 
 
-// =============================================================================
-// 'TDBIXbaseBlobConnection' public implementation
-// =============================================================================
+
+
+{ TDBIXbaseCustomBlobConnection }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 01/11/2000 12:40:52 - Initial code.<br>
+  Jvr - 29/12/2004 13:32:48 - Refactored to allow multiple data formats.<br>
+}
+procedure TDBIXbaseCustomBlobConnection.CloseBlobStream;
+begin
+  WriteMetaData;
+
+  if (StreamMode = smFileStream) then begin
+    FBlobStream.Free;
+    FBlobStream := nil;
+  end;
+end;  { CloseBlobStream }
+
 
 // _____________________________________________________________________________
 {**
@@ -943,6 +867,42 @@ end;  { Create }
 
 // _____________________________________________________________________________
 {**
+  Jvr - 29/06/2005 18:52:59 - Initial code.<br>
+}
+procedure TDBIXbaseCustomBlobConnection.CreateBlobStream(const New: Boolean);
+var
+  Mode: Word;
+
+begin
+  // Don't free the stream if it is an externally assigned stream
+  if (StreamMode <> smExternalStream) then begin
+    FBlobStream.Free;
+    FBlobStream := nil;
+  end;
+
+  Mode := OpenModes[ReadOnly] or ShareModes[Exclusive] or CreateModes[New];
+
+  FBlobStream := TDBIFileStream.CreateStream(FFileName, Mode, FStreamMode);
+  ReadOnly := (Mode and fmOpenReadWrite) = fmOpenReadWrite;
+
+  FModified := False;
+  Assert(Assigned(FBlobStream));
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 10/05/2005 14:09:30 - Initial code.<br>
+}
+procedure TDBIXbaseCustomBlobConnection.DefaultMetaData;
+begin
+  // Clear Header Data;
+  FillChar(GetHeaderBuf^, GetHeaderSize, #0);
+end;  { DefaultMetaData }
+
+
+// _____________________________________________________________________________
+{**
   Jvr - 29/12/2004 13:31:23 - Refactored to allow multiple data formats.<br>
 }
 destructor TDBIXbaseCustomBlobConnection.Destroy;
@@ -963,59 +923,40 @@ end;  { Destroy }
 
 // _____________________________________________________________________________
 {**
-  Jvr - 29/06/2005 18:52:59 - Initial code.<br>
+  This works but I'm not sure if this is the way I want to do it
+  It probably isn't an issue.
+
+  Jvr - 06/10/2005 13:27:38 - Initial code.<br>
 }
-procedure TDBIXbaseCustomBlobConnection.CreateBlobStream(const New: Boolean);
-var
-  Mode: Word;
-  
+function TDBIXbaseCustomBlobConnection.GetAttributes: TFieldAttributes;
+const
+  ReadOnlyAttrMap: array[Boolean] of TFieldAttributes = ([], [db.faReadOnly]);
+
 begin
-  // Don't free the stream if it is an externally assigned stream
-  if (StreamMode <> smExternalStream) then begin
-    FBlobStream.Free;
-    FBlobStream := nil;
-  end;
+  Assert(Assigned(Self));
 
-  Mode := OpenModes[ReadOnly] or ShareModes[Exclusive] or CreateModes[New];
-
-  FBlobStream := TDBIFileStream.CreateStream(FFileName, Mode, FStreamMode);
-  ReadOnly := (Mode and fmOpenReadWrite) = fmOpenReadWrite;
-
-  FModified := False;
-  Assert(Assigned(FBlobStream));
-end;
+  Result := ReadOnlyAttrMap[(FBlobStream is THandleStream) and FileIsReadOnly(FFilename)];
+end;  { GetFieldAttributes }
 
 
 // _____________________________________________________________________________
 {**
-  Jvr - 01/11/2000 12:40:52 - Initial code.<br>
-  Jvr - 29/12/2004 13:32:48 - Refactored to allow multiple data formats.<br>
+  Jvr - 29/06/2005 17:53:34 - Initial code.<br>
 }
-procedure TDBIXbaseCustomBlobConnection.CloseBlobStream;
+function TDBIXbaseCustomBlobConnection.GetFileMode: Word;
 begin
-  WriteMetaData;
-
-  if (StreamMode = smFileStream) then begin
-    FBlobStream.Free;
-    FBlobStream := nil;
-  end;
-end;  { CloseBlobStream }
+  Result := OpenModes[ReadOnly] or ShareModes[Exclusive];
+end;  { GetFileMode }
 
 
 // _____________________________________________________________________________
 {**
-  Jvr - 01/11/2000 12:35:38 - Currently this implementation only supports
-                              file based memos<BR>
-  Jvr - 29/10/2002 14:06:06 - Readonly file support added<P>
-  Jvr - 29/12/2004 13:33:04 - Refactored to allow multiple data formats.<br>
+  Jvr - 30/12/2004 13:05:09 - Initial code.<br>
 }
-procedure TDBIXbaseCustomBlobConnection.OpenBlobStream;
+function TDBIXbaseCustomBlobConnection.GetHeaderBuf: Pointer;
 begin
-  if FileExists(FFileName) then begin
-    CreateBlobStream(False);
-    ReadMetaData;
-  end;
-end;  { OpenBlobStream }
+  Result := PHeader;
+end;  { GetHeaderBuf }
 
 
 // _____________________________________________________________________________
@@ -1038,6 +979,40 @@ end;  { NewBlobStream }
 
 // _____________________________________________________________________________
 {**
+  Jvr - 01/11/2000 12:35:38 - Currently this implementation only supports
+                              file based memos<BR>
+  Jvr - 29/10/2002 14:06:06 - Readonly file support added<P>
+  Jvr - 29/12/2004 13:33:04 - Refactored to allow multiple data formats.<br>
+}
+procedure TDBIXbaseCustomBlobConnection.OpenBlobStream;
+begin
+  if FileExists(FFileName) then begin
+    CreateBlobStream(False);
+    ReadMetaData;
+  end;
+end;  { OpenBlobStream }
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 09/02/2001 16:37:49 - Initial code.<br>
+}
+procedure TDBIXbaseCustomBlobConnection.ReadMetaData;
+begin
+  Assert(Assigned(FBlobStream));
+
+  try
+    FBlobStream.Seek(0, soFromBeginning);
+    FBlobStream.Read(GetHeaderBuf^, GetHeaderSize);
+  except
+    on E: Exception do
+      raise EDBIException.Create(Self, E, 'ReadMetaData::1010', 'Unable to Read Blob MetaData', []);
+  end;
+end;  { ReadMetaData }
+
+
+// _____________________________________________________________________________
+{**
   Jvr - 27/02/2001 12:40:46 - Initial code.<br>
   Jvr - 29/12/2004 11:34:16 - Refactored to allow multiple data formats.<p>
 }
@@ -1048,7 +1023,7 @@ begin
   end;
 
   if (AFileName = '') then begin
-    raise EDBIException.Create(Self, 'SaveToFile::1050', 'Invalid FileName', []);
+    raise EDBIException.Create(Self, 'SaveToFile::1025', 'Invalid FileName', []);
   end;
 
   TDBIFileStream.SaveStreamToFile(FBlobStream, AFileName);
@@ -1062,24 +1037,37 @@ end;  { SaveToFile }
 }
 procedure TDBIXbaseCustomBlobConnection.SaveToStream(AStream: TStream);
 begin
-//##JVR  FBlobStream.SaveToStream(FBlobStream);
+  raise EDBINotImplementedException.Create(Self, 'SaveToStream::1040');
 end;  { SaveToStream }
 
 
 // _____________________________________________________________________________
 {**
-  Jvr - 01/11/2000 14:22:32 - Initial code<br>
-  Jvr - 29/12/2004 11:18:47 - Refactored to allow for multiple data formats.<p>
+  Jvr - 09/02/2001 16:39:14.<P>
 }
+procedure TDBIXbaseCustomBlobConnection.WriteMetaData;
+begin
+  if not FDirty then begin
+    Exit;
+  end;
 
-// _____________________________________________________________________________
-{**
-  Jvr - 07/02/2001 14:53:03.<P>
-}
+  Assert(Assigned(FBlobStream));
+  try
+    // Write the header to the stream
+    FBlobStream.Seek(0, soFromBeginning);
+    FBlobStream.Write(GetHeaderBuf^, GetHeaderSize);
+    FDirty := False;
+    FModified := True;
 
-// _____________________________________________________________________________
-{**
-  Jvr - 07/02/2001 14:55:19.<P>
-}
+  except
+    on E: Exception do
+      raise EDBIException.Create(Self, E, 'WriteMetaData::1065',
+        'Unable to write "%d" bytes of MetaData to file "%s"',
+        [GetHeaderSize, FFileName]
+        );
+  end;
+end;  { WriteMetaData }
+
+
 
 end.

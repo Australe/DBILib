@@ -1272,7 +1272,7 @@ end;
 
 class procedure TDBIDebugInfo.LogMsg(const Kind: TDBIDebugKind; const Msg: String; Args: array of const);
 begin
-  if (Kind in DBIDebugKinds) then begin
+  if {%H-}(Kind in DBIDebugKinds) then begin
     Windows.OutputDebugString(PChar(Format(Msg, Args)));
   end;
 end;

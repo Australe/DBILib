@@ -136,7 +136,7 @@ type
   TDBIFieldChecks = set of TDBIFieldCheck;
 
 const
-  fcCheckAll = [fcFieldName..fcReadOnly];
+  DBIFieldCheckAll = [fcFieldName..fcReadOnly];
 
 
 type
@@ -1037,7 +1037,7 @@ begin
     CDS.SaveToFile(TableName);
 
     FieldData := GetFields;
-    CheckFields(CDS, fcCheckAll);
+    CheckFields(CDS, DBIFieldCheckAll);
     VerifyFields(CDS, @FieldData, Length(FieldData));
 
     OccupyValues(CDS);
@@ -1052,7 +1052,7 @@ begin
   try
     CDS.Open;
 
-    CheckFields(CDS, fcCheckAll);
+    CheckFields(CDS, DBIFieldCheckAll);
     VerifyFields(CDS, @FieldData, Length(FieldData));
     OccupyValues(CDS);
     AssertValues(CDS);
@@ -1076,7 +1076,7 @@ begin
     ODS.CreateDataset;
     ODS.SaveToFile(TableName);
 
-    CheckFields(ODS, fcCheckAll);
+    CheckFields(ODS, DBIFieldCheckAll);
     OccupyValues(ODS);
     AssertValues(ODS);
   finally
@@ -1601,7 +1601,7 @@ begin
 
   BuildDataset(ADataset);
   FieldData := GetFields;
-  CheckFields(ADataset, fcCheckAll);
+  CheckFields(ADataset, DBIFieldCheckAll);
   VerifyFields(ADataset, @FieldData, Length(FieldData));
   AssertValues(ADataset);
 end;
@@ -2260,7 +2260,7 @@ begin
     ODS.CreateDataset;
 
     FieldData := GetFields;
-    CheckFields(ODS, fcCheckAll);
+    CheckFields(ODS, DBIFieldCheckAll);
     VerifyFields(ODS, @FieldData, Length(FieldData));
     AssertValues(ODS);
 
@@ -2274,7 +2274,7 @@ begin
 
       XDS.LoadFromDataset(ODS);
 
-      CheckFields(XDS, fcCheckAll);
+      CheckFields(XDS, DBIFieldCheckAll);
       VerifyFields(XDS, @FieldData, Length(FieldData));
       AssertValues(XDS);
     finally
@@ -2838,7 +2838,7 @@ begin
   CDS := TDBIClientDataset.Create(nil);
   try
     CDS.LoadFromFile(AFileName);
-    TBookData.CheckFields(CDS, fcCheckAll);
+    TBookData.CheckFields(CDS, DBIFieldCheckAll);
     TBookData.AssertValues(CDS);
 
     // Update Data
@@ -2867,7 +2867,7 @@ begin
   try
     ODS.ClassTypeName := TBookData.ClassName;
     ODS.LoadFromFile(AFileName);
-    TBookData.CheckFields(ODS, fcCheckAll);
+    TBookData.CheckFields(ODS, DBIFieldCheckAll);
     TBookData.AssertValues(ODS);
 
     // Update Data
@@ -3494,6 +3494,7 @@ begin
     Result := Result and (DBIIntfConsts.DataTypeMap[iFldType] = PFieldData^.FieldType);
   end;
 
+//##FCP Should we check iFldLen as well?
   if (PFieldData^.FieldType = ftWideString) then begin
     Result := Result and (PFieldProps^.iUnits1 = 2 * PFieldData^.FieldSize);
   end
@@ -3933,7 +3934,7 @@ begin
     CDS.CreateDataset;
 
 //##JVR    VerifyFields(CDS, @FieldData, Length(FieldData));
-    CheckFields(CDS, fcCheckAll);
+    CheckFields(CDS, DBIFieldCheckAll);
     OccupyValues(CDS);
     AssertValues(CDS);
 
@@ -3963,11 +3964,11 @@ begin
     ODS.CreateDataset;
 
 //##JVR    VerifyFields(ODS);
-    CheckFields(ODS, fcCheckAll);
+    CheckFields(ODS, DBIFieldCheckAll);
     OccupyValues(ODS);
 
     ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
-    CheckFields(ODS, fcCheckAll);
+    CheckFields(ODS, DBIFieldCheckAll);
 
     ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
     AssertValues(ODS);
@@ -3980,9 +3981,9 @@ begin
       XDS.CreateDataset;
 
 //##JVR      VerifyFields(XDS);
-      CheckFields(XDS, fcCheckAll);
+      CheckFields(XDS, DBIFieldCheckAll);
       XDS.LoadFromDataset(ODS);
-      CheckFields(XDS, fcCheckAll);
+      CheckFields(XDS, DBIFieldCheckAll);
       AssertValues(XDS);
 
       ClearValues(XDS);
@@ -4014,7 +4015,7 @@ begin
     ODS.CreateDataset;
 
     ODS.LoadFromFile(AFileName);
-    CheckFields(ODS, fcCheckAll);
+    CheckFields(ODS, DBIFieldCheckAll);
 //##JVR    VerifyFields(ODS);
     AssertValues(ODS);
 
@@ -4065,7 +4066,7 @@ begin
     ODS.ClassTypeName := Self.ClassName;
     CreateFieldDefs(ODS);
     ODS.CreateDataset;
-    CheckFields(ODS, fcCheckAll);
+    CheckFields(ODS, DBIFieldCheckAll);
 
     ODS.LoadFromFile(ChangeFileExt(AFileName, '.csv'));
     AssertValues(ODS);
@@ -4090,7 +4091,7 @@ begin
     try
       CreateFieldDefs(XDS);
       XDS.CreateDataset;
-      CheckFields(XDS, fcCheckAll);
+      CheckFields(XDS, DBIFieldCheckAll);
       XDS.LoadFromDataset(CDS);
       AssertValues(XDS);
       XDS.Close;
@@ -4137,7 +4138,7 @@ begin
     XDS.FileName := ChangeFileExt(AFileName, '.dbf');
     XDS.CreateDataset;
 
-    CheckFields(XDS, fcCheckAll);
+    CheckFields(XDS, DBIFieldCheckAll);
     OccupyValues(XDS);
     AssertValues(XDS);
 

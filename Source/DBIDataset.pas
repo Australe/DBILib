@@ -552,7 +552,7 @@ type
     procedure CheckSetKeyMode;
     procedure ClearCalcFields(Buffer: TDBIRecordBuffer); override;
     procedure CloseCursor; override;
-    procedure DataConvert(Field: TField; Source, Dest: TDBIValueBuffer; ToNative: Boolean); overload; override;
+    procedure {%H-}DataConvert(Field: TField; Source, Dest: TDBIValueBuffer; ToNative: Boolean); overload; override;
 {$ifdef DelphiXE3}
     procedure DataConvert(Field: TField; Source, Dest: Pointer; ToNative: Boolean); overload; override; //##JVR deprecated 'Use overloaded method instead';
 {$endif DelphiXE3}
@@ -647,7 +647,7 @@ type
 {$endif}
     function SetCursorRange: Boolean;
     procedure SetDataSetField(const Value: TDataSetField); override;
-    procedure SetFieldData(Field: TField; Buffer: TDBIValueBuffer); overload; override;
+    procedure {%H-}SetFieldData(Field: TField; Buffer: TDBIValueBuffer); overload; override;
     procedure SetFilterData(const Text: string; Options: TFilterOptions);
     procedure SetFiltered(Value: Boolean); override;
     procedure SetFilterOptions(Value: TFilterOptions); override;
@@ -2123,6 +2123,7 @@ begin
 {$ifdef _UNUSED}
   DataPacketToVariant(DataPacket, Result);
 {$endif}
+//## FSavedPacket is not assigned a value if we're not "Active".
   Result := FSavedPacket;
 end;
 
@@ -2883,8 +2884,10 @@ end;
 }
 procedure TDBIDataset.CreateDataset;
 
+//## This method needs a better name.
   procedure CheckFieldDef(FieldDef: TFieldDef);
   begin
+    //## Please remove the "with" statement.
     with FieldDef do
       if Required then
         Attributes := Attributes + [faRequired] else
@@ -3058,6 +3061,7 @@ begin
     if WriteSize then begin
       Stream.Write(Size, SizeOf(Size));
     end;
+	//## You are copying from "FSavedPacket's" current position - Is that what you want?
     Stream.CopyFrom(FSavedPacket, Size);
 
     if Active then begin
@@ -5096,13 +5100,10 @@ begin
   try
     GetFieldList(FieldList, Fields);
     for I := 0 to FieldList.Count - 1 do
-      if TField(FieldList[I]).FieldNo > 0 then begin
-         FieldList[I] := Pointer(TField(FieldList[I]).FieldNo);
-      end
-      else begin
+      if TField(FieldList[I]).FieldNo > 0 then
+        FieldList[I] := Pointer(TField(FieldList[I]).FieldNo)
+      else
         DatabaseError(SFieldIndexError, Self);
-      end;
-
     Check(Cursor.SortOnFields(FieldList.Count, PPointer(FieldList.List),
       GetFlags(Descending, DescFlags), GetFlags(CaseInsensitive, CaseFlags)));
     GetIndexInfo('');
@@ -5110,8 +5111,6 @@ begin
     FieldList.Free;
   end;
 end;
-
-
 
 { Ranges / Keys }
 

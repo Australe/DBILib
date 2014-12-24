@@ -2265,13 +2265,12 @@ procedure TDBIDataConnection.LoadFromFile(
   const Format: TDBIDataFormat
   );
 begin
-  Close;
-  Release;
-
-  // If filename is not blank then set it, otherwise use the existing one
-  if (AFileName <> '') then begin
-    FFileName := AFileName;
+  if (AFileName = '') then begin
+    raise EDBIException.Create(Self, 'LoadFromFile::2270', 'Invalid Filename', []);
   end;
+
+  // Setting the Filename will Close and Release the existing Data Stream
+  FileName := AFileName;
 
   SetStreamMode(smLoadFromFile, FileName <> '');
 end;  { LoadFromFile }
@@ -2288,7 +2287,9 @@ procedure TDBIDataConnection.LoadFromStream(
 begin
   Assert(AStream <> nil);
 
+  // Resetting the Filename will Close and Release the existing Data Stream
   FileName := '';
+
   SetStreamMode(smLoadFromStream, AStream <> nil);
 end;  { LoadFromStream }
 
@@ -2387,7 +2388,7 @@ var
 
 begin
   if (AFileName = '') then begin
-    raise EDBIException.Create(Self, 'SaveToFile::2375', 'Invalid FileName', []);
+    raise EDBIException.Create(Self, 'SaveToFile::2375', 'Invalid Filename', []);
   end;
 
   if not Active then begin
@@ -3382,6 +3383,7 @@ begin
   Assert(Assigned(FDataConnection));
 
   case eProp of
+  //## Why are we supressing the exception in this case?
     basepropDATAHASCHANGED: { ##JVR - Warning - Not Implemented Yet! } ;
 
     basepropREADONLY: begin
@@ -4359,6 +4361,7 @@ begin
   // Setup Data buffers
   PFieldData := pFldBuf;
   PRecordData := pRecBuf;
+  //## Should we do a sanity check on PRecordData e.g. is it nil?
   Inc(PRecordData, FFieldProps[iFieldNo-1].iFldOffsInRec);
   Size := FFieldProps[iFieldNo-1].iFldLen;
 
@@ -4421,6 +4424,7 @@ begin
   // Setup Data buffers
   PFieldData := pFldBuf;
   PRecordData := pRecBuf;
+  //## Should we do a sanity check on PRecordData e.g. is it nil?
   Inc(PRecordData, FFieldProps[iFieldNo-1].iFldOffsInRec);
   Size := FFieldProps[iFieldNo-1].iFldLen;
 

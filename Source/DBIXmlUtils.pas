@@ -63,7 +63,7 @@ type
 
   public
     // Data Packet Helpers
-    class function CreateDataPacket(const value: String = ''): TDBIDataPacket; overload;
+    class function CreateDataPacket(const Value: String = ''): TDBIDataPacket; overload;
     class function CreateDataPacket(ADataset: TDataset): TDBIDataPacket; overload;
     class function CreateDataPacket(ADataPacket: TDBIDataPacket; const ASize: LongInt = 0): TDBIDataPacket; overload;
     class function DataPacketSize(ADataPacket: TDBIDataPacket): Integer;
@@ -87,7 +87,7 @@ uses
 {**
   Jvr - 26/11/2014 12:36:54 - Initial code.<br>
 }
-class function TDBIXmlData.CreateDataPacket(const value: String = ''): TDBIDataPacket;
+class function TDBIXmlData.CreateDataPacket(const Value: String = ''): TDBIDataPacket;
 begin
   Result := TStringStream.Create(Value);
 end;
@@ -171,17 +171,13 @@ var
   Connection: TDBIXmlDataPacketReader;
 
 begin
-  Connection := TDBIXmlDataPacketReader.Create;
-  try
-    Connection.Input.LoadFromStream(ADataPacket);
-    Connection.Dataset := ADataSet;
-    Connection.DropMetaData;
-    Connection.GetData;
+  Connection := Local(TDBIXmlDataPacketReader.Create).Obj as TDBIXmlDataPacketReader;
+  Connection.Input.LoadFromStream(ADataPacket);
+  Connection.Dataset := ADataSet;
+  Connection.DropMetaData;
+  Connection.GetData;
 
-    ADataSet.First;
-  finally
-    Connection.Free;
-  end;
+  ADataSet.First;
 end;
 
 
@@ -210,21 +206,17 @@ var
   Connection: TDBIXmlDataPacketReader;
 
 begin
-  Connection := TDBIXmlDataPacketReader.Create;
-  try
-    ADataSet.Close;
+  Connection := Local(TDBIXmlDataPacketReader.Create).Obj as TDBIXmlDataPacketReader;
+  ADataSet.Close;
 
-    Connection.Input.LoadFromFile(AFileName);
-    Connection.Dataset := ADataSet;
-    Connection.GetMetaData;
+  Connection.Input.LoadFromFile(AFileName);
+  Connection.Dataset := ADataSet;
+  Connection.GetMetaData;
 
-    ADataSet.CreateDataset;
-    Connection.GetData;
+  ADataSet.CreateDataset;
+  Connection.GetData;
 
-    ADataSet.First;
-  finally
-    Connection.Free;
-  end;
+  ADataSet.First;
 end;
 
 
@@ -237,21 +229,17 @@ var
   Connection: TDBIXmlDataPacketReader;
 
 begin
-  Connection := TDBIXmlDataPacketReader.Create;
-  try
-    ADataSet.Close;
+  Connection := Local(TDBIXmlDataPacketReader.Create).Obj as TDBIXmlDataPacketReader;
+  ADataSet.Close;
 
-    Connection.Input.LoadFromStream(Stream);
-    Connection.Dataset := ADataSet;
-    Connection.GetMetaData;
+  Connection.Input.LoadFromStream(Stream);
+  Connection.Dataset := ADataSet;
+  Connection.GetMetaData;
 
-    ADataSet.CreateDataset;
-    Connection.GetData;
+  ADataSet.CreateDataset;
+  Connection.GetData;
 
-    ADataSet.First;
-  finally
-    Connection.Free;
-  end;
+  ADataSet.First;
 end;
 
 
@@ -265,13 +253,11 @@ var
 
 begin
   try
-    LocalStream := TDBIFileStream.Create(
-      AFileName, fmCreate, DBIPageBufferSize, [{No Options}]);
-    try
-      SaveToStream(LocalStream, ADataSet);
-    finally
-      LocalStream.Free;
-    end;
+    LocalStream := Local(
+      TDBIFileStream.Create(AFileName, fmCreate, DBIPageBufferSize, [])
+      ).Obj as TStream;
+
+    SaveToStream(LocalStream, ADataSet);
   except
     on E: Exception do
       raise EDBIException.Create(Self, E, 'SaveToFile::145', 'Failed to save Dataset as Xml', []);
@@ -292,13 +278,9 @@ var
   Writer: TDBIXmlDataPacketWriter;
 
 begin
-  Writer := TDBIXmlDataPacketWriter.Create;
-  try
-    Writer.Dataset := Dataset;
-    Writer.SaveToStream(Stream);
-  finally
-    Writer.Free;
-  end;
+  Writer := Local(TDBIXmlDataPacketWriter.Create).Obj as TDBIXmlDataPacketWriter;
+  Writer.Dataset := Dataset;
+  Writer.SaveToStream(Stream);
 end;  { SaveToXmlStream }
 
 
@@ -320,7 +302,7 @@ var
   procedure Write(Str: String);
   begin
     if Str <> '' then begin
-      Stream.Write(Str[1], length(Str));
+      Stream.Write(Str[1], Length(Str));
     end;
   end;
 
@@ -374,17 +356,11 @@ var
 
 begin
   try
-    LocalStream := TDBIFileStream.Create(
-      AFileName,
-      fmCreate,
-      DBIPageBufferSize,
-      [{No Options}]
-      );
-    try
-      SaveToStream(LocalStream, ADataSet);
-    finally
-      LocalStream.Free;
-    end;
+    LocalStream := Local(
+      TDBIFileStream.Create(AFileName, fmCreate, DBIPageBufferSize, [])
+      ).Obj as TStream;
+
+    SaveToStream(LocalStream, ADataSet);
   except
     on E: Exception do
       raise EDBIException.Create(Self, E, 'SavetoFile::260', 'Failed to save Dataset as Psv', []);
@@ -410,17 +386,13 @@ begin
       );
   end;
 
-  Connection := TDBICSVDataPacketReader.Create;
-  try
-    Connection.Input.LoadFromFile(AFileName);
-    Connection.Dataset := ADataSet;
-    Connection.GetMetaData;
-    Connection.GetData;
+  Connection := Local(TDBICSVDataPacketReader.Create).Obj as TDBICSVDataPacketReader;
+  Connection.Input.LoadFromFile(AFileName);
+  Connection.Dataset := ADataSet;
+  Connection.GetMetaData;
+  Connection.GetData;
 
-    ADataSet.First;
-  finally
-    Connection.Free;
-  end;
+  ADataSet.First;
 end;
 
 
@@ -439,18 +411,13 @@ begin
       );
   end;
 
-  Connection := TDBICSVDataPacketReader.Create;
-  try
-    Connection.Input.LoadFromStream(Stream);
-    Connection.Dataset := ADataSet;
-    Connection.GetMetaData;
+  Connection := Local(TDBICSVDataPacketReader.Create).Obj as TDBICSVDataPacketReader;
+  Connection.Input.LoadFromStream(Stream);
+  Connection.Dataset := ADataSet;
+  Connection.GetMetaData;
+  Connection.GetData;
 
-    Connection.GetData;
-
-    ADataSet.First;
-  finally
-    Connection.Free;
-  end;
+  ADataSet.First;
 end;
 
 
@@ -464,13 +431,11 @@ var
 
 begin
   try
-    LocalStream := TDBIFileStream.Create(
-      AFileName, fmCreate, DBIPageBufferSize, [{No Options}]);
-    try
-      SaveToStream(LocalStream, ADataSet);
-    finally
-      LocalStream.Free;
-    end;
+    LocalStream := Local(
+      TDBIFileStream.Create(AFileName, fmCreate, DBIPageBufferSize, [])
+      ).Obj as TStream;
+
+    SaveToStream(LocalStream, ADataSet);
   except
     on E: Exception do
       raise EDBIException.Create(Self, E, 'SaveToFile::345', 'Failed to save Dataset as CSV', []);
@@ -491,13 +456,9 @@ var
   Writer: TDBICSVDataPacketWriter;
 
 begin
-  Writer := TDBICSVDataPacketWriter.Create;
-  try
-    Writer.Dataset := Dataset;
-    Writer.SaveToStream(Stream);
-  finally
-    Writer.Free;
-  end;
+  Writer := Local(TDBICSVDataPacketWriter.Create).Obj as TDBICSVDataPacketWriter;
+  Writer.Dataset := Dataset;
+  Writer.SaveToStream(Stream);
 end;  { SaveToCSVStream }
 
 

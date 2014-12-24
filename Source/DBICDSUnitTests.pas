@@ -268,7 +268,7 @@ begin
   try
     CDS.LoadFromFile(DataPath(TableName));
 
-    TBookData.CheckFields(CDS, fcCheckAll);
+    TBookData.CheckFields(CDS, DBIFieldCheckAll);
     TBookData.UpdateValues(CDS);
     TBookData.ReviseFields(CDS);
 

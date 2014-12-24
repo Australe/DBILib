@@ -578,6 +578,7 @@ end;  { SetActive }
 }
 procedure TDBICustomStreamDataConnection.SetDataStream(AStream: TStream);
 begin
+  // Resetting the Filename will Close and Release the existing Data Stream
   FileName := '';
   FDataStream := AStream;
 
