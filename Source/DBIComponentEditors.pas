@@ -74,7 +74,7 @@ procedure Register;
 implementation
 
 uses
-  SysUtils, Controls;
+  SysUtils, Controls, DBIUtils;
 
 type
   TdseAction = (
@@ -95,7 +95,7 @@ const
   SXbaseDataFilter = 'Xbase files (*.dbf)|*.dbf|All Files (*.*)|*.*';
   SXbaseDataExtension = 'dbf';
   SXmlDataFilter = 'Client Dataset (*.cds)|*.cds|XML Files (*.xml)|*.xml|All Files (*.*)|*.*';
-  SXmlDataExtention = 'xml';
+  SXmlDataExtension = 'xml';
 
 
 { TODSDesigner }
@@ -217,19 +217,13 @@ var
   OpenDialog: TOpenDialog;
 
 begin
- OpenDialog := TOpenDialog.Create(nil);
-    try
-      OpenDialog.Title := OpenFileTitle;
-      OpenDialog.DefaultExt := SXmlDataExtention;
-      OpenDialog.Filter := SXmlDataFilter;
+  OpenDialog := Local(TOpenDialog.Create(nil)).Obj as TOpenDialog;
+  OpenDialog.Title := OpenFileTitle;
+  OpenDialog.DefaultExt := SXmlDataExtension;
+  OpenDialog.Filter := SXmlDataFilter;
 
-      if OpenDialog.Execute then begin
-        Result := OpenDialog.FileName;
-      end;
-
-    finally
-      OpenDialog.Free;
-    end;
+  if OpenDialog.Execute then begin
+    Result := OpenDialog.FileName;
   end;
 end;  { GetFileName }
 
