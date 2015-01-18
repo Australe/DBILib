@@ -199,11 +199,22 @@ end;
 
 // _____________________________________________________________________________
 {**
-  Jvr - 02/06/2013 10:58:11 - Initial code.<br>
+  Jvr - 02/06/2013 10:58:11 - Initial code.<br><p>
+
+  If a Dataset is readonly then this method of loading from an XML file will
+  FAIL.  Therefore we preserve the "ReadOnly" status, force it to FALSE,
+  and load the data.
+
+  The ReadOnly property is then restored to the initial value.</p>
+
+  <b>Please Note</b></br><p>
+  This is only a hack and is not likely to be fail-safe.
+  In the future a more reliable method of loading will need to be made.</p>
 }
 class procedure TDBIXmlData.LoadFromFile(const AFileName: TFileName; ADataSet: TDBIDataset);
 var
   Connection: TDBIXmlDataPacketReader;
+  ReadOnly: Boolean;
 
 begin
   Connection := Local(TDBIXmlDataPacketReader.Create).Obj as TDBIXmlDataPacketReader;
@@ -213,8 +224,15 @@ begin
   Connection.Dataset := ADataSet;
   Connection.GetMetaData;
 
-  ADataSet.CreateDataset;
-  Connection.GetData;
+  ReadOnly := ADataset.ReadOnly;
+  try
+    ADataset.ReadOnly := False;
+
+    ADataSet.CreateDataset;
+    Connection.GetData;
+  finally
+    ADataset.ReadOnly := ReadOnly;
+  end;
 
   ADataSet.First;
 end;

@@ -31,7 +31,70 @@ unit DBITypInfo;
 interface
 
 uses
-  Classes, TypInfo, DB;
+  Classes, Contnrs, TypInfo, DB, DBIObjectListDatasets;
+
+type
+  TDBIEnumName = class(TPersistent)
+  private
+    FID: Integer;
+    FName: String;
+
+  public
+    class function BuildLookupDataset(
+      TypeInfo: PTypeInfo;
+      const Low: Integer;
+      const High: Integer
+      ): TObjectListDataset;
+
+    class function New(const ID: Integer; const Name: String): TDBIEnumName;
+    class function Add(List: TObjectList; const Name: String): TDBIEnumName;
+    class procedure Populate(List: TObjectList; TypeInfo: PTypeInfo; const Low, High: Integer);
+
+  published
+    property ID: Integer read FID write FID;
+    property Name: String read FName write FName;
+
+  end;
+
+
+
+type
+  TDBICustomFieldData = class(TPersistent)
+  private
+    FKind: TFieldKind;
+    FTitle: String;
+    FName: String;
+    FSize: Integer;
+    FPrecision: Integer;
+    FRequired: Boolean;
+    FViewName: String;
+
+  protected
+    property Kind: TFieldKind read FKind write FKind;
+    property Title: String read FTitle write FTitle;
+    property Name: String read FName write FName;
+    property Size: Integer read FSize write FSize;
+    property Precision: Integer read FPrecision write FPrecision;
+    property Required: Boolean read FRequired write FRequired;
+    property ViewName: String read FViewName write FViewName;
+
+  public
+    class function BuildDataset: TObjectListDataset;
+
+  end;
+
+  TDBIFieldData = class(TDBICustomFieldData)
+  protected
+    property Kind;
+    property Title;
+    property Name;
+    property Size;
+    property Precision;
+    property Required;
+    property ViewName;
+
+  end;
+
 
 type
   TDBITypeKinds = set of TTypeKind;
@@ -68,7 +131,11 @@ type
       const ValidKinds: TDBITypeKinds
       ): TTypeKind;
 
+    class function GetDataType(AClass: TClass; const PropName: String): TFieldType;
+
     class function GetTypeData(PropInfo: PPropInfo): PTypeData;
+
+    class function IsPublishedProp(AClass: TClass; const PropName: String): Boolean;
 
     class function IsTypeKind(
       Instance: TObject;
@@ -82,7 +149,8 @@ type
 type
   TDBIProperties = class(TStringList)
   public
-    class procedure GetProperties(AInstance: TObject; Strings: TStrings);
+    class procedure GetProperties(AClass: TClass; Strings: TStrings); overload;
+    class procedure GetProperties(AInstance: TObject; Strings: TStrings); overload;
   end;
 
 
@@ -127,7 +195,9 @@ uses
   Consts,
 {$endif}
   SysUtils,
-  DBIUtils;
+  DBIUtils,
+  DBIIntfConsts,
+  DBIInterfaces;
 
 
 { TypInfo Helpers }
@@ -474,12 +544,19 @@ end;
 
 { TDBIPropertyList }
 
+class procedure TDBIProperties.GetProperties(AInstance: TObject; Strings: TStrings);
+begin
+  GetProperties(AInstance.ClassType, Strings);
+
+end;
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 13/09/2011 19:16:00 - Initial code.<br />
 }
-class procedure TDBIProperties.GetProperties(AInstance: TObject; Strings: TStrings);
-  function ReadProperty(PropInfo: PPropInfo): String;
+class procedure TDBIProperties.GetProperties(AClass: TClass; Strings: TStrings);
+  function ReadProperty(ClassInfo: Pointer; PropInfo: PPropInfo): String;
   begin
     Result := '';
     if (
@@ -490,13 +567,13 @@ class procedure TDBIProperties.GetProperties(AInstance: TObject; Strings: TStrin
       (PropInfo^.Name <> 'Name')) then
     begin
       case PropInfo^.PropType^.Kind of
-        tkString, tkWstring, tkLString{$ifdef DELPHIxe2}, tkUString{$endif}: Result := GetStrProp(AInstance, PropInfo);
-        tkFloat: Result := FloatToStr(GetFloatProp(AInstance, PropInfo));
-        tkInteger: Result := IntToStr(GetOrdProp(AInstance, PropInfo));
-        tkInt64: Result := IntToStr(GetInt64Prop(AInstance, PropInfo));
-        tkEnumeration: Result := GetEnumProp(AInstance, PropInfo);
-        tkChar, tkWChar: Result := Chr(GetOrdProp(AInstance, PropInfo));
-        tkSet: Result := GetSetProp(AInstance, PropInfo, False);
+        tkString, tkWstring, tkLString{$ifdef DELPHIxe2}, tkUString{$endif}: Result := GetStrProp(ClassInfo, PropInfo);
+        tkFloat: Result := FloatToStr(GetFloatProp(ClassInfo, PropInfo));
+        tkInteger: Result := IntToStr(GetOrdProp(ClassInfo, PropInfo));
+        tkInt64: Result := IntToStr(GetInt64Prop(ClassInfo, PropInfo));
+        tkEnumeration: Result := GetEnumProp(ClassInfo, PropInfo);
+        tkChar, tkWChar: Result := Chr(GetOrdProp(ClassInfo, PropInfo));
+        tkSet: Result := GetSetProp(ClassInfo, PropInfo, False);
       else
         raise Exception.CreateFmt(
           'Property "%s" of type "%s" not supported',
@@ -515,11 +592,11 @@ var
 
 begin
   PropList := Local(TList.Create).Obj as TList;
-  PropList.Count := GetTypeData(AInstance.ClassInfo)^.PropCount;
+  PropList.Count := GetTypeData(AClass.ClassInfo)^.PropCount;
   if PropList.Count > 0 then begin
-    GetPropInfos(AInstance.ClassInfo, PPropList(PropList.List));
+    GetPropInfos(AClass.ClassInfo, PPropList(PropList.List));
     for PropIndex := 0 to PropList.Count - 1 do begin
-      ReadProperty(PropList[PropIndex]);
+      ReadProperty(AClass.ClassInfo, PropList[PropIndex]);
     end;
   end;
 end;
@@ -555,6 +632,63 @@ begin
 end;
 
 
+class function TDBIPropType.GetDataType(AClass: TClass; const PropName: String): TFieldType;
+type
+  TDBIFieldOrdTypeMap = array[TOrdType] of TFieldType;
+
+const
+  FieldOrdTypeMap: TDBIFieldOrdTypeMap = (
+    ftSigned8,                         // otSByte,
+    ftUnsigned8,                       // otUByte,
+    ftSigned16,                        // otSWord,
+    ftUnsigned16,                      // otUWord,
+    ftSigned32,                        // otSLong,
+    ftUnsigned32                       // otULong
+    );
+
+var
+  PropInfo: PPropInfo;
+
+  procedure CheckFieldType;
+  begin
+    if Result = ftUnknown then begin
+      raise Exception.CreateFmt('Invalid type for property "%s"', [PropName]);
+    end;
+
+    if (Result = ftInteger) then begin
+
+    end;
+  end;
+
+begin
+  Result := ftUnknown;
+  if (AClass = nil) then begin
+    CheckFieldType;
+    Exit;
+  end;
+
+  PropInfo := TypInfo.GetPropInfo(PTypeInfo(AClass.ClassInfo), PropName);
+  if (PropInfo = nil) then begin
+    CheckFieldType;
+    Exit;
+  end;
+
+  if (PropInfo^.PropType^.Kind = tkEnumeration) then begin
+    if CompareText(String(PropInfo^.PropType^.Name), 'Boolean') = 0 then begin
+      Result := ftBoolean;
+    end
+    else begin
+      Result := FieldOrdTypeMap[PropInfo^.PropType^.TypeData^.OrdType];
+    end;
+  end
+  else begin
+    Result := FieldKindTypeMap[PropInfo^.PropType^.Kind];
+  end;
+
+  CheckFieldType;
+end;
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 08/11/2000 13:26:48<P>
@@ -562,6 +696,36 @@ end;
 class function TDBIPropType.GetTypeData(PropInfo: PPropInfo): PTypeData;
 begin
   Result := TypInfo.GetTypeData(PropInfo^.PropType{$ifndef fpc}^{$endif});
+end;
+
+{##JVR
+function GetPropInfo(TypeInfo: PTypeInfo; const PropName: string): PPropInfo;
+begin
+  Result := InternalGetPropInfo(TypeInfo, PropName);
+end;
+
+function GetPropInfo(TypeInfo: PTypeInfo; const PropName: string; AKinds: TTypeKinds): PPropInfo;
+begin
+  Result := InternalGetPropInfo(TypeInfo, PropName);
+  if (Result <> nil) and
+     (AKinds <> []) and
+     not (Result^.PropType^^.Kind in AKinds) then
+    Result := nil;
+end;
+
+function IsPublishedProp(Instance: TObject; const PropName: string): Boolean;
+begin
+  Result := InternalGetPropInfo(PTypeInfo(Instance.ClassInfo), PropName) <> nil;
+end;
+
+function IsPublishedProp(AClass: TClass; const PropName: string): Boolean;
+begin
+  Result := InternalGetPropInfo(PTypeInfo(AClass.ClassInfo), PropName) <> nil;
+end;
+//}
+class function TDBIPropType.IsPublishedProp(AClass: TClass; const PropName: String): Boolean;
+begin
+  Result := (AClass <> nil) and (TypInfo.GetPropInfo(PTypeInfo(AClass.ClassInfo), PropName) <> nil);
 end;
 
 
@@ -578,5 +742,86 @@ begin
 end;
 
 
+
+
+{ TDBICustomFieldData }
+
+class function TDBICustomFieldData.BuildDataset: TObjectListDataset;
+begin
+  Result := TObjectListDataset.Create(nil);
+  Result.ClassTypeName := Self.ClassName;
+  Result.Open;
+end;
+
+
+
+
+
+{ TDBIEnumName }
+
+class function TDBIEnumName.Add(List: TObjectList; const Name: String): TDBIEnumName;
+begin
+  Result := New(List.Count, Name);
+
+  List.Add(Result);
+end;
+
+
+class function TDBIEnumName.BuildLookupDataset(
+  TypeInfo: PTypeInfo;
+  const Low: Integer;
+  const High: Integer
+  ): TObjectListDataset;
+begin
+  Result := TObjectListDataset.Create(nil);
+  Result.ClassTypeName := TDBIEnumName.ClassName;
+  TDBIEnumName.Populate(Result.List, TypeInfo, Low, High);
+  Result.Open;
+end;
+
+
+class function TDBIEnumName.New(const ID: Integer; const Name: String): TDBIEnumName;
+begin
+  Result := Self.Create;
+  Result.ID := ID;
+  Result.Name := Name;
+end;
+
+
+class procedure TDBIEnumName.Populate(
+  List: TObjectList;
+  TypeInfo: PTypeInfo;
+  const Low, High: Integer
+  );
+var
+  ID: Integer;
+
+  function GetName: String;
+  var
+    Data: AnsiString;
+    Index: Integer;
+  begin
+    Result := '';
+    Data := AnsiString(Copy(GetEnumName(TypeInfo, ID), 3, 128));
+    for Index := 1 to Length(Data) do begin
+      if (Data[Index] in ['A'..'Z']) then begin
+        Result := Result + ' ';
+      end;
+      Result := Result + String(Data[Index]);
+    end;
+  end;
+
+begin
+  List.Clear;
+  for ID := Low to High do begin
+    List.Add(New(ID, GetName));
+  end;
+end;
+
+
+
+initialization
+  Classes.RegisterClass(TDBIEnumName);
+  Classes.RegisterClass(TDBIFieldData);
 
 end.

@@ -2462,24 +2462,30 @@ var
     StrLCopy(Result^.szName, PDBIChar(TDBIString(FieldName)), SizeOf(Result^.szName));
 
     // Set Field Attributes
+    Attributes := [];
+
     if IsNullFlagField(Result) then begin
-      Attributes := [DB.faReadOnly, DB.faHiddenCol];
+      Include(Attributes, db.faReadOnly);
+      Include(Attributes, db.faHiddenCol);
     end
     else begin
       // If property is readonly then make field readonly
       if not Assigned(PropInfo.SetProc) then begin
-        Attributes := [DB.faReadonly];
-      end
-      else begin
-        Attributes := [];
+        Include(Attributes, db.faReadonly);
       end;
+
+      // If property stored is false then set Attribute to db.faUnNamed to indicate not to include it
+      if not Assigned(PropInfo.StoredProc) then begin
+        Include(Attributes, db.faUnNamed);
+      end;
+
 {##NULL
       // Is Field nullable
       if NullFlags.IsNullable then begin
-        Exclude(Attributes, DB.faRequired);
+        Exclude(Attributes, db.faRequired);
       end
       else begin
-        Include(Attributes, DB.faRequired);
+        Include(Attributes, db.faRequired);
       end;
 //}
     end;
