@@ -149,7 +149,6 @@ type
 type
   TDBIProperties = class(TStringList)
   public
-    class procedure GetProperties(AClass: TClass; Strings: TStrings); overload;
     class procedure GetProperties(AInstance: TObject; Strings: TStrings); overload;
   end;
 
@@ -544,19 +543,12 @@ end;
 
 { TDBIPropertyList }
 
-class procedure TDBIProperties.GetProperties(AInstance: TObject; Strings: TStrings);
-begin
-  GetProperties(AInstance.ClassType, Strings);
-
-end;
-
-
 // _____________________________________________________________________________
 {**
   Jvr - 13/09/2011 19:16:00 - Initial code.<br />
 }
-class procedure TDBIProperties.GetProperties(AClass: TClass; Strings: TStrings);
-  function ReadProperty(ClassInfo: Pointer; PropInfo: PPropInfo): String;
+class procedure TDBIProperties.GetProperties(AInstance: TObject; Strings: TStrings);
+  function ReadProperty(PropInfo: PPropInfo): String;
   begin
     Result := '';
     if (
@@ -567,13 +559,13 @@ class procedure TDBIProperties.GetProperties(AClass: TClass; Strings: TStrings);
       (PropInfo^.Name <> 'Name')) then
     begin
       case PropInfo^.PropType^.Kind of
-        tkString, tkWstring, tkLString{$ifdef DELPHIxe2}, tkUString{$endif}: Result := GetStrProp(ClassInfo, PropInfo);
-        tkFloat: Result := FloatToStr(GetFloatProp(ClassInfo, PropInfo));
-        tkInteger: Result := IntToStr(GetOrdProp(ClassInfo, PropInfo));
-        tkInt64: Result := IntToStr(GetInt64Prop(ClassInfo, PropInfo));
-        tkEnumeration: Result := GetEnumProp(ClassInfo, PropInfo);
-        tkChar, tkWChar: Result := Chr(GetOrdProp(ClassInfo, PropInfo));
-        tkSet: Result := GetSetProp(ClassInfo, PropInfo, False);
+        tkString, tkWstring, tkLString{$ifdef DELPHIxe2}, tkUString{$endif}: Result := GetStrProp(AInstance, PropInfo);
+        tkFloat: Result := FloatToStr(GetFloatProp(AInstance, PropInfo));
+        tkInteger: Result := IntToStr(GetOrdProp(AInstance, PropInfo));
+        tkInt64: Result := IntToStr(GetInt64Prop(AInstance, PropInfo));
+        tkEnumeration: Result := GetEnumProp(AInstance, PropInfo);
+        tkChar, tkWChar: Result := Chr(GetOrdProp(AInstance, PropInfo));
+        tkSet: Result := GetSetProp(AInstance, PropInfo, False);
       else
         raise Exception.CreateFmt(
           'Property "%s" of type "%s" not supported',
@@ -592,11 +584,11 @@ var
 
 begin
   PropList := Local(TList.Create).Obj as TList;
-  PropList.Count := GetTypeData(AClass.ClassInfo)^.PropCount;
+  PropList.Count := GetTypeData(AInstance.ClassInfo)^.PropCount;
   if PropList.Count > 0 then begin
-    GetPropInfos(AClass.ClassInfo, PPropList(PropList.List));
+    GetPropInfos(AInstance.ClassInfo, PPropList(PropList.List));
     for PropIndex := 0 to PropList.Count - 1 do begin
-      ReadProperty(AClass.ClassInfo, PropList[PropIndex]);
+      ReadProperty(PropList[PropIndex]);
     end;
   end;
 end;
@@ -678,7 +670,7 @@ begin
       Result := ftBoolean;
     end
     else begin
-      Result := FieldOrdTypeMap[PropInfo^.PropType^.TypeData^.OrdType];
+      Result := FieldOrdTypeMap[GetTypeData(PropInfo)^.OrdType];
     end;
   end
   else begin
