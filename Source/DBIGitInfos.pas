@@ -329,6 +329,7 @@ type
     function GetParameters: String; override;
 
   public
+    function Execute: Boolean; override;
     function FileFind(const AFileName: String; const APathName: String): Boolean;
 
     property FileName;
@@ -383,7 +384,7 @@ type
 implementation
 
 uses
-  SysConst, DBIUtils, DBIStrings, DBIDialogs;
+  SysConst, UITypes, DBIUtils, DBIStrings, DBIDialogs;
 
 
 function Is64Bit: Boolean;
@@ -466,6 +467,21 @@ end;
 
 
 { TDBIGitFileSearch }
+
+function TDBIGitFileSearch.Execute: Boolean;
+const
+  Prompt = 'Command "%s" failed';
+
+begin
+  Emit(Self, '', ioTrace);
+  Emit(Self, '[ ' + SourceName + ' ] ' + GetCommandLine, ioTrace);
+
+  Result := ProcessExecute;
+  if not Result then begin
+    Emit(Self, 'File "' + FileName + '" NOT found! ', ioWarning);
+  end;
+end;
+
 
 function TDBIGitFileSearch.FileFind(const AFileName: String; const APathName: String): Boolean;
 begin
@@ -706,8 +722,7 @@ end;
 function TDBIGitLogInfo.GetParameters: String;
 begin
   Result :=
-//##JVR    'log --all --follow --pretty=format:"' +
-    'log --all --pretty=format:"' +
+    'log --follow --pretty=format:"' +
     '<ROW ' +
     'Hash=%x0B%H%x0B ' +
 
@@ -834,7 +849,7 @@ begin
   Emit(Self, '', ioTrace);
   Emit(Self, '[ ' + SourceName + ' ] ' + GetCommandLine, ioTrace);
 
-  Result := inherited Execute;
+  Result := ProcessExecute;
 
   if not Result then begin
     raise EGitStatusError.Create('Fatal Git Error! Command Failed.');

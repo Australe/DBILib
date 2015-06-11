@@ -49,8 +49,8 @@ type
 
 
 type
-  TDBIProcessEmitKind = (ioNone, ioStdin, ioStdout, ioStderr, ioInfo, ioTrace, ioError, ioDebug);
-  TDBIProcessEmit = procedure(Sender: TObject; const Message: String; const Emitind: TDBIProcessEmitKind) of object;
+  TDBIProcessEmitKind = (ioNone, ioStdin, ioStdout, ioStderr, ioInfo, ioTrace, ioWarning, ioError, ioDebug);
+  TDBIProcessEmit = procedure(Sender: TObject; const Message: String; const EmitKind: TDBIProcessEmitKind) of object;
 
   TDBIProcessInfoOption = (piCtrlCAbort, piDetachedProcess, piRedirectOutput, piVerbose);
   TDBIProcessInfoOptions = set of TDBIProcessInfoOption;
@@ -107,6 +107,7 @@ type
     procedure ProcessCloseHandles;
     function ProcessCreate: Boolean;
     procedure ProcessEnd; virtual;
+    function ProcessExecute: Boolean; virtual;
     function ProcessIdle: Boolean; virtual;
     function ProcessOutput(hRead: THandle; var TextBuffer: AnsiString; const Eof: Boolean): Boolean;
     procedure ProcessOutputLine(const Value: AnsiString); virtual;
@@ -350,87 +351,8 @@ end;
 
 
 function TDBICustomProcess.Execute: Boolean;
-const
-  ExitCode_SUCCESS = 0;
-  ExitCode_STILL_ACTIVE = 259;
-
-var
-  OutputBuffer: AnsiString;
-  OrgEnvPath: String;
-
-  function Processing: Boolean;
-  begin
-    Result := not (piDetachedProcess in Options);
-    if Result then begin
-      Result := WaitForSingleObject(FProcessInfo.hProcess, 80) = WAIT_TIMEOUT;
-    end
-    else begin
-      RegisterDetachedCallback;
-
-      WaitForInputIdle(FProcessInfo.hProcess, Infinite);
-    end;
-  end;
-
 begin
-  FAborted := False;
-  FExitCode := -2;
-  FTickOffset := GetTickCount;
-  OutputBuffer := '';
-
-  Result := ProcessStartupInfo;
-  if not Result then begin
-    Exit;
-  end;
-
-  try
-    OrgEnvPath := GetEnvironmentVariable('PATH');
-    if (EnvironmentPath <> '') then begin
-      SetEnvironmentVariable('PATH', Pointer(EnvironmentPath));
-    end;
-
-    try
-      Result := ProcessCreate;
-      if Result then begin
-        ProcessBegin;
-
-        ResumeThread(FProcessInfo.hThread);
-        CloseHandle(FProcessInfo.hThread);
-
-        try
-          while Processing and not Aborted do begin
-            ProcessOutput(hRead, OutputBuffer, False);
-            ProcessIdle;
-          end;
-
-          // Process remaining characters in buffer
-          ProcessOutput(hRead, OutputBuffer, True);
-
-          if Aborted then begin
-            ProcessAbort;
-          end;
-
-          // Exit-Code
-          GetExitCodeProcess(FProcessInfo.hProcess, Cardinal(FExitCode));
-
-        finally
-          ProcessClose;
-        end;
-      end
-      else begin
-        Win32Check(False);
-        FExitCode := -1;
-      end;
-
-    finally
-      if (EnvironmentPath <> '') then begin
-        SetEnvironmentVariable('PATH', Pointer(OrgEnvPath));
-      end;
-    end;
-  finally
-    ProcessCloseHandles;
-  end;
-
-  Result := (ExitCode = ExitCode_SUCCESS) or (ExitCode = ExitCode_STILL_ACTIVE);
+  Result := ProcessExecute;
 end;
 
 
@@ -577,6 +499,91 @@ begin
 
     CloseHandle(FProcessInfo.hProcess);
   end;
+end;
+
+
+function TDBICustomProcess.ProcessExecute: Boolean;
+const
+  ExitCode_SUCCESS = 0;
+  ExitCode_STILL_ACTIVE = 259;
+
+var
+  OutputBuffer: AnsiString;
+  OrgEnvPath: String;
+
+  function Processing: Boolean;
+  begin
+    Result := not (piDetachedProcess in Options);
+    if Result then begin
+      Result := WaitForSingleObject(FProcessInfo.hProcess, 80) = WAIT_TIMEOUT;
+    end
+    else begin
+      RegisterDetachedCallback;
+
+      WaitForInputIdle(FProcessInfo.hProcess, Infinite);
+    end;
+  end;
+
+begin
+  FAborted := False;
+  FExitCode := -2;
+  FTickOffset := GetTickCount;
+  OutputBuffer := '';
+
+  Result := ProcessStartupInfo;
+  if not Result then begin
+    Exit;
+  end;
+
+  try
+    OrgEnvPath := GetEnvironmentVariable('PATH');
+    if (EnvironmentPath <> '') then begin
+      SetEnvironmentVariable('PATH', Pointer(EnvironmentPath));
+    end;
+
+    try
+      Result := ProcessCreate;
+      if Result then begin
+        ProcessBegin;
+
+        ResumeThread(FProcessInfo.hThread);
+        CloseHandle(FProcessInfo.hThread);
+
+        try
+          while Processing and not Aborted do begin
+            ProcessOutput(hRead, OutputBuffer, False);
+            ProcessIdle;
+          end;
+
+          // Process remaining characters in buffer
+          ProcessOutput(hRead, OutputBuffer, True);
+
+          if Aborted then begin
+            ProcessAbort;
+          end;
+
+          // Exit-Code
+          GetExitCodeProcess(FProcessInfo.hProcess, Cardinal(FExitCode));
+
+        finally
+          ProcessClose;
+        end;
+      end
+      else begin
+        Win32Check(False);
+        FExitCode := -1;
+      end;
+
+    finally
+      if (EnvironmentPath <> '') then begin
+        SetEnvironmentVariable('PATH', Pointer(OrgEnvPath));
+      end;
+    end;
+  finally
+    ProcessCloseHandles;
+  end;
+
+  Result := (ExitCode = ExitCode_SUCCESS) or (ExitCode = ExitCode_STILL_ACTIVE);
 end;
 
 
