@@ -147,6 +147,9 @@ type
     function Execute: Boolean; virtual;
 
     class function Instance: TDBICustomProcess; virtual;
+{$ifndef fpc}
+    class function ProcessExists(ProgramName: String): Boolean;
+{$endif}
     class procedure Release; virtual;
 
   end;
@@ -207,6 +210,10 @@ type
 
 implementation
 
+{$ifndef fpc}
+uses
+  TlHelp32;
+{$endif}
 
 type
   WaitOrTimerCallback = procedure (Instance: TDBIProcess; TimeOrWaitFired: Boolean); stdcall;
@@ -585,6 +592,34 @@ begin
 
   Result := (ExitCode = ExitCode_SUCCESS) or (ExitCode = ExitCode_STILL_ACTIVE);
 end;
+
+
+{$ifndef fpc}
+class function TDBICustomProcess.ProcessExists(ProgramName: String): Boolean;
+var
+  ContinueLoop: BOOL;
+  FSnapshotHandle: THandle;
+  FProcessEntry32: TProcessEntry32;
+
+begin
+  Result := False;
+  ProgramName := UpperCase(ProgramName);
+
+  FSnapshotHandle := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  FProcessEntry32.dwSize := SizeOf(FProcessEntry32);
+  ContinueLoop := Process32First(FSnapshotHandle, FProcessEntry32);
+
+  while (Integer(ContinueLoop) <> 0) and not Result do begin
+    Result :=
+      (ProgramName = UpperCase(ExtractFileName(FProcessEntry32.szExeFile))) or
+      (ProgramName = UpperCase(FProcessEntry32.szExeFile));
+
+    ContinueLoop := Process32Next(FSnapshotHandle, FProcessEntry32);
+  end;
+
+  CloseHandle(FSnapshotHandle);
+end;
+{$endif}
 
 
 function TDBICustomProcess.ProcessIdle: Boolean;

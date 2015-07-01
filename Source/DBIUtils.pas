@@ -197,14 +197,24 @@ type
 type
   TDBIHostInfo = class(TPersistent)
   public
+    class function GetCacheUserFolder: String;
     class function GetComputerName: String;
     class function GetLocalHostName: String;
     class function GetUserName: WideString;
 
   public
+    property CacheUserFolder: String read GetCacheUserFolder;
     property ComputerName: String read GetComputerName;
     property HostName: String read GetLocalHostName;
     property UserName: WideString read GetUserName;
+
+  end;
+
+
+type
+  TDBIMouseInfo = class(TPersistent)
+  public
+    class function GetShiftState: TShiftState;
 
   end;
 
@@ -258,9 +268,6 @@ var                           { Taken from Delphi System.pas }
 implementation
 
 uses
-{$ifndef fpc}
-  Controls,
-{$endif}
   WinSock, TypInfo, Dialogs, Contnrs, Registry, DBIXbaseConsts;
 
 
@@ -310,6 +317,27 @@ end;
 
 
 
+{ TDBIMouseInfo }
+
+class function TDBIMouseInfo.GetShiftState: TShiftState;
+var
+  KeyState: TKeyboardState;
+
+begin
+  GetKeyboardState(KeyState);
+  Result := KeyboardStateToShiftState(KeyState);
+end;
+
+
+
+
+
+class function TDBIHostInfo.GetCacheUserFolder: String;
+begin
+  Result := ExtractFilePath(ParamStr(0)) + 'cache\' + TDBIHostInfo.GetUserName + '\';
+end;
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 26/07/2005 17:20:20 - Initial code.<br>
@@ -325,7 +353,7 @@ begin
   Win32Check(Windows.GetComputerName(@Buffer[0], Size));
 {$Warnings On}
   Result := string(Buffer);
-end;  { GetMachineName }
+end;
 
 
 // _____________________________________________________________________________

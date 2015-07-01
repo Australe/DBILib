@@ -49,6 +49,8 @@ type
 
 
 type
+  TDBIMemoPosition = (mpColumn, mpPosition, mpRow);
+
   TDBIMemo = class(TMemo)
   private
     FStartIndex: Integer;
@@ -57,10 +59,12 @@ type
     FHighLightedText: String;
 
     procedure WMLButtonDown(var Message: TWMLButtonDown); message WM_LBUTTONDOWN;
+    procedure WMRButtonDown(var Message: TWMRButtonDown); message WM_RBUTTONDOWN;
     procedure WMPaint(var Msg: TWMPaint); message WM_PAINT;
 
   protected
     procedure DrawLine(First, Last: Integer);
+    function GetPosition(const Index: TDBIMemoPosition): Integer;
     function GetRow(const CharIndex: Integer): Integer;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     function SelectWordAtCaret: string;
@@ -73,6 +77,10 @@ type
 
     property HighLightColor: TColor read FHighLightColor write FHighLightColor;
     property HighLightedText: String read FHighLightedText;
+
+    property Column: Integer index mpColumn read GetPosition;
+    property Position: Integer index mpPosition read GetPosition;
+    property Row: Integer index mpRow read GetPosition;
 
   end;
 
@@ -200,7 +208,7 @@ implementation
 {. $R *.DFM}
 
 uses
-  DBIUTils;
+  DBIUtils;
 
 const
   clHotLight = $00CC6600;
@@ -670,6 +678,26 @@ begin
 end;
 
 
+function TDBIMemo.GetPosition(const Index: TDBIMemoPosition): Integer;
+var
+  CharIndex: Integer;
+  Column: Integer;
+  Row: Integer;
+
+begin
+  CharIndex := SelStart;
+  Row := Perform(EM_LINEFROMCHAR, CharIndex, 0);
+  Column := CharIndex - Perform(EM_LINEINDEX, Row, 0) ;
+
+  case Index of
+    mpColumn: Result := Column;
+    mpRow: Result := Row;
+  else
+    Result := CharIndex;
+  end;
+end;
+
+
 function TDBIMemo.GetRow(const CharIndex: Integer): Integer;
 begin
   Result := SendMessage(Handle, EM_LINEFROMCHAR, CharIndex, 0);
@@ -702,9 +730,6 @@ const
   InValidChars = [' ', ',', ':', ';'];
 
 var
-  CharIndex: Integer;
-  Row: Integer;
-  Column: Integer;
   Line: string;
   InitPos: Integer;
   EndPos: Integer;
@@ -713,11 +738,6 @@ begin
   FHighLightedText := '';
   FStartIndex := 0;
   FEndIndex := 0;
-
-  // Get the caret position
-  CharIndex := SelStart;
-  Row := Perform(EM_LINEFROMCHAR, CharIndex, 0) ;
-  Column := CharIndex - Perform(EM_LINEINDEX, Row, 0) ;
 
   // Validate the line number
   if Lines.Count-1 < Row then begin
@@ -772,6 +792,17 @@ begin
 
   if (ssCtrl in KeysToShiftState(Message.Keys)) and not (csNoStdEvents in ControlStyle) then begin
     SelectWordAtCaret;
+  end;
+end;
+
+
+procedure TDBIMemo.WMRButtonDown(var Message: TWMRButtonDown);
+begin
+  inherited;
+
+  if (ssCtrl in KeysToShiftState(Message.Keys)) and not (csNoStdEvents in ControlStyle) then begin
+    Mouse_Event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+    Mouse_Event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
   end;
 end;
 

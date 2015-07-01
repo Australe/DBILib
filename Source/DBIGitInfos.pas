@@ -39,18 +39,35 @@ type
 
 type
   TDBIGitFileStatus = (gfsCommitted, gfsStaged, gfsUnstaged, gfsUntracked);
-  TDBIPathType = ( ptCmd, ptCmdWOW64, ptGit, ptGrep, ptXE3, ptD2006, ptSource, pt3rdParty );
+  TDBIPathType = (
+    ptCmdCompare,
+    ptCmdExplorer,
+    ptCmdNotePad,
+    ptCmdWIN32,
+    ptCmdWOW64,
+    ptGitConfig,
+    ptGit,
+    ptGrep,
+    ptXE3,
+    ptD2006,
+    ptSource,
+    pt3rdParty
+    );
 
 const
   PathNames: array[TDBIPathType] of String = (
-    { ptCmd       }  'C:\Windows\System32\cmd.exe /c',
-    { ptCmdWOW64  }  'C:\Windows\SysWOW64\cmd.exe /c',
-    { ptGit       }  'C:\Program Files\git\bin\git.exe',
-    { ptGrep      }  'C:\Program Files\Git\bin\grep.exe',
-    { ptXE3       }  'C:\Program Files\Embarcadero\RAD Studio\11.0\Source\',
-    { pt2006      }  'C:\Program Files\Borland\BDS\4.0\Source\',
-    { ptSource    }  'O:\Prj\omSource\',
-    { pt3rdParty  }  'O:\Prj\3rdParty\'
+    { ptCmdCompare  }  'C:\Program Files\Beyond Compare 3\bcomp.exe',
+    { ptCmdExplorer }  'C:\Windows\explorer.exe',
+    { ptCmdNotePad  }  'C:\Windows\System32\notepad.exe',
+    { ptCmdWIN32    }  'C:\Windows\System32\cmd.exe /c',
+    { ptCmdWOW64    }  'C:\Windows\SysWOW64\cmd.exe /c',
+    { ptGitConfig   }  '\.git\config',
+    { ptGit         }  'C:\Program Files\git\bin\git.exe',
+    { ptGrep        }  'C:\Program Files\Git\bin\grep.exe',
+    { ptXE3         }  'C:\Program Files\Embarcadero\RAD Studio\11.0\Source\',
+    { pt2006        }  'C:\Program Files\Borland\BDS\4.0\Source\',
+    { ptSource      }  'O:\Prj\omSource\',
+    { pt3rdParty    }  'O:\Prj\3rdParty\'
     );
 
 
@@ -133,17 +150,13 @@ type
       const EmitKind: TDBIProcessEmitKind
       ); override;
 
-    class function ExtractRelativeUnixName(
-      const FileName: String;
-      const SourceName: String
-      ): String;
-
+    function GetFileName: TFileName; virtual;
     function GetRepositoryName: String; overload;
     function GetStream: TStream;
     function GetTargetName: String; override;
     procedure SetFileName(const Value: TFileName); virtual;
 
-    property FileName: TFileName read FFileName write SetFileName;
+    property FileName: TFileName read GetFileName write SetFileName;
     property Stream: TStream read GetStream;
     property RepositoryName: String read GetRepositoryName;
 
@@ -151,6 +164,11 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function Execute: Boolean; override;
+
+    class function ExtractRelativeUnixName(
+      const FileName: String;
+      const SourceName: String
+      ): String;
 
     class function GetRepositoryName(const AFileName: TFileName): String; overload;
 
@@ -220,6 +238,23 @@ type
     property FileName;
     property SourceName;
     property Stream;
+
+  end;
+
+
+type
+  TDBIGitShowInfo = class(TDBIGitCustomCommandProcessor)
+  private
+    FSha1: String;
+
+  protected
+    function GetParameters: String; override;
+
+  public
+    property FileName;
+    property Sha1: String read FSha1 write FSha1;
+    property SourceName;
+    property Output;
 
   end;
 
@@ -323,18 +358,34 @@ type
 
 
 type
-  TDBIGitFileSearch = class(TDBIGitCustomCommandProcessor)
+  TDBIGitCustomFileSearch = class(TDBIGitCustomCommandProcessor)
   protected
     function GetCommandLine: String; override;
     function GetParameters: String; override;
 
   public
     function Execute: Boolean; override;
-    function FileFind(const AFileName: String; const APathName: String): Boolean;
 
     property FileName;
     property Output;
     property SourceName;
+
+  end;
+
+
+type
+  TDBIGitFileSearch = class(TDBIGitCustomFileSearch)
+  private
+    FCaption: String;
+
+  public
+    class function FindFile(FileName: String): Boolean;
+
+    function Execute: Boolean; override;
+    function GetWindowsFileName: String;
+    procedure MessageFileNotFound;
+
+    property Caption: String read FCaption write FCaption;
 
   end;
 
@@ -468,7 +519,96 @@ end;
 
 { TDBIGitFileSearch }
 
+type
+  SearchTypes = ptSource..pt3rdParty;
+
 function TDBIGitFileSearch.Execute: Boolean;
+const
+  Title = 'Select applicable file name';
+
+var
+  PathType: TDBIPathType;
+  TempName: TFileName;
+
+begin
+  TempName := '';
+  Output.Clear;
+
+  if (Caption = '') then begin
+    Caption := Title;
+  end;
+
+  for PathType := Low(SearchTypes) to High(SearchTypes) do begin
+    SourceName := PathNames[PathType];
+
+    inherited Execute;
+
+    Result := Output.Count > 0;
+    if Result then begin
+      if (Output.Count > 1) then begin
+        TempName := TDBIDialogSelect.Execute(Output, Caption);
+      end
+      else begin
+        TempName := Output[0];
+      end;
+
+      Break;
+    end;
+  end;
+
+  Result := TempName <> '';
+  if Result then begin
+    FileName := TempName;
+  end;
+end;
+
+
+class function TDBIGitFileSearch.FindFile(FileName: String): Boolean;
+var
+  Git: TDBIGitFileSearch;
+  PathType: TDBIPathType;
+
+begin
+  FileName := ExtractFileName(FileName);
+
+  Result := (FileName <> '');
+  if Result then begin
+    Git := Local(Self.Create(nil)).Obj as Self;
+    Git.FileName := FileName;
+
+    for PathType := Low(SearchTypes) to High(SearchTypes) do begin
+      Git.SourceName := PathNames[PathType];
+      Git.ProcessExecute;
+
+      Result := Git.Output.Count > 0;
+      if Result then begin
+        Break;
+      end;
+    end;
+  end;
+end;
+
+
+function TDBIGitFileSearch.GetWindowsFileName: String;
+begin
+  Result := SourceName + StringReplace(FileName, '/', '\', [rfReplaceAll]);
+end;
+
+
+procedure TDBIGitFileSearch.MessageFileNotFound;
+const
+  Prompt = 'File "%s" not found in git!';
+begin
+  MessageDlg(Format(Prompt, [FileName]), mtWarning, [mbOK], 0);
+end;
+
+
+
+
+
+{ TDBIGitCustomFileSearch }
+
+function TDBIGitCustomFileSearch.Execute: Boolean;
 const
   Prompt = 'Command "%s" failed';
 
@@ -483,27 +623,18 @@ begin
 end;
 
 
-function TDBIGitFileSearch.FileFind(const AFileName: String; const APathName: String): Boolean;
-begin
-  FileName := AFileName;
-  SourceName := APathName;
-  Execute;
-  Result := Output.Count > 0;
-end;
-
-
-function TDBIGitFileSearch.GetCommandLine: String;
+function TDBIGitCustomFileSearch.GetCommandLine: String;
 begin
   if IsWow64 then begin
     Result := PathNames[ptCmdWOW64] + ' ' + '"' + inherited GetCommandLine + '"';
   end
   else begin
-    Result := PathNames[ptCmd] + ' ' + '"' + inherited GetCommandLine + '"';
+    Result := PathNames[ptCmdWIN32] + ' ' + '"' + inherited GetCommandLine + '"';
   end;
 end;
 
 
-function TDBIGitFileSearch.GetParameters: String;
+function TDBIGitCustomFileSearch.GetParameters: String;
 begin
   Result := 'ls-files | "' + PathNames[ptGrep] + '" -i ' + FileName;
 end;
@@ -629,7 +760,6 @@ begin
     Writer.Data.Assign(Output);
     Writer.Dataset := ODS;
     Writer.SaveToStream(Stream);
-    Writer.SaveToFile('C:\Temp\Data.xml');
   end;
 end;
 
@@ -689,6 +819,17 @@ end;
 function TDBIGitBranchInfo.GetParameters: String;
 begin
   Result := 'branch';
+end;
+
+
+
+
+
+{ TDBIGitShowInfo }
+
+function TDBIGitShowInfo.GetParameters: String;
+begin
+  Result := 'show ' + Sha1 + ':' + FileName;
 end;
 
 
@@ -789,7 +930,7 @@ begin
     Result := PathNames[ptCmdWOW64] + ' ' + '"' + inherited GetCommandLine + '"';
   end
   else begin
-    Result := PathNames[ptCmd] + ' ' + '"' + inherited GetCommandLine + '"';
+    Result := PathNames[ptCmdWIN32] + ' ' + '"' + inherited GetCommandLine + '"';
   end;
 
   Output.Add('[' + SourceName + ']');
@@ -809,16 +950,17 @@ end;
 
 function TDBIBeyondCompare.GetSourceName: String;
 begin
-  Result := 'C:\Temp\';
+  Result := TDBIHostInfo.GetCacheUserFolder;
 end;
 
 function TDBIBeyondCompare.GetTargetName: String;
-const
-  CmdNotePad = 'C:\windows\system32\notepad.exe';
-  CmdCompare = '"C:\Program Files\Beyond Compare 3\BComp.exe"';
-
 begin
-  Result := CmdCompare;
+  if FileExists(PathNames[ptCmdCompare]) then begin
+    Result := '"' + PathNames[ptCmdCompare] + '"';
+  end
+  else begin
+    Result := '"' + PathNames[ptCmdNotePad] + '"';
+  end;
 end;
 
 
@@ -829,7 +971,7 @@ end;
 
 constructor TDBIGitCustomCommandProcessor.Create(AOwner: TComponent);
 begin
-  inherited Create(Aowner);
+  inherited Create(AOwner);
 
   Options := [piRedirectOutput];
   Visible := False;
@@ -863,10 +1005,13 @@ begin
 end;
 
 
-class function TDBIGitCustomCommandProcessor.GetRepositoryName(const AFileName: TFileName): String;
-const
-  GitConfig = '\.git\config';
+function TDBIGitCustomCommandProcessor.GetFileName: TFileName;
+begin
+  Result := FFileName;
+end;
 
+
+class function TDBIGitCustomCommandProcessor.GetRepositoryName(const AFileName: TFileName): String;
 begin
   if (AFileName = '') then begin
     Result := PathNames[ptSource];
@@ -880,7 +1025,7 @@ begin
   Result := AFileName;
   while (Result <> '') do begin
     Result := ExtractFileDir(Result);
-    if FileExists(Result + GitConfig) then begin
+    if FileExists(Result + PathNames[ptGitConfig]) then begin
       Result := Result + '\';
       Break;
     end;
@@ -1000,6 +1145,7 @@ end;
 
 class procedure TDBIGitStatus.UpdateFields(ADataset: TDataset);
 begin
+  ADataset.FieldByName('Status').Alignment := taRightJustify;
   ADataset.FieldByName('Status').DisplayWidth := 4;
   ADataset.FieldByName('FileName').DisplayWidth := 80;
   ADataset.FieldByName('SourceName').DisplayWidth := 80;
