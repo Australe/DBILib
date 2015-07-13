@@ -43,6 +43,7 @@ type
     ptCmdCompare,
     ptCmdExplorer,
     ptCmdNotePad,
+    ptCmdRunDll,
     ptCmdWIN32,
     ptCmdWOW64,
     ptGitConfig,
@@ -59,6 +60,7 @@ const
     { ptCmdCompare  }  'C:\Program Files\Beyond Compare 3\bcomp.exe',
     { ptCmdExplorer }  'C:\Windows\explorer.exe',
     { ptCmdNotePad  }  'C:\Windows\System32\notepad.exe',
+    { ptCmdRunDll   }  'rundll32.exe',
     { ptCmdWIN32    }  'C:\Windows\System32\cmd.exe /c',
     { ptCmdWOW64    }  'C:\Windows\SysWOW64\cmd.exe /c',
     { ptGitConfig   }  '\.git\config',
@@ -386,6 +388,7 @@ type
     procedure MessageFileNotFound;
 
     property Caption: String read FCaption write FCaption;
+    property Options;
 
   end;
 
@@ -958,8 +961,15 @@ begin
   if FileExists(PathNames[ptCmdCompare]) then begin
     Result := '"' + PathNames[ptCmdCompare] + '"';
   end
-  else begin
+
+  // This is a hack and should be removed in the future
+  else if FileExists(PathNames[ptCmdNotePad]) then begin
     Result := '"' + PathNames[ptCmdNotePad] + '"';
+  end
+
+  else begin
+    raise Exception.CreateFmt(
+      'Beyond Compare Application Not Found "%s"', [ PathNames[ptCmdCompare] ]);
   end;
 end;
 

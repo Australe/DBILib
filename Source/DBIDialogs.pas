@@ -402,6 +402,9 @@ begin
         else begin
           Result := Strings[Dialog.ListBox.ItemIndex];
         end;
+      end
+      else begin
+        abort;
       end;
 
     finally

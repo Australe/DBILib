@@ -252,6 +252,15 @@ function FileIsReadOnly(const FileName: string): Boolean;
 function GetEnvironmentVariable(lpName: PChar; lpBuffer: PChar; nSize: Cardinal): LongWord;
 {$endif}
 
+type
+  TDBIHtmlToTextOption = (
+    htRemoveQuote,
+    htRemoveApostrophe,
+    htRemoveLineBreak
+    );
+  TDBIHtmlToTextOptions = set of TDBIHtmlToTextOption;
+
+function HtmlToText(Html: String; const Options: TDBIHtmlToTextOptions): String;
 
 function SwapDWord(Value: LongWord): LongWord;
 function SwapDouble(Value: Double): Double;
@@ -1170,6 +1179,72 @@ begin
   raise Exception.CreateFmt('DBIUtils::GetEnvironmentVariable() Not implemented for FPC', []);
 end;
 {$endif}
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 22/03/2013 15:34:28 - Origin: Scalabium Software - http://www.scalabium.com <br>
+}
+function HtmlToText(Html: String; const Options: TDBIHtmlToTextOptions): String;
+const
+  Quotes: array[Boolean] of String = (#34, '');
+  Apostrophes: array[Boolean] of String = (#39, '');
+
+var
+  PHtml: PAnsiChar;
+  InTag: Boolean;
+  Text: AnsiString;
+
+begin
+  Html := StringReplace(Html, '<br>', sLineBreak,  [rfReplaceAll, rfIgnoreCase]);
+  Html := StringReplace(Html, '</p>', sLineBreak + sLineBreak,  [rfReplaceAll, rfIgnoreCase]);
+  Html := StringReplace(Html, '<li>', '* ',  [rfReplaceAll, rfIgnoreCase]);
+  Html := StringReplace(Html, '</li>', sLineBreak,  [rfReplaceAll, rfIgnoreCase]);
+  Html := StringReplace(Html, '&nbsp;', ' ',  [rfReplaceAll, rfIgnoreCase]);
+
+  PHtml := PAnsiChar(AnsiString(Html));
+  Text := '';
+
+  InTag := False;
+  repeat
+    case PHtml^ of
+      '<': InTag := True;
+      '>': InTag := False;
+
+      #34:
+        if not (htRemoveQuote in Options) then begin
+          Text := Text + AnsiChar(PHtml^);
+        end;
+
+      #39:
+        if not (htRemoveApostrophe in Options) then begin
+          Text := Text + AnsiChar(PHtml^);
+        end;
+
+      #13, #10:
+        if not (htRemoveLineBreak in Options) then begin
+          Text := Text + AnsiChar(PHtml^);
+        end;
+
+      else
+        if not InTag then begin
+          if (PHtml^ in [#9, #32]) and ((PHtml+1)^ in [#10, #13, #32, #9, '<']) then
+          else
+            Text := Text + AnsiChar(PHtml^);
+        end;
+    end;
+    Inc(PHtml);
+  until (PHtml^ = #0);
+
+  Result := String(Text);
+
+  { convert system characters }
+  Result := StringReplace(Result, '&quot;', Quotes[htRemoveQuote in Options],  [rfReplaceAll, rfIgnoreCase]);
+  Result := StringReplace(Result, '&apos;', Apostrophes[htRemoveApostrophe in Options], [rfReplaceAll, rfIgnoreCase]);
+  Result := StringReplace(Result, '&gt;', '>',  [rfReplaceAll, rfIgnoreCase]);
+  Result := StringReplace(Result, '&lt;', '<',  [rfReplaceAll, rfIgnoreCase]);
+  Result := StringReplace(Result, '&amp;',  '&',  [rfReplaceAll, rfIgnoreCase]);
+end;
 
 
 // _____________________________________________________________________________

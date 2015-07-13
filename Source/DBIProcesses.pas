@@ -52,7 +52,7 @@ type
   TDBIProcessEmitKind = (ioNone, ioStdin, ioStdout, ioStderr, ioInfo, ioTrace, ioWarning, ioError, ioDebug);
   TDBIProcessEmit = procedure(Sender: TObject; const Message: String; const EmitKind: TDBIProcessEmitKind) of object;
 
-  TDBIProcessInfoOption = (piCtrlCAbort, piDetachedProcess, piRedirectOutput, piVerbose);
+  TDBIProcessInfoOption = (piCtrlCAbort, piDetachedProcess, piRedirectOutput, piVerbose, piVerifyTargetName);
   TDBIProcessInfoOptions = set of TDBIProcessInfoOption;
   
 
@@ -86,6 +86,8 @@ type
     FOnProcessEnd: TNotifyEvent;
 
   protected
+    function CheckTargetName: String;
+
     procedure Emit(
       Sender: TObject;
       const Message: String;
@@ -94,6 +96,7 @@ type
 
     function GetCommandLine: String; virtual;
     function GetEnvironmentVariable(const Name: String): String;
+    function GetDebugInfo: String;
     function GetOutput: TStrings; virtual;
     function GetParameters: String; virtual;
     function GetSourceName: String; virtual;
@@ -113,6 +116,7 @@ type
     procedure ProcessOutputLine(const Value: AnsiString); virtual;
     function ProcessStartupInfo: Boolean;
 
+    procedure RaiseLastOSError;
     procedure RegisterDetachedCallback;
 
     procedure SetEnvironmentPath(const Value: String);
@@ -311,6 +315,16 @@ type
   TDBIOutputList = class(TStringList);
 
 
+function TDBICustomProcess.CheckTargetName: String;
+begin
+  Result :=   StringReplace(TargetName, '"', '', [rfReplaceAll]);
+
+  if (piVerifyTargetName in Options) and (Result <> '') and not FileExists(Result) then begin
+    raise Exception.CreateFmt('TargetName "%s" Not Found', [Result]);
+  end;
+end;
+
+
 constructor TDBICustomProcess.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -363,8 +377,28 @@ begin
 end;
 
 
+function TDBICustomProcess.GetDebugInfo: String;
+begin
+  Result := '';
+
+  if (TargetName <> '') then begin
+    Result := Result + 'TargetName: ' + TargetName + sLineBreak;
+  end;
+
+  if (SourceName <> '') then begin
+    Result := Result + 'SourceName: ' + SourceName + sLineBreak;
+  end;
+
+  if (Parameters <> '') then begin
+    Result := Result + 'Parameters: ' + Parameters + sLineBreak;
+  end;
+end;
+
+
 function TDBICustomProcess.GetCommandLine: String;
 begin
+  CheckTargetName;
+
   Result := TargetName + ' ' + Parameters;
 end;
 
@@ -577,8 +611,9 @@ begin
         end;
       end
       else begin
-        Win32Check(False);
         FExitCode := -1;
+
+        RaiseLastOSError;
       end;
 
     finally
@@ -720,6 +755,30 @@ begin
 
   FStartupInfo.dwFlags :=
     RedirectOutputFlag[piRedirectOutput in Options] or ShowWindowFlag[Visible];
+end;
+
+
+procedure TDBICustomProcess.RaiseLastOSError;
+const
+  SysOSError = 'System Error.  Code: %d.' + sLineBreak + '%s';
+  SysUnkOSError = 'A call to an OS function failed';
+
+var
+  Error: EOSError;
+  LastError: Integer;
+
+begin
+  LastError := GetLastError;
+
+  if (LastError <> 0) then begin
+    Error := EOSError.CreateFmt(GetDebugInfo + SysOSError, [LastError, SysErrorMessage(LastError)]);
+  end
+  else begin
+    Error := EOSError.Create(GetDebugInfo + SysUnkOSError);
+  end;
+
+  Error.ErrorCode := LastError;
+  raise Error;
 end;
 
 

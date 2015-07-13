@@ -34,6 +34,7 @@ uses
 
 type
   TDBISourceFileNameType = (snWindowsFileName, snUnixFileName);
+  TDBIShellOpenFileAction = (soFileOpenFolder, soFileOpenWith, soFileOpenWithDefault);
 
   TDBICustomSourceFileInfo = class(TComponent)
   private
@@ -41,24 +42,34 @@ type
     FFileName: String;
     FFileLineNo: Integer;
     FGitFileSearch: TDBIGitFileSearch;
+    FGitFileShow: TDBIGitShowInfo;
     FSha1: String;
     FVclFiles: TDBIFileList;
 
-
-    class function ExtractValidFileName(FileName: String): String; static;
-
   protected
     function FileFind: Boolean;
+
+    class function ExtractValidFileName(FileName: String): String; static;
     class function FileOpenBDS(FileName: string; LineNo: Integer): Boolean;
+    class function FileOpenCompare(
+      const FileName1: String;
+      const FileName2: String = ''
+      ): Boolean;
 
     function GetFileExtension: String;
-    function GetGitFileSearch: TDBIGitFileSearch;
 
-    function GetVclFileName(var TargetName: String): Boolean;
+    function GetGitFileName(var FileName: String): Boolean;
+    function GetGitFileSearch: TDBIGitFileSearch;
+    function GetGitFileShow: TDBIGitShowInfo;
+    function GetShaFileName(var FileName: String): Boolean;
+
+    function GetVclFileName(var FileName: String): Boolean;
     function GetVclFiles: TDBIFileList;
     function GetFileShortName: String;
 
-    property Git: TDBIGitFileSearch read GetGitFileSearch;
+
+    property GitSearch: TDBIGitFileSearch read GetGitFileSearch;
+    property GitSha: TDBIGitShowInfo read GetGitFileShow;
     property VclFiles: TDBIFileList read GetVclFiles;
 
   public
@@ -67,15 +78,13 @@ type
     function CopyToClipboard(const FileNameType: TDBISourceFileNameType): Boolean;
     class function ExtractLineNumber(TextLine: String): Integer;
 
-    function FileOpenWithDefault: Boolean;
-
-    function FileOpenCFM: Boolean;
-    function FileOpenDefault: Boolean;
-    function FileOpenJS: Boolean;
-    function FileOpenPAS: Boolean;
+    function FileOpenCFM(const FileName: String): Boolean;
+    function FileOpenDefault(const FileName: String): Boolean;
+    function FileOpenJS(const FileName: String): Boolean;
+    function FileOpenPAS(const FileName: String): Boolean;
+    function FileOpenRailo: Boolean;
     function FileOpenRegistered: Boolean;
-    function FileOpenWith: Boolean;
-    function FolderOpen: Boolean;
+    function FileOpenShell(const Action: TDBIShellOpenFileAction): Boolean;
 
     function IsRegisteredFileExtension: Boolean;
     function IsValidFileExtension(Extensions: array of String): Boolean;
@@ -174,6 +183,7 @@ type
     procedure Popup(X:Integer=-1; Y: Integer=-1); override;
     function FileOpen: Boolean;
 
+    function SetFileData(const FileName: String; const Sha1: String = ''): Boolean;
     function SetFileName(const FileName: String; const LineNo: Integer = 1): Boolean;
 
     property MenuItemCopyUnixFileName: TMenuItem read GetMenuItemCopyUnixFileName;
@@ -345,6 +355,19 @@ begin
   inherited Popup(X, Y);
 end;
 
+
+function TDBIPopupMenuSourceFile.SetFileData(const FileName: String; const Sha1: String): Boolean;
+begin
+  Actions.SetFileName(FileName);
+  Actions.Sha1 := Sha1;
+
+  Result := Actions.IsValidFileName;
+  if Result then begin
+    MenuItemTitle.Caption := Actions.FileShortName;
+  end;
+end;
+
+
 function TDBIPopupMenuSourceFile.SetFileName(const FileName: String; const LineNo: Integer): Boolean;
 begin
   Actions.SetFileName(FileName);
@@ -371,15 +394,6 @@ procedure TDBIActionsSourceFile.CopyWindowsFileNameExecute(Sender: TObject);
 begin
   CopyToClipboard(snWindowsFileName);
 end;
-
-(*##JVR
-//    object ToolsPopupMenu: TAction
-//      Category := 'Tools';
-//      Caption := 'ToolsPopupMenu';
-//      OnExecute := ToolsPopupMenuExecute;
-//    end
-//*)
-
 
 function TDBIActionsSourceFile.GetActionCopyUnixFileName: TAction;
 begin
@@ -483,17 +497,17 @@ end;
 
 procedure TDBIActionsSourceFile.FolderOpenExecute(Sender: TObject);
 begin
-  FolderOpen;
+  FileOpenShell(soFileOpenFolder);
 end;
 
 procedure TDBIActionsSourceFile.FileOpenWithExecute(Sender: TObject);
 begin
-  FileOpenWith;
+  FileOpenShell(soFileOpenWith);
 end;
 
 procedure TDBIActionsSourceFile.FileOpenWithDefaultExecute(Sender: TObject);
 begin
-  FileOpenWithDefault;
+  FileOpenShell(soFileOpenWithDefault);
 end;
 
 
@@ -513,17 +527,17 @@ begin
   if Result then begin
     case FileNameType of
       snWindowsFileName: ClipBoard.AsText := FileName;
-      snUnixFileName: ClipBoard.AsText := Git.ExtractRelativeUnixName(FileName, 'C:\');
+      snUnixFileName: ClipBoard.AsText := GitSearch.ExtractRelativeUnixName(FileName, 'C:\');
     end;
   end
 
   else begin
-    Git.Caption := 'Copy file name to clipboard';
-    Result := Git.Execute;
+    GitSearch.Caption := 'Copy file name to clipboard';
+    Result := GitSearch.Execute;
     if Result then begin
       case FileNameType of
-        snWindowsFileName: ClipBoard.AsText := Git.GetWindowsFileName;
-        snUnixFileName: ClipBoard.AsText := Git.FileName;
+        snWindowsFileName: ClipBoard.AsText := GitSearch.GetWindowsFileName;
+        snUnixFileName: ClipBoard.AsText := GitSearch.FileName;
       end;
     end;
   end;
@@ -532,6 +546,7 @@ end;
 
 destructor TDBICustomSourceFileInfo.Destroy;
 begin
+  FreeAndNil(FGitFileShow);
   FreeAndNil(FGitFileSearch);
   FreeAndNil(FVclFiles);
 
@@ -542,14 +557,23 @@ end;
 class function TDBICustomSourceFileInfo.ExtractLineNumber(TextLine: String): Integer;
 begin
   Result := Pos('line', TextLine);
-  if (Result <= 0) then begin
-    Result := 1;
-  end
-  else begin
+  if (Result > 0) then begin
     TextLine := Copy(TextLine, Result + 4, $f);
 
     Result := StrToIntDef(TextLine, 1);
+    Exit;
   end;
+
+  Result := Pos('.java:', TextLine);
+  if (Result > 0) then begin
+    Result := Pos('):', TextLine, Result);
+    TextLine := Copy(TextLine, Result + 2, $f);
+
+    Result := StrToIntDef(TextLine, 1);
+    Exit;
+  end;
+
+  Result := 1;
 end;
 
 
@@ -585,7 +609,7 @@ var
   Str: string;
 
 begin
-  Result := TDBIProcess.ProcessExists('bds.exe');
+  Result := FileExists(FileName) and TDBIProcess.ProcessExists('bds.exe');
   if Result then begin
     Wmx:= RegisterWindowMessage('omIDEFileOpener');
 
@@ -601,42 +625,36 @@ begin
 end;
 
 
-function TDBICustomSourceFileInfo.FileOpenCFM: Boolean;
-var
-  Compare: TDBIBeyondCompare;
-
+function TDBICustomSourceFileInfo.FileOpenCFM(const FileName: String): Boolean;
 begin
-  Result := IsValidFileExtension(['.cfm']);
-  if Result then begin
-    Result := Git.Execute;
-    if Result then begin
-      Compare := Local(TDBIBeyondCompare.Create(nil)).Obj as TDBIBeyondCompare;
-      Compare.Options := [piDetachedProcess];
-      Compare.FileName1 := Git.GetWindowsFileName;
-      Compare.Execute;
-    end;
-  end;
+  Result := IsValidFileExtension(['.cfm']) and FileOpenCompare(FileName);
 end;
 
 
-function TDBICustomSourceFileInfo.FileOpenDefault: Boolean;
+class function TDBICustomSourceFileInfo.FileOpenCompare(const FileName1, FileName2: String): Boolean;
 var
   Compare: TDBIBeyondCompare;
 
 begin
-  Result := Git.Execute;
+  Result := FileName1 <> '';
   if Result then begin
     Compare := Local(TDBIBeyondCompare.Create(nil)).Obj as TDBIBeyondCompare;
-    Compare.Options := [piDetachedProcess];
-    Compare.FileName1 := Git.GetWindowsFileName;
+    Compare.Options := [piDetachedProcess, piVerifyTargetName];
+    Compare.FileName1 := FileName1;
+    Compare.FileName2 := FileName2;
     Compare.Execute;
   end;
 end;
 
 
-function TDBICustomSourceFileInfo.FileOpenJS: Boolean;
+function TDBICustomSourceFileInfo.FileOpenDefault(const FileName: String): Boolean;
+begin
+  Result := FileOpenCompare(FileName);
+end;
+
+
+function TDBICustomSourceFileInfo.FileOpenJS(const FileName: String): Boolean;
 var
-  Compare: TDBIBeyondCompare;
   Http: TDBIHttpStreamAdapter;
 
 begin
@@ -647,100 +665,103 @@ begin
 
     Result := Http.Load;
     if Result then begin
-      Result := Git.Execute;
-      if Result then begin
-        Http.SaveToFile(TDBIHostInfo.GetCacheUserFolder + Http.DocumentName);
+      ForceDirectories(TDBIHostInfo.GetCacheUserFolder);
+      Http.SaveToFile(TDBIHostInfo.GetCacheUserFolder + Http.DocumentName);
 
-        Compare := Local(TDBIBeyondCompare.Create(nil)).Obj as TDBIBeyondCompare;
-        Compare.Options := [piDetachedProcess];
-        Compare.FileName1 := TDBIHostInfo.GetCacheUserFolder + Http.DocumentName;
-        Compare.FileName2 := Git.GetWindowsFileName;
-
-        Compare.Execute;
-      end;
+      FileOpenCompare(TDBIHostInfo.GetCacheUserFolder + Http.DocumentName, FileName);
     end;
   end;
 end;
 
 
-function TDBICustomSourceFileInfo.FileOpenPAS: Boolean;
+function TDBICustomSourceFileInfo.FileOpenPAS(const FileName: String): Boolean;
+begin
+  Result := IsValidFileExtension(['.pas', '.dpr']) and FileOpenBDS(FileName, LineNo);
+end;
+
+
+function TDBICustomSourceFileInfo.FileOpenRailo: Boolean;
 var
   FileName: String;
 
-begin
-  Result := IsValidFileExtension(['.pas', '.dpr']);
-  if Result then begin
-    Result := GetVclFileName(FileName);
-    if Result then begin
-      Result := FileOpenBDS(FileName, LineNo);
+  function GetRailoURL: String;
+  const
+    RailoRuntime = 'https://github.com/getrailo/railo/blob/master/railo-java/railo-core/src/';
+    RailoLoader = 'https://github.com/getrailo/railo/blob/master/railo-java/railo-loader/src/';
+
+  var
+    Offset: Integer;
+    RailoSource: String;
+
+  begin
+    Result := '';
+    if (Pos('railo.runtime', FileData) = 1) then begin
+      RailoSource := RailoRuntime;
+    end
+    else if (Pos('railo.loader', FileData) = 1) then begin
+      RailoSource := RailoLoader;
     end
     else begin
-      Result := Git.Execute and FileOpenBDS(Git.GetWindowsFileName, LineNo);
+      RailoSource := RailoRuntime;
     end;
+
+    Offset := Pos('(', FileData);
+    if Offset > 1 then begin
+      Result := Copy(FileData, 1, Offset - 1);
+      Result := ChangeFileExt(Result, '');
+      Result := StringReplace(Result, '.', '/', [rfReplaceAll]);
+      Result := ChangeFileExt(Result, FileExtension);
+      Result := RailoSource + Result + '#L' + IntToStr(LineNo);
+    end;
+  end;
+
+begin
+  Result := (FileExtension = '.java') and (Pos('railo.', FileData) = 1);
+  if Result then begin
+    FileName := GetRailoURL;
+    Result := ShellExecute(Application.Handle, 'open', PChar(FileName), '', '', SW_SHOWNORMAL) > 32;
   end;
 end;
 
 
 function TDBICustomSourceFileInfo.FileOpenRegistered: Boolean;
-begin
-  Result := FileOpenPAS or FileOpenJS or FileOpenCFM or FileOpenDefault;
-end;
-
-
-function TDBICustomSourceFileInfo.FileOpenWith: Boolean;
-const
-  Run = 'rundll32.exe';
-
 var
   FileName: String;
 
 begin
-  Result := GetVclFileName(FileName);
-  if Result then begin
-    ShellExecute(Application.Handle, 'open', Run, PChar('shell32.dll, OpenAs_RunDLL ' + FileName), nil, SW_SHOWNORMAL);
-  end
-  else begin
-    Result := Git.Execute;
+  Result := FileOpenRailo;
+  if not Result then begin
+    Result := GetVclFileName(FileName) or GetShaFileName(FileName);
     if Result then begin
-      ShellExecute(Application.Handle, 'open', Run, PChar('shell32.dll, OpenAs_RunDLL ' + Git.GetWindowsFileName), nil, SW_SHOWNORMAL);
+      Result := FileOpenPAS(FileName) or FileOpenJS(FileName) or FileOpenCFM(FileName) or FileOpenDefault(FileName);
     end;
   end;
 end;
 
 
-function TDBICustomSourceFileInfo.FileOpenWithDefault: Boolean;
+function TDBICustomSourceFileInfo.FileOpenShell(const Action: TDBIShellOpenFileAction): Boolean;
 var
   FileName: String;
+  Parameters: String;
 
 begin
-  Result := GetVclFileName(FileName);
+  Result := GetVclFileName(FileName) or GetShaFileName(FileName);
   if Result then begin
-    ShellExecute(Application.Handle, 'open', PChar(FileName), '', '', SW_SHOWNORMAL);
-  end
-  else begin
-    Result := Git.Execute;
-    if Result then begin
-      ShellExecute(Application.Handle, 'open', PChar(Git.GetWindowsFileName), '', '', SW_SHOWNORMAL);
+    case Action of
+      soFileOpenFolder: begin
+        Parameters := '/select,"' + FileName + '"';
+        FileName := PathNames[ptCmdExplorer];
+      end;
+
+      soFileOpenWith: begin
+        Parameters := 'shell32.dll, OpenAs_RunDLL ' + FileName;
+        FileName := PathNames[ptCmdRunDll];
+      end;
+
+      soFileOpenWithDefault: Parameters := '';
     end;
-  end;
-end;
 
-
-function TDBICustomSourceFileInfo.FolderOpen: Boolean;
-var
-  FileName: String;
-
-begin
-  Result := GetVclFileName(FileName);
-  if Result then begin
-    ShellExecute(Application.Handle, 'open', PChar(PathNames[ptCmdExplorer]), PChar('/select,"' + FileName + '"'), nil, SW_SHOWNORMAL);
-  end
-  else begin
-    Git.Caption := 'Open folder for file';
-
-    if Git.Execute then begin
-      ShellExecute(Application.Handle, 'open', PChar(PathNames[ptCmdExplorer]), PChar('/select,"' + Git.GetWindowsFileName + '"'), nil, SW_SHOWNORMAL);
-    end;
+    Result := ShellExecute(Application.Handle, 'open', PChar(FileName), PChar(Parameters), '', SW_SHOWNORMAL) > 32;
   end;
 end;
 
@@ -757,16 +778,67 @@ begin
 end;
 
 
+function TDBICustomSourceFileInfo.GetGitFileName(var FileName: String): Boolean;
+begin
+  Result := GitSearch.Execute;
+  if Result then begin
+    FileName := GitSearch.GetWindowsFileName;
+  end;
+end;
+
+
 function TDBICustomSourceFileInfo.GetGitFileSearch: TDBIGitFileSearch;
 begin
   if not Assigned(FGitFileSearch) then begin
     FGitFileSearch := TDBIGitFileSearch.Create(nil);
+    FGitFileSearch.Options := FGitFileSearch.Options + [piVerifyTargetName];
   end;
   Result := FGitFileSearch;
 end;
 
 
-function TDBICustomSourceFileInfo.GetVclFileName(var TargetName: String): Boolean;
+function TDBICustomSourceFileInfo.GetGitFileShow: TDBIGitShowInfo;
+begin
+  if not Assigned(FGitFileShow) then begin
+    FGitFileShow := TDBIGitShowInfo.Create(nil);
+  end;
+  Result := FGitFileShow;
+end;
+
+
+function TDBICustomSourceFileInfo.GetShaFileName(var FileName: String): Boolean;
+begin
+  Result := Sha1 = '';
+
+  if Result then begin
+    Result := GitSearch.Execute;
+    if Result then begin
+      FileName := GitSearch.GetWindowsFileName;
+    end;
+  end
+
+  // Sha specified
+  else begin
+    Result := GitSearch.Execute;
+    if Result then begin
+      GitSha.Output.Clear;
+
+      GitSha.Sha1 := Sha1;
+      GitSha.FileName := GitSearch.FileName;
+      GitSha.SourceName := GitSearch.SourceName;
+      Result := GitSha.Execute;
+      if Result then begin
+        FileName := TDBIHostInfo.GetCacheUserFolder + GitSha.Sha1 + '\' + FileShortName;
+        ForceDirectories(ExtractFileDir(FileName));
+
+        GitSha.Output.SaveToFile(FileName);
+      end;
+    end;
+  end;
+end;
+
+
+function TDBICustomSourceFileInfo.GetVclFileName(var FileName: String): Boolean;
 var
   Index: Integer;
 
@@ -774,7 +846,7 @@ begin
   Index := VclFiles.IndexOfName(ChangeFileExt(FileShortName, ''));
   Result := Index >= 0;
   if Result then begin
-    TargetName := VclFiles.FileName[Index];
+    FileName := VclFiles.FileName[Index];
   end;
 end;
 
@@ -824,8 +896,8 @@ begin
   FFileData := Value;
   FFileName := ExtractValidFileName(Value);
 
-  Git.FileName := FileShortName;
-  Git.Caption := 'Select file to open';
+  GitSearch.FileName := FileShortName;
+  GitSearch.Caption := 'Select file to open';
 end;
 
 
