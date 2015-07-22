@@ -665,7 +665,6 @@ begin
 
     Result := Http.Load;
     if Result then begin
-      ForceDirectories(TDBIHostInfo.GetCacheUserFolder);
       Http.SaveToFile(TDBIHostInfo.GetCacheUserFolder + Http.DocumentName);
 
       FileOpenCompare(TDBIHostInfo.GetCacheUserFolder + Http.DocumentName, FileName);

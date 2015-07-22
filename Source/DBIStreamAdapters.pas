@@ -67,12 +67,12 @@ type
 
   protected
     procedure Append;
-    procedure Clear;
 
   public
     constructor Create(AStream: TStream = nil); virtual;
     destructor Destroy; override;
 
+    procedure Clear;
     procedure LoadFromFile(const AFileName: TFileName);
     procedure LoadFromStream(AStream: TStream);
 

@@ -344,6 +344,8 @@ end;
 class function TDBIHostInfo.GetCacheUserFolder: String;
 begin
   Result := ExtractFilePath(ParamStr(0)) + 'cache\' + TDBIHostInfo.GetUserName + '\';
+
+  DBIForceDirectories(Result);
 end;
 
 

@@ -55,6 +55,7 @@ type
     function GetTokenString: String;
 
     procedure SetTokenChar(const Value: TDBIChar);
+    procedure SetTokenString(const Value: String);
 
   public
     constructor Create;
@@ -75,7 +76,7 @@ type
     property TokenName: String read GetTokenName;
     property TokenPosition: TDBITokenPosition read FTokenPosition;
     property TokenStatus: TDBITokenStatus read FTokenStatus write FTokenStatus;
-    property TokenString: String read GetTokenString;
+    property TokenString: String read GetTokenString write SetTokenString;
     property TokenType: TDBITokenType read FTokenType write FTokenType;
 
   end;
@@ -447,7 +448,7 @@ function TDBICustomMacroProcessor.GetParam(
   var ParamValue: Variant
   ): Boolean;
 begin
-  Result := Assigned(FOnGetParam) and FOnGetParam(SEnder, ParamName, ParamValue);
+  Result := Assigned(FOnGetParam) and FOnGetParam(Sender, ParamName, ParamValue);
 end;
 
 
@@ -1578,6 +1579,8 @@ end;
 }
 procedure TDBIAbstractLexer.Reset;
 begin
+  inherited Reset;
+
   FBufferIndex := 0;
 
   FLexerChar := #0;
@@ -1960,6 +1963,11 @@ begin
   FTokenString[1] := Value;
 end;
 
+
+procedure TDBILexerToken.SetTokenString(const Value: String);
+begin
+  FTokenString := AnsiString(Value);
+end;
 
 
 end.
