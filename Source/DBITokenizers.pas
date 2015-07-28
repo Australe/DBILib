@@ -34,9 +34,31 @@ uses
   Classes, SysUtils, DBITypInfo, DBIStreamAdapters, DBITokenizerConsts;
 
 type
+  EAnalyserError = class(Exception);
+
+type
   TDBIString = AnsiString;
   TDBIChar = AnsiChar;
   PDBIChar = PAnsiChar;
+
+type
+{$ifdef Delphi7}
+  TDBILexerData = record
+{$else}
+  TDBILexerData = object
+{$endif}
+    Column: Integer;
+    Row: Integer;
+    Position: Integer;
+    Eof: Boolean;
+    LexerChar: TDBIChar;
+    PriorChar: TDBIChar;
+    Status: TDBITokenStatus;
+
+    procedure Clear;
+    procedure UpdateAsciiPosition;
+  end;
+
 
 type
   TDBILexerToken = class(TPersistent)
@@ -63,6 +85,8 @@ type
     procedure AddChar(const Value: TDBIChar);
     procedure Clear;
     procedure ClearString;
+
+    procedure Info(const AMessage: String);
 
     property AsChar: TDBIChar read GetTokenChar write SetTokenChar;
     property AsInteger: Integer read GetTokenInteger;
@@ -133,16 +157,8 @@ type
   private
     FPutbackBuffer: array[0..Pred(PUTCHARBUFFERSIZE)] of TDBIChar;
     FBufferIndex: Integer;
-
-    FInternalColumn: Integer;
-    FInternalPosition: Integer;
-    FInternalRow: Integer;
-
-    FPriorChar: TDBIChar;
-    FLexerChar: TDBIChar;
     FLexerCharMap: TDBILexerCharacterMap;
-    FLexerEof: Boolean;
-    FLexerStatus: TDBITokenStatus;
+    FLexerData: TDBILexerData;
     FLexerToken: TDBILexerToken;
 
   protected
@@ -170,13 +186,13 @@ type
     procedure UpdateStatus(Value: TDBITokenStatus);
 
     property BufferIndex: Integer read GetBufferIndex write SetBufferIndex;
-    property Eof: Boolean read FLexerEof write SetEof default False;
-    property PriorChar: TDBIChar read FPriorChar write FPriorChar;
-    property LexerChar: TDBIChar read FLexerChar write FLexerChar;
+    property Eof: Boolean read FLexerData.Eof write SetEof default False;
+    property PriorChar: TDBIChar read FLexerData.PriorChar write FLexerData.PriorChar;
+    property LexerChar: TDBIChar read FLexerData.LexerChar write FLexerData.LexerChar;
     property LexerCharMap: TDBILexerCharacterMap read FLexerCharMap;
-    property LexerStatus: TDBITokenStatus read FLexerStatus;
+    property LexerStatus: TDBITokenStatus read FLexerData.Status;
     property LexerTokenType: TDBITokenType read GetTokenType;
-    property Token: TDBILexerToken read GetLexerToken;
+    property Token: TDBILexerToken read FLexerToken;
 
   public
     constructor Create(AStream: TStream = nil); override;
@@ -360,12 +376,9 @@ uses
 {$ifdef Delphi6}
   Types,
 {$endif}
+  Windows,
   TypInfo,
   DBIUtils;
-
-
-type
-  EAnalyserError = class(Exception);
 
 
 function Macro(const Format: String; const Args: array of const): String;
@@ -865,6 +878,11 @@ begin
   MapSymbol(LexXMLEntity, Chr_Ampersand, Tok_Default, tkSymbol);
   MapDualSymbol(LexEncodedSymbol, Chr_Ampersand_Hash, Tok_Macro, tkSymbol);
 end;
+
+
+
+
+
 { TDBICustomAsciiLexer }
 
 // _____________________________________________________________________________
@@ -940,11 +958,11 @@ begin
       // DOS uses CRLF, UNIX uses LF only, thus the CR is of no consequence
   end
   else if (LexerChar = Chr_LineFeed) then begin
-    FInternalRow := FInternalRow + 1;
-    FInternalColumn := 0;
+    FLexerData.Row := FLexerData.Row + 1;
+    FLexerData.Column := 0;
   end
   else begin
-    FInternalColumn := FInternalColumn + 1;
+    FLexerData.Column := FLexerData.Column + 1;
   end;
 end;
 
@@ -1249,9 +1267,9 @@ procedure TDBICustomAsciiLexer.PutChar(const Value: TDBIChar);
 begin
   inherited PutChar(Value);
 
-  FInternalColumn := FInternalColumn - 0;
+  FLexerData.Column := FLexerData.Column - 0;
   if (Value = Chr_CarriageReturn) then begin
-    FInternalRow := FInternalRow - 1;
+    FLexerData.Row := FLexerData.Row - 1;
   end;
 end;
 
@@ -1302,6 +1320,8 @@ constructor TDBIAbstractLexer.Create(AStream: TStream = nil);
 begin
   inherited Create(AStream);
 
+  GetLexerToken;
+
   Reset;
   LexInitialise;
 end;
@@ -1335,16 +1355,16 @@ end;
 }
 function TDBIAbstractLexer.GetChar: Boolean;
 begin
-  FPriorChar := FLexerChar;
+  FLexerData.PriorChar := FLexerData.LexerChar;
 
   if (BufferIndex > 0) then begin
-    FLexerChar := FPutbackBuffer[BufferIndex];
+    FLexerData.LexerChar := FPutbackBuffer[BufferIndex];
     BufferIndex := BufferIndex-1;
     Result := True;
   end
   else begin
-    FInternalPosition := ReadChar(FLexerChar);
-    Result := FInternalPosition > 0;
+    FLexerData.Position := ReadChar(FLexerData.LexerChar);
+    Result := FLexerData.Position > 0;
   end;
 
   Eof := not Result;
@@ -1370,9 +1390,9 @@ var
 
 begin
   // Update Token Position
-  Token.Position := FInternalPosition;
-  Token.Column := FInternalColumn;
-  Token.Row := FInternalRow;
+  Token.Position := FLexerData.Position;
+  Token.Column := FLexerData.Column;
+  Token.Row := FLexerData.Row;
 
   PSymbolData := @(FLexerCharMap[LexerChar]);
   Token.TokenKind := PSymbolData^.TokenKind;
@@ -1581,17 +1601,9 @@ procedure TDBIAbstractLexer.Reset;
 begin
   inherited Reset;
 
+  FLexerToken.Clear;
+  FLexerData.Clear;
   FBufferIndex := 0;
-
-  FLexerChar := #0;
-  FLexerEof := False;
-  FLexerStatus := tsNone;
-
-  FreeAndNil(FLexerToken);
-
-  FInternalColumn := 0;
-  FInternalPosition := -1;
-  FInternalRow := 1;
 
   GetChar;
 end;
@@ -1609,14 +1621,15 @@ begin
   // Restore Lexer State
   Token.Assign(AToken);
 
-  FLexerEof := False;
-  FLexerStatus := AToken.TokenStatus;
+  FLexerData.Eof := False;
+  FLexerData.Status := AToken.TokenStatus;
 
-  FInternalColumn := AToken.Column;
-  FInternalPosition := AToken.Position;
-  FInternalRow := AToken.Row;
+  FLexerData.Column := AToken.Column;
+  FLexerData.Position := AToken.Position;
+  FLexerData.Row := AToken.Row;
 
   GetChar;
+  GetToken;
 end;
 
 
@@ -1637,7 +1650,7 @@ end;
 }
 procedure TDBIAbstractLexer.SetEof(const Value: Boolean);
 begin
-  FLexerEof := Value;
+  FLexerData.Eof := Value;
 end;
 
 
@@ -1651,18 +1664,18 @@ var
 
 begin
   // Exclude Comments when in a String Literal
-  if (tsStringLiteral in FLexerStatus) then begin
+  if (tsStringLiteral in FLexerData.Status) then begin
     Value := Value - [tsComment1, tsComment2, tsComment3];
   end
 
   // Exclude String Literal from Comments
-  else if (tsComment1 in FLexerStatus) or (tsComment2 in FLexerStatus) or  (tsComment3 in FLexerStatus) then begin
+  else if (tsComment1 in FLexerData.Status) or (tsComment2 in FLexerData.Status) or  (tsComment3 in FLexerData.Status) then begin
     Value := Value - [tsStringLiteral];
   end;
 
   // Mask - may need to change the order of this to first
   if (tsMask in Value) then begin
-    FLexerStatus := FLexerStatus - Value;
+    FLexerData.Status := FLexerData.Status - Value;
   end
 
   // Toggle
@@ -1670,11 +1683,11 @@ begin
     Value := Value - [tsToggle];
     for LexerState := Low(TDBILexerState) to High(TDBILexerState) do begin
       if (LexerState in Value) then begin
-        if (LexerState in FLexerStatus) then begin
-          FLexerStatus := FLexerStatus - [LexerState];
+        if (LexerState in FLexerData.Status) then begin
+          FLexerData.Status := FLexerData.Status - [LexerState];
         end
         else begin
-          FLexerStatus := FLexerStatus + [LexerState];
+          FLexerData.Status := FLexerData.Status + [LexerState];
         end;
       end;
     end;
@@ -1682,7 +1695,7 @@ begin
 
   // Include
   else begin
-    FLexerStatus := FLexerStatus + Value;
+    FLexerData.Status := FLexerData.Status + Value;
   end;
 end;
 
@@ -1952,6 +1965,19 @@ begin
 end;
 
 
+procedure TDBILexerToken.Info(const AMessage: String);
+begin
+  Windows.OutputDebugString(
+    PChar(
+      Format(
+        'Class: %s, Position(%d = %d , %d) [%s] - %s',
+        [ClassName, Position, Row, Column, TokenString, AMessage]
+        )
+      )
+    );
+end;
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 04/10/2008 13:09:50 - Initial code.<br />
@@ -1969,5 +1995,38 @@ begin
   FTokenString := AnsiString(Value);
 end;
 
+
+
+
+
+{ TDBILexerData }
+
+procedure TDBILexerData.Clear;
+begin
+  PriorChar := #0;
+  LexerChar := #0;
+  Eof := False;
+  Status := tsNone;
+
+  Column := 0;
+  Position := -1;
+  Row := 1;
+end;
+
+
+procedure TDBILexerData.UpdateAsciiPosition;
+begin
+  if (LexerChar = Chr_CarriageReturn) then begin
+    ; // Skip Carriage-return white space for row and column count
+      // DOS uses CRLF, UNIX uses LF only, thus the CR is of no consequence
+  end
+  else if (LexerChar = Chr_LineFeed) then begin
+    Inc(Row, 1);
+    Column := 0;
+  end
+  else begin
+    Inc(Column, 1);
+  end;
+end;
 
 end.

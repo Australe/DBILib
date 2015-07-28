@@ -31,7 +31,7 @@ unit DBIExpressionEvaluators;
 interface
 
 uses
-  Classes, SysUtils;
+  Classes, SysUtils, DB, DBITokenizers;
 
 type
   PDBIShortString = ^TDBIShortString;
@@ -81,7 +81,7 @@ type
 
   TDBICharacterStack = class(TDBICustomStack)
   protected
-    procedure SetCapacity(NewCapacity: Integer);
+    procedure SetCapacity(const NewCapacity: Integer);
 
   public
     constructor Create;
@@ -98,7 +98,7 @@ type
 type
   TDBIFloatStack = class(TDBICustomStack)
   protected
-    procedure SetCapacity(NewCapacity: Integer);
+    procedure SetCapacity(const NewCapacity: Integer);
 
   public
     constructor Create;
@@ -137,10 +137,10 @@ type
     destructor Destroy; override;
 
     procedure Clear;
-    function Peek: TDBIShortString;
+    function Peek: AnsiString;
     function IsEmpty: Boolean;
-    function Pop: TDBIShortString;
-    function Push(const Value: TDBIShortString): PDBIShortString;
+    function Pop: AnsiString;
+    function Push(const Value: AnsiString): PDBIShortString;
 
     property Count: Integer read GetCount;
 
@@ -168,14 +168,14 @@ type
     FArray: PDBIVariableArray;
     FCapacity: Integer;
     FCount: Integer;
-    FStStack: TDBIStringStack;
+    FVariableStack: TDBIStringStack;
 
   protected
-    function GetName(const Index: Integer): TDBIShortString;
-    function GetVariable(const AName: TDBIShortString): Double;
-    function FindName(const AName: TDBIShortString; var Index: Integer): Boolean;
-    procedure SetCapacity(NewCapacity: Integer);
-    procedure SetVariable(const AName: TDBIShortString; const Value: Double);
+    function GetName(const Index: Integer): AnsiString;
+    function GetVariable(const Index: AnsiString): Double;
+    function FindName(const AName: AnsiString; var Index: Integer): Boolean;
+    procedure SetCapacity(const NewCapacity: Integer);
+    procedure SetVariable(const Index: AnsiString; const Value: Double);
 
     procedure Grow;
 
@@ -184,16 +184,16 @@ type
     destructor Destroy; override;
 
     procedure Clear;
-    function GetValue(const aName: TDBIShortString; var Value: Double): Boolean;
+    function GetValue(const AName: AnsiString; var Value: Double): Boolean;
     function IsEmpty : Boolean;
 
     property Capacity: Integer read FCapacity write SetCapacity;
     property Count: Integer read FCount;
-    property Name[const Index: Integer]: TDBIShortString read GetName;
+    property Name[const Index: Integer]: AnsiString read GetName;
 
     // Associative array of variable names and their values,
     // on read, if the variable does not exist, 0.0 is returned
-    property Value[const AName: TDBIShortString]: Double read GetVariable write SetVariable;
+    property Value[const AName: AnsiString]: Double read GetVariable write SetVariable;
 
   end;
 
@@ -203,10 +203,11 @@ type
   TDBIExpressionParser = class
   private
     FExpr: PAnsiChar;
-    FOrigExpr: PAnsiChar;
+//##JVR    FOrigExpr: PAnsiChar;
+    FOrigExpression: AnsiString;
     FParsed: Boolean;
-    FStStack: TDBIStringStack;
-    FOpStack: TDBICharacterStack;
+    FOperandStack: TDBIStringStack;
+    FOperatorStack: TDBICharacterStack;
     FVarList: TDBIVariableList;
 
   protected
@@ -225,7 +226,7 @@ type
     function GetPrecedence(AOperator: AnsiChar): Integer;
     function GetRPNExpression: String;
     function GetValue: Double;
-    function GetVariable(const AName: String): Double;
+    function GetVariable(const AName: AnsiString): Double;
 
     function NextToken(var aStartToken: PAnsiChar): TDBIExprTokenType;
     procedure ParseToRPN;
@@ -233,12 +234,12 @@ type
     procedure PushNewOperand(aStartPos: PAnsiChar);
 
     procedure RaiseBadExpressionError(aPosn: PAnsiChar);
-    procedure SetExpression(aExpr: String);
-    procedure SetVariable(const AName: String; Value: Double);
+    procedure SetExpression(const Value: String); virtual;
+    procedure SetVariable(const AName: AnsiString; Value: Double);
     procedure SkipBlanks;
 
   public
-    constructor Create(const aExpr: String);
+    constructor Create(const AExpression: String); virtual;
     destructor Destroy; override;
 
     {$IFOPT D+}
@@ -248,14 +249,31 @@ type
     property Expression: String read GetExpression write SetExpression;
     property RPNExpression: String read GetRPNExpression;
 //##JVR    property Value: Double read GetValue;
-    property Variable[const AName: String]: Double read GetVariable write SetVariable;
+    property Variable[const AName: AnsiString]: Double read GetVariable write SetVariable;
 
     //##JVR
     property Result: Double read GetValue;
   end;
 
 
-  TXiExpressionEvaluator = class(TDBIExpressionParser);
+//##JVR  TXiExpressionEvaluator = class(TDBIExpressionParser);
+type
+  TDBIExpressionEvaluator = class(TDBIExpressionParser)
+  private
+    FProcessor: TDBICustomMacroProcessor;
+    FParams: TParams;
+
+  protected
+    function GetParam(Sender: TObject; const ParamName: String; var ParamValue: Variant): Boolean;
+    procedure SetExpression(const Value: String); override;
+
+  public
+    constructor Create(const AExpression: String); override;
+    destructor Destroy; override;
+
+    property Params: TParams read FParams write FParams;
+
+  end;
 
 
 implementation
@@ -311,6 +329,64 @@ end;
 
 
 
+{ TDBIExpressionEvaluator }
+
+type
+  TDBIExpressionProcessor = class(TDBICustomMacroProcessor);
+
+constructor TDBIExpressionEvaluator.Create(const AExpression: String);
+begin
+  inherited Create(AExpression);
+
+  FProcessor := TDBIExpressionProcessor.Create;
+  TDBIExpressionProcessor(FProcessor).OnGetParam := GetParam;
+end;
+
+
+destructor TDBIExpressionEvaluator.Destroy;
+begin
+  FreeAndNil(FProcessor);
+
+  inherited Destroy;
+end;
+
+
+function TDBIExpressionEvaluator.GetParam(
+  Sender: TObject;
+  const ParamName: String;
+  var ParamValue: Variant
+  ): Boolean;
+var
+  Param: TParam;
+
+begin
+  Param := Params.FindParam(ParamName);
+
+  Result := Assigned(Param);
+  if Result then begin
+    ParamValue := Param.Value;
+  end;
+end;
+
+
+procedure TDBIExpressionEvaluator.SetExpression(const Value: String);
+begin
+  if Assigned(FProcessor) then begin
+    FProcessor.Output.Clear;
+    FProcessor.Input.Text := Value;
+    FProcessor.Process;
+
+    inherited SetExpression(FProcessor.Output.Text);
+  end
+  else begin
+    inherited SetExpression(Value);
+  end;
+end;
+
+
+
+
+
 { TDBIExpressionParser }
 
 procedure TDBIExpressionParser.CheckBadParserState(
@@ -323,28 +399,30 @@ begin
 end;
 
 
-constructor TDBIExpressionParser.Create(const aExpr: String);
+constructor TDBIExpressionParser.Create(const AExpression: String);
 begin
   inherited Create;
 
-  // Create a String stack for the operands and an operator stack
-  FStStack := TDBIStringStack.Create(4096);
-  FOpStack := TDBICharacterStack.Create;
+  // Create a String stack for the operands
+  FOperandStack := TDBIStringStack.Create(4096);
+
+  // Create an operator stack
+  FOperatorStack := TDBICharacterStack.Create;
 
   // Create a variable list
   FVarList := TDBIVariableList.Create;
 
   // Set the expression String
-  Expression := aExpr;
+  Expression := AExpression;
 end;
 
 
 destructor TDBIExpressionParser.Destroy;
 begin
-  Expression := '';
+//##JVR  Expression := '';
 
-  FreeAndNil(FStStack);
-  FreeAndNil(FOpStack);
+  FreeAndNil(FOperandStack);
+  FreeAndNil(FOperatorStack);
   FreeAndNil(FVarList);
 
   inherited Destroy;
@@ -401,60 +479,60 @@ var
 
 begin
   PrecOp := GetPrecedence(aOp);
-  PrecTop := GetPrecedence(FOpStack.Peek);
+  PrecTop := GetPrecedence(FOperatorStack.Peek);
   while (PrecOp <= PrecTop) and (PrecTop > 1) do begin
-    TempOp := FOpStack.Pop;
+    TempOp := FOperatorStack.Pop;
     if (TempOp = UnaryMinus) then begin
-      if (FStStack.Count = 0) then begin
+      if (FOperandStack.Count = 0) then begin
         RaiseBadExpressionError(aCharPos);
       end;
       
-      Operand1 := FStStack.Pop + UnaryMinus;
-      FStStack.Push(Operand1);
+      Operand1 := FOperandStack.Pop + UnaryMinus;
+      FOperandStack.Push(Operand1);
     end
 
     else if (TDBIFunctionOperator(Ord(TempOp) and $7F) in FunctionOperators) then begin
-      if (FStStack.Count = 0) then begin
+      if (FOperandStack.Count = 0) then begin
         RaiseBadExpressionError(aCharPos);
       end;
 
-      Operand1 := FStStack.Pop + TempOp;
-      FStStack.Push(Operand1);
+      Operand1 := FOperandStack.Pop + TempOp;
+      FOperandStack.Push(Operand1);
     end
 
     else begin
-      if (FStStack.Count < 2) then begin
+      if (FOperandStack.Count < 2) then begin
         RaiseBadExpressionError(aCharPos);
       end;
       
-      Operand2 := FStStack.Pop;
-      Operand1 := FStStack.Pop + Operand2 + TempOp;
-      FStStack.Push(Operand1);
+      Operand2 := FOperandStack.Pop;
+      Operand1 := FOperandStack.Pop + Operand2 + TempOp;
+      FOperandStack.Push(Operand1);
     end;
 
-    if FOpStack.IsEmpty then begin
+    if FOperatorStack.IsEmpty then begin
       PrecOp := 0;
     end
     else begin
-      PrecTop := GetPrecedence(FOpStack.Peek);
+      PrecTop := GetPrecedence(FOperatorStack.Peek);
     end;
   end;
 
   // If the given operator was a right parenthesis the top of the
   // operator stack *must* be a left parenthesis and we should remove it
   if (aOp = ')') then begin
-    if FOpStack.IsEmpty or (FOpStack.Peek <> '(') then begin
+    if FOperatorStack.IsEmpty or (FOperatorStack.Peek <> '(') then begin
       RaiseBadExpressionError(aCharPos);
     end;
     
-    FOpStack.Pop;
+    FOperatorStack.Pop;
   end;
 end;
 
 
 function TDBIExpressionParser.GetExpression: String;
 begin
-  Result := String(FOrigExpr);
+  Result := String(FOrigExpression);
 end;
 
 
@@ -507,7 +585,7 @@ begin
   if not FParsed then begin
     ParseToRPN;
   end;
-  Result := FStStack.Peek;
+  Result := String(FOperandStack.Peek);
 end;
 
 
@@ -521,8 +599,8 @@ var
   Index: Integer;
   Operand1: Double;
   Operand2: Double;
-  Expr: String[255];
-  OperandSt: String[255];
+  Expr: AnsiString;
+  OperandSt: AnsiString;
 
   function UserFunction(FunctionOperator: TDBIFunctionOperator): Boolean;
   begin
@@ -582,7 +660,7 @@ begin
   DblStack := TDBIFloatStack.Create;
   try
     // Read through the RPN expression and evaluate it
-    Expr := FStStack.Peek;
+    Expr := FOperandStack.Peek;
     Index := 0;
     while (Index < Length(Expr)) do begin
       Inc(Index);
@@ -595,7 +673,7 @@ begin
             OperandSt := OperandSt + Expr[Index+1];
             Inc(Index);
           end;
-          DblStack.Push(StrToFloat(OperandSt));
+          DblStack.Push(StrToFloat(String(OperandSt)));
         end
         else begin
           OperandSt := '';
@@ -620,7 +698,7 @@ begin
 end;
 
 
-function TDBIExpressionParser.GetVariable(const AName: String): Double;
+function TDBIExpressionParser.GetVariable(const AName: AnsiString): Double;
 begin
   Result := FVarList.Value[AName];
 end;
@@ -683,14 +761,14 @@ begin
   // Initialise the operator stack to have a left parenthesis; when we
   // reach the end of the expression we'll be pretending it has a right
   // parenthesis
-  FOpStack.Clear;
-  FOpStack.Push('(');
+  FOperatorStack.Clear;
+  FOperatorStack.Push('(');
 
   // Initialise the operand stack
-  FStStack.Clear;
+  FOperandStack.Clear;
 
   // Initialise the parser
-  FExpr := FOrigExpr;
+  FExpr := PAnsiChar(FOrigExpression);
   ParserState := psCouldBeOperand;
 
   // Get the next token from the expression
@@ -709,7 +787,7 @@ begin
           // If the operator is a left parenthesis, just push it onto
           // the operator stack}
           if (Op = '(') then begin
-            FOpStack.Push(Op);
+            FOperatorStack.Push(Op);
             ParserState := psCouldBeOperand;
           end
           else begin
@@ -719,7 +797,7 @@ begin
             // operators and operands and forming RPN subexpressions,
             // until we reach a left parenthesis
             if (Op = ')') then begin
-              if FOpStack.IsEmpty then
+              if FOperatorStack.IsEmpty then
                 RaiseBadExpressionError(StartPos);
               FormRPNSubExpr(')', StartPos);
               ParserState := psCannotBeOperand;
@@ -733,7 +811,7 @@ begin
               end;
 
               if (Op = '-') then begin
-                FOpStack.Push(UnaryMinus);
+                FOperatorStack.Push(UnaryMinus);
               end;
 
               ParserState := psMustBeOperand;
@@ -745,17 +823,17 @@ begin
             // precedence
             else begin
               PrecOp := GetPrecedence(Op);
-              if FOpStack.IsEmpty then begin
+              if FOperatorStack.IsEmpty then begin
                 PrecTop := 0;
               end
               else begin
-                PrecTop := GetPrecedence(FOpStack.Peek);
+                PrecTop := GetPrecedence(FOperatorStack.Peek);
               end;
 
               if (PrecOp <= PrecTop) then begin
                 FormRPNSubExpr(Op, StartPos);
               end;
-              FOpStack.Push(Op);
+              FOperatorStack.Push(Op);
               ParserState := psCouldBeOperand;
             end;
           end;
@@ -799,7 +877,7 @@ begin
 
   // At this point, the operator stack should be empty and the operand
   // stack should have one item: the RPN of the original expression
-  if (not FOpStack.IsEmpty) or (FStStack.Count <> 1) then begin
+  if (not FOperatorStack.IsEmpty) or (FOperandStack.Count <> 1) then begin
     RaiseBadExpressionError(StartPos);
   end;
   
@@ -820,10 +898,10 @@ begin
   TempStr[0] := AnsiChar(Succ(FExpr - aStartPos));
   TempStr[1] := ' ';
   Move(aStartPos^, TempStr[2], FExpr - aStartPos);
-//##JVR  FStStack.Push(TempStr);
-  Operator := GetFunctionOperator(TempStr);
+//##JVR  FOperandStack.Push(TempStr);
+  Operator := GetFunctionOperator(String(TempStr));
   if (Operator > #0) then begin
-    FOpStack.Push(Operator);
+    FOperatorStack.Push(Operator);
   end
   else begin
     raise Exception.CreateFmt('Invalid function: %s', [TempStr]);
@@ -839,50 +917,38 @@ begin
   TempStr[0] := AnsiChar(Succ(FExpr - aStartPos));
   TempStr[1] := ' ';
   Move(aStartPos^, TempStr[2], FExpr - aStartPos);
-  FStStack.Push(TempStr);
+  FOperandStack.Push(TempStr);
 end;
 
 
 procedure TDBIExpressionParser.RaiseBadExpressionError(aPosn: PAnsiChar);
 begin
-  if (aPosn = StrEnd(FOrigExpr)) then begin
+  if (aPosn = StrEnd(PAnsiChar(FOrigExpression))) then begin
     raise Exception.Create(
        'Badly formed expression detected at end of String');
   end
   else begin
     raise Exception.Create(
        Format('Badly formed expression with Character [%s], at position %d',
-              [aPosn^, succ(aPosn - FOrigExpr)]));
+              [aPosn^, succ(aPosn - PAnsiChar(FOrigExpression))]));
   end;
 end;
 
 
-procedure TDBIExpressionParser.SetExpression(aExpr: String);
+procedure TDBIExpressionParser.SetExpression(const Value: String);
 begin
-  // First destroy the original expression
-  if (FOrigExpr <> nil) then begin
-    StrDispose(FOrigExpr);
+  if (Length(Value) > 255) then begin
+    raise Exception.Create('TDBIExpressionParser: the expression is too long');
   end;
 
-  // Now allocate the new one
-  if (aExpr = '') then begin
-    FOrigExpr := nil;
-  end
-  else begin
-    if (Length(aExpr) > 255) then begin
-      raise Exception.Create('TDBIExpressionParser: the expression is too long');
-    end;
-
-    FOrigExpr := StrAlloc(succ(Length(aExpr)));
-    StrPCopy(FOrigExpr, aExpr);
-  end;
+  FOrigExpression := AnsiString(Value);
 
   // The expression is not yet parsed
-  FParsed := aExpr = '';
+  FParsed := Value = '';
 end;
 
 
-procedure TDBIExpressionParser.SetVariable(const AName: String; Value: Double);
+procedure TDBIExpressionParser.SetVariable(const AName: AnsiString; Value: Double);
 begin
   FVarList.Value[AName] := Value
 end;
@@ -904,7 +970,6 @@ begin
   // Jump past all the blanks
   PTempExpr := FExpr;
 
-//##JVR  while (PTempExpr^ = ' ') do
   while IsWhiteSpace(PTempExpr^) do begin
     Inc(PTempExpr);
   end;
@@ -922,7 +987,7 @@ var
   TokenType: TDBIExprTokenType;
 
 begin
-  FExpr := FOrigExpr;
+  FExpr := PAnsiChar(FOrigExpression);
   TokenType := NextToken(PStartPos);
 
   while TokenType <> ttEndOfExpr do begin
@@ -954,13 +1019,13 @@ constructor TDBIVariableList.Create;
 begin
   inherited Create;
 
-  FStStack := TDBIStringStack.Create(1024);
+  FVariableStack := TDBIStringStack.Create(1024);
 end;
 
 
 destructor TDBIVariableList.Destroy;
 begin
-  FreeAndNil(FStStack);
+  FreeAndNil(FVariableStack);
 
   Capacity := 0;
 
@@ -972,18 +1037,18 @@ procedure TDBIVariableList.Clear;
 begin
   FCount := 0;
 
-  FStStack.Clear;
+  FVariableStack.Clear;
 end;
 
 
-function TDBIVariableList.GetValue(const aName: TDBIShortString; var Value: Double): Boolean;
+function TDBIVariableList.GetValue(const AName: AnsiString; var Value: Double): Boolean;
 var
-  Index: LongInt;
+  ItemIndex: LongInt;
 
 begin
-  Result := FindName(aName, Index);
+  Result := FindName(AName, ItemIndex);
   if Result then begin
-    Value := FArray^[Index].Value;
+    Value := FArray^[ItemIndex].Value;
   end;
 end;
 
@@ -994,12 +1059,15 @@ begin
 end;
 
 
-function TDBIVariableList.FindName(const AName: TDBIShortString; var Index: Integer): Boolean;
+function TDBIVariableList.FindName(const AName: AnsiString; var Index: Integer): Boolean;
 var
   L, R, M: LongInt;
   PMidNode: PDBIVariableNode;
+  ShortName: TDBIShortString;
 
 begin
+  Shortname := AName;
+
   // Binary search
   L := 0;
   R := Pred(Count);
@@ -1007,10 +1075,10 @@ begin
   while (L <= R) do begin
     M := (L + R) div 2;
     PMidNode := @FArray^[M];
-    if (PMidNode^.PName^ < AName) then begin
+    if (PMidNode^.PName^ < ShortName) then begin
       L := Succ(M);
     end
-    else if (PMidNode^.PName^ > AName) then begin
+    else if (PMidNode^.PName^ > ShortName) then begin
       R := Pred(M);
     end
     else {found it} begin
@@ -1025,17 +1093,17 @@ begin
 end;
 
 
-function TDBIVariableList.GetName(const Index: Integer): TDBIShortString;
+function TDBIVariableList.GetName(const Index: Integer): AnsiString;
 begin
   if (Index >= 0) and (Index < Count) then begin
-    Result := FArray^[Index].PName^;
+    Result := AnsiString(FArray^[Index].PName^);
   end
 end;
 
 
-function TDBIVariableList.GetVariable(const AName: TDBIShortString): Double;
+function TDBIVariableList.GetVariable(const Index: AnsiString): Double;
 begin
-  if not GetValue(AName, Result) then begin
+  if not GetValue(TDBIShortString(Index), Result) then begin
     Result := 0.0;
   end;
 end;
@@ -1059,7 +1127,7 @@ end;
 {**
   Jvr - 24/10/2007 19:07:23 - Updated code.<br>
 }
-procedure TDBIVariableList.SetCapacity(NewCapacity: Integer);
+procedure TDBIVariableList.SetCapacity(const NewCapacity: Integer);
 var
   PNewArray: PDBIVariableArray;
   CopyCount: LongInt;
@@ -1097,11 +1165,14 @@ begin
 end;  { SetCapacity }
 
 
-procedure TDBIVariableList.SetVariable(const AName: TDBIShortString; const Value: Double);
+procedure TDBIVariableList.SetVariable(const Index: AnsiString; const Value: Double);
 var
-  Index: Integer;
+  ItemIndex: Integer;
+  ShortName: TDBIShortString;
 
 begin
+  ShortName := Index;
+
   // Make sure there's enough room
   if (Count = Capacity) then begin
     Grow;
@@ -1109,24 +1180,24 @@ begin
 
   // First the simple case
   if (Count = 0) then begin
-    FArray^[0].PName := FStStack.Push(AName);
+    FArray^[0].PName := FVariableStack.Push(ShortName);
     FArray^[0].Value := Value;
     Inc(FCount);
   end
 
   // Next the case where the name is already present
-  else if FindName(AName, Index) then begin
-    FArray^[Index].Value := Value;
+  else if FindName(ShortName, ItemIndex) then begin
+    FArray^[ItemIndex].Value := Value;
   end
 
   // Finally the case where the name is not present
   else begin
-    if (Index <> Count) then begin
-      Move(FArray^[Index], FArray^[Index+1], (Count - Index) * SizeOf(TDBIVariableNode));
+    if (ItemIndex <> Count) then begin
+      Move(FArray^[ItemIndex], FArray^[ItemIndex+1], (Count - ItemIndex) * SizeOf(TDBIVariableNode));
     end;
 
-    FArray^[Index].PName := FStStack.Push(AName);
-    FArray^[Index].Value := Value;
+    FArray^[ItemIndex].PName := FVariableStack.Push(ShortName);
+    FArray^[ItemIndex].Value := Value;
     Inc(FCount);
   end;
 end;
@@ -1288,7 +1359,7 @@ begin
 end;
 
 
-function TDBIStringStack.Peek : TDBIShortString;
+function TDBIStringStack.Peek: AnsiString;
 begin
   // Check for the obvious mistake
   CheckEmpty;
@@ -1298,7 +1369,7 @@ begin
 end;
 
 
-function TDBIStringStack.Pop: TDBIShortString;
+function TDBIStringStack.Pop: AnsiString;
 var
   PTemp: PAnsiChar;
 
@@ -1330,7 +1401,7 @@ begin
 end;
 
 
-function TDBIStringStack.Push(const Value: TDBIShortString): PDBIShortString;
+function TDBIStringStack.Push(const Value: AnsiString): PDBIShortString;
 var
   PPrevNode: PDBIStringNode;
   PNewString: PAnsiChar;
@@ -1403,7 +1474,7 @@ begin
   if (FStack <> nil) then begin
     FreeMem(FStack, FSize);
   end;
-  
+
   inherited Destroy;
 end;
 
@@ -1452,7 +1523,7 @@ begin
 end;
 
 
-procedure TDBIFloatStack.SetCapacity(NewCapacity: Integer);
+procedure TDBIFloatStack.SetCapacity(const NewCapacity: Integer);
 var
   PNewStack: PAnsiChar;
 
@@ -1475,7 +1546,8 @@ begin
   inherited Create;
   
   FSize := 1024;
-  FStack := StrAlloc(FSize);
+//##JVR  FStack := StrAlloc(FSize);
+  GetMem(FStack, FSize);
   FStackPointer := -1;
 end;
 
@@ -1483,9 +1555,13 @@ end;
 destructor TDBICharacterStack.Destroy;
 begin
   if (FStack <> nil) then begin
+    FreeMem(FStack, FSize);
+  end;
+{##JVR
+  if (FStack <> nil) then begin
     StrDispose(FStack);
   end;
-  
+//}
   inherited Destroy;
 end;
 
@@ -1534,14 +1610,21 @@ begin
 end;
 
 
-procedure TDBICharacterStack.SetCapacity(NewCapacity: Integer);
+procedure TDBICharacterStack.SetCapacity(const NewCapacity: Integer);
 var
   PNewStack: PAnsiChar;
 
 begin
-  PNewStack := StrAlloc(NewCapacity);
+//##JVR  PNewStack := StrAlloc(NewCapacity);
+  GetMem(PNewStack, NewCapacity);
+
   Move(FStack^, PNewStack^, FSize);
-  StrDispose(FStack);
+
+//##JVR  StrDispose(FStack);
+  if (FStack <> nil) then begin
+    FreeMem(FStack, FSize);
+  end;
+
   FStack := PNewStack;
   FSize := NewCapacity;
 end;

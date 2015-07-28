@@ -87,6 +87,7 @@ const
   Chr_Decrement              = '--';
   Chr_DotDot                 = '..';
   Chr_ColonColon             = '::';
+  Chr_EqualGreater           = '=>';
   Chr_GreaterEqual           = '>=';
   Chr_Equality               = '==';
   Chr_Increment              = '++';
@@ -261,6 +262,7 @@ type
     Tok_Decrement,                     // '--'
     Tok_DotDot,                        // '..'
     Tok_ColonColon,                    // '::'
+    Tok_EqualGreater,                  // '=>'
     Tok_GreaterEqual,                  // '>='
     Tok_Equality,                      // '=='
     Tok_Increment,                     // '++'
