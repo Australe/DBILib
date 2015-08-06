@@ -1124,7 +1124,7 @@ begin
   if not (Keyword = Value) then begin
     raise ECodeAnalyserError.CreateFmt(
       ErrMsg,
-      [Token.TokenString, Token.Row, Token.Column, GetEnumName(TypeInfo(TDBIPascalKeyword), Ord(Value))]
+      [Token.TokenString, Token.TokenPosition.Row, Token.TokenPosition.Column, GetEnumName(TypeInfo(TDBIPascalKeyword), Ord(Value))]
       );
   end;
 end;
@@ -1705,7 +1705,7 @@ begin
   inherited LexSymbol;
 
   // Bom - UTF8
-  if (PriorChar = Chr_EF) and (Token.Row = 1) and (Token.Column = 1) then begin
+  if (PriorChar = Chr_EF) and (Token.TokenPosition.Row = 1) and (Token.TokenPosition.Column = 1) then begin
     Token.TokenType := Tok_UTF8;
 
     Assert(LexerChar = Chr_BB);

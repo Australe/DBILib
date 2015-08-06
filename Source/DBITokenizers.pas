@@ -31,7 +31,7 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  Classes, SysUtils, DBITypInfo, DBIStreamAdapters, DBITokenizerConsts;
+  Classes, SysUtils, DB, DBITypInfo, DBIStreamAdapters, DBITokenizerConsts;
 
 type
   EAnalyserError = class(Exception);
@@ -59,12 +59,15 @@ type
     procedure UpdateAsciiPosition;
   end;
 
+type
+  TDBITokenPosition = TDBILexerData;
+  TDBITokenPositionEnumerate = (ptStart, ptEnd);
 
 type
   TDBILexerToken = class(TPersistent)
   private
     FTokenKind: TDBITokenKind;
-    FTokenPosition: TDBITokenPosition;
+    FTokenPosition: array[ptStart..ptEnd] of TDBITokenPosition;
     FTokenStatus: TDBITokenStatus;
     FTokenString: TDBIString;
     FTokenType: TDBITokenType;
@@ -83,6 +86,7 @@ type
     constructor Create;
 
     procedure AddChar(const Value: TDBIChar);
+    procedure CheckState(ALexerData: TDBILexerData);
     procedure Clear;
     procedure ClearString;
 
@@ -92,13 +96,9 @@ type
     property AsInteger: Integer read GetTokenInteger;
     property AsString: TDBIString read FTokenString write FTokenString;
 
-    property Column: Integer read FTokenPosition.Column write FTokenPosition.Column;
-    property Row: Integer read FTokenPosition.Row write FTokenPosition.Row;
-    property Position: Integer read FTokenPosition.Position write FTokenPosition.Position;
-
     property TokenKind: TDBITokenKind read FTokenKind write FTokenKind;
     property TokenName: String read GetTokenName;
-    property TokenPosition: TDBITokenPosition read FTokenPosition;
+    property TokenPosition: TDBITokenPosition read FTokenPosition[ptStart];
     property TokenStatus: TDBITokenStatus read FTokenStatus write FTokenStatus;
     property TokenString: String read GetTokenString write SetTokenString;
     property TokenType: TDBITokenType read FTokenType write FTokenType;
@@ -115,18 +115,31 @@ type
   private
     FCallBack: TDBICustomScopeCallback;
     FData: TObject;
+    FName: String;
+    FParams: TParams;
     FParent: TDBICustomScope;
 
   protected
+    function CreateParams: TParams; virtual;
     function GetEnabled: Boolean; virtual;
+    function GetName: String; virtual;
+    function GetParams: TParams; virtual;
 
-  public
-    function CheckType(AClassType: TDBICustomScopeClass): Boolean;
+    procedure SetName(const Value: String); virtual;
 
     property CallBack: TDBICustomScopeCallback read FCallback write FCallback;
     property Data: TObject read FData write FData;
-    property Enabled: Boolean read GetEnabled;
     property Parent: TDBICustomScope read FParent write FParent;
+
+  public
+    constructor Create(AData: TObject = nil); virtual;
+    destructor Destroy; override;
+
+    function CheckType(AClassType: TDBICustomScopeClass): Boolean;
+
+    property Enabled: Boolean read GetEnabled;
+    property Name: String read GetName write SetName;
+    property Params: TParams read GetParams;
 
   end;
 
@@ -137,14 +150,17 @@ type
     FItems: TList;
 
   protected
+    function GetGlobal: TDBICustomScope;
     function GetItems: TList;
     function GetTop: TDBICustomScope;
 
+    property Global: TDBICustomScope read GetGlobal;
     property Items: TList read GetItems;
 
   public
     destructor Destroy; override;
 
+    function FindParam(const ParamName: String): TParam;
     function Push(Item: TDBICustomScope): TDBICustomScope;
     function Pop: TDBICustomScope;
 
@@ -190,6 +206,7 @@ type
     property PriorChar: TDBIChar read FLexerData.PriorChar write FLexerData.PriorChar;
     property LexerChar: TDBIChar read FLexerData.LexerChar write FLexerData.LexerChar;
     property LexerCharMap: TDBILexerCharacterMap read FLexerCharMap;
+    property LexerData: TDBILexerData read FLexerData;
     property LexerStatus: TDBITokenStatus read FLexerData.Status;
     property LexerTokenType: TDBITokenType read GetTokenType;
     property Token: TDBILexerToken read FLexerToken;
@@ -259,6 +276,13 @@ type
     function Skip(TokenTypes: TDBITokenTypes): String; overload;
     function Skip(TokenKinds: TDBITokenKinds): String; overload;
 
+    procedure SyntaxError(
+      const ErrMsg: String;
+      Args: array of const;
+      Instance: TObject = nil;
+      Caller: String = ''
+      ); virtual;
+
   public
     function GetChar: Boolean; override;
     procedure PutChar(const Value: TDBIChar); override;
@@ -298,20 +322,13 @@ type
     FScope: TDBIScopeStack;
 
   protected
+    function CreateScope: TDBIScopeStack; virtual;
     procedure EnabledHandler(Sender: TObject; var Enabled: Boolean);
 
     function GetInput: TDBICustomAsciiLexer;
     function GetLexerClassType: TDBICustomAsciiLexerClass; virtual; abstract;
     function GetOutput: TDBIStreamFormatter;
     function GetScope: TDBIScopeStack; virtual;
-
-    procedure SyntaxError(
-      const Caller: String;
-      const ErrMsg: String;
-      Args: array of const
-      ); virtual;
-
-    property Scope: TDBIScopeStack read GetScope;
 
   public
     constructor Create; virtual;
@@ -518,11 +535,28 @@ end;
 
 { TDBICustomParser }
 
+type
+  TDBIProtectedStreamFormatter = class(TDBIStreamFormatter);
+
 constructor TDBICustomParser.Create;
 begin
   inherited Create;
 
-  // Place holder (to allow constructor to be virtual)
+  FScope := CreateScope;
+
+  // Register Callback to ensure that the output.enabled property
+  // correctly reflects the scope.enabled;
+  TDBIProtectedStreamFormatter(Output).EnabledCallback := EnabledHandler;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 04/04/2011 09:14:12 - Initial code.<br />
+}
+function TDBICustomParser.CreateScope: TDBIScopeStack;
+begin
+  Result := TDBIScopeStack.Create;
 end;
 
 
@@ -546,8 +580,8 @@ end;
 }
 procedure TDBICustomParser.EnabledHandler(Sender: TObject; var Enabled: Boolean);
 begin
-  if Enabled and Assigned(Scope.Top) then begin
-    Enabled := Scope.Top.Enabled;
+  if Enabled and Assigned(GetScope.Top) then begin
+    Enabled := GetScope.Top.Enabled;
   end;
 end;
 
@@ -578,66 +612,9 @@ begin
 end;
 
 
-// _____________________________________________________________________________
-{**
-  Jvr - 04/04/2011 09:14:12 - Initial code.<br />
-}
-type
-  TDBIProtectedStreamFormatter = class(TDBIStreamFormatter);
-
 function TDBICustomParser.GetScope: TDBIScopeStack;
 begin
-  if not Assigned(FScope) then begin
-    FScope := TDBIScopeStack.Create;
-
-    // Register Callback to ensure that the output.enabled property
-    // correctly reflects the scope.enabled;
-    TDBIProtectedStreamFormatter(Output).EnabledCallback := EnabledHandler;
-  end;
   Result := FScope;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 06/06/2007 15:57:20 - Initial code.<br>
-}
-procedure TDBICustomParser.SyntaxError(
-  const Caller: String;
-  const ErrMsg: String;
-  Args: array of const
-  );
-{$ifndef fpc}
-var
-  Address: Pointer;
-{$endif}
-
-const
-  MsgFormat =
-    '%s Syntax Error at [Line: %d, Offset: %d]'#13 +
-    '  %s'#13 +
-    '  Token = "%s"'#13 +
-    '  Type = "%s"'#13 +
-    '  String = "%s"';
-
-begin
-{$ifndef fpc}
-  // Get return address
-  asm
-    mov eax, [ebp + 4]
-    mov Address, eax
-  end;
-{$endif}
-
-  raise Exception.CreateFmt(MsgFormat, [
-    Caller,
-    Input.Token.Row,
-    Input.Token.Column,
-    Format(ErrMsg, Args),
-    Input.Token.TokenName,
-    GetEnumName(TypeInfo(TDBITokenKind), Ord(Input.Token.TokenKind)),
-    Input.Token.AsString
-    ]) {$ifndef fpc} at Address {$endif} ;
 end;
 
 
@@ -890,13 +867,10 @@ end;
   Jvr - 16/12/2010 13:43:43 - Initial code.<br />
 }
 function TDBICustomAsciiLexer.Check(TokenTypes: TDBITokenTypes): String;
-const
-  ErrMsg = 'Unexpected Token "%s" at [ %d, %d ]';
-
 begin
   Result := Token.TokenString;
   if not (Token.TokenType in TokenTypes) then begin
-    raise EAnalyserError.CreateFmt(ErrMsg, [Token.TokenString, Token.Row, Token.Column]);
+    SyntaxError('Unexpected Token type "%s"', [Token.TokenString]);
   end;
 end;
 
@@ -906,13 +880,10 @@ end;
   Jvr - 14/12/2010 18:56:47 - Initial code.<br />
 }
 function TDBICustomAsciiLexer.Check(TokenKinds: TDBITokenKinds): String;
-const
-  ErrMsg = 'Unexpected Token "%s" at [ %d, %d ]';
-
 begin
   Result := Token.TokenString;
   if not (Token.TokenKind in TokenKinds) then begin
-    raise EAnalyserError.CreateFmt(ErrMsg, [Token.TokenString, Token.Row, Token.Column]);
+    SyntaxError('Unexpected Token kind "%s"', [Token.TokenString]);
   end;
 end;
 
@@ -1302,9 +1273,50 @@ begin
 end;
 
 
+// _____________________________________________________________________________
+{**
+  Jvr - 06/06/2007 15:57:20 - Initial code.<br>
+}
+procedure TDBICustomAsciiLexer.SyntaxError(
+  const ErrMsg: String;
+  Args: array of const;
+  Instance: TObject = nil;
+  Caller: String = ''
+  );
+var
+{$ifndef fpc}
+  Address: Pointer;
+{$endif}
+  MsgFormat: String;
 
+begin
+{$ifndef fpc}
+  // Get return address
+  asm
+    mov eax, [ebp + 4]
+    mov Address, eax
+  end;
+{$endif}
 
+  if Assigned(Instance) then begin
+    Caller := Instance.ClassName + '::' + Caller;
+  end;
 
+  MsgFormat := '(%1:d, %2:d): %0:s';
+  if DBIIsDebuggerPresent then begin
+    MsgFormat := '%6:s ' + MsgFormat + #13'Token = "%3:s", Kind = "%5:s", String = "%4:s"';
+  end;
+
+  raise EAnalyserError.CreateFmt(MsgFormat, [
+{0} Format(ErrMsg, Args),
+{1} Token.TokenPosition.Row,
+{2} Token.TokenPosition.Column,
+{3} Token.TokenName,
+{4} Token.TokenString,
+{5} GetEnumName(TypeInfo(TDBITokenKind), Ord(Token.TokenKind)),
+{6} Caller
+    ]) {$ifndef fpc} at Address {$endif} ;
+end;
 
 
 
@@ -1334,6 +1346,7 @@ end;
 destructor TDBIAbstractLexer.Destroy;
 begin
   Clear;
+  FreeAndNil(FLexerToken);
 
   inherited Destroy;
 end;
@@ -1390,9 +1403,7 @@ var
 
 begin
   // Update Token Position
-  Token.Position := FLexerData.Position;
-  Token.Column := FLexerData.Column;
-  Token.Row := FLexerData.Row;
+  Token.FTokenPosition[ptStart] := FLexerData;
 
   PSymbolData := @(FLexerCharMap[LexerChar]);
   Token.TokenKind := PSymbolData^.TokenKind;
@@ -1406,6 +1417,7 @@ begin
     PSymbolData^.LexerProc;
   end;
 
+  Token.FTokenPosition[ptEnd] := FLexerData;
   Result := Token;
 end;
 
@@ -1615,23 +1627,15 @@ end;
 }
 procedure TDBIAbstractLexer.Restore(AToken: TDBILexerToken);
 begin
-  // Restore Lexer Position
-  Stream.Position := AToken.Position;
+  // Restore Lexer Stream Position
+  Stream.Position := AToken.FTokenPosition[ptEnd].Position;
 
-  // Restore Lexer State
+  // Restore Token State
   Token.Assign(AToken);
 
-  FLexerData.Eof := False;
-  FLexerData.Status := AToken.TokenStatus;
-
-  FLexerData.Column := AToken.Column;
-  FLexerData.Position := AToken.Position;
-  FLexerData.Row := AToken.Row;
-
-  GetChar;
-  GetToken;
+  // Restore Lexer Data State
+  FLexerData := AToken.FTokenPosition[ptEnd];
 end;
-
 
 
 // _____________________________________________________________________________
@@ -1736,6 +1740,37 @@ begin
 end;
 
 
+function TDBIScopeStack.FindParam(const ParamName: String): TParam;
+var
+  Index: Integer;
+  Scope: TDBICustomScope;
+
+begin
+  Result := nil;
+
+  for Index := Items.Count-1 downto 0 do begin
+    Scope := Items[Index];
+
+    if Assigned(Scope) and Assigned(Scope.Params) then begin
+      Result := Scope.GetParams.FindParam(ParamName);
+    end;
+
+    if Assigned(Result) then begin
+      Break;
+    end;
+  end;
+end;
+
+
+function TDBIScopeStack.GetGlobal: TDBICustomScope;
+begin
+  Result := nil;
+  if Items.Count > 0 then begin
+    Result := Items[0];
+  end;
+end;
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 04/04/2011 09:22:04 - Initial code.<br />
@@ -1809,12 +1844,34 @@ begin
       ScopeName := '<nil>, probably a syntax error!';
     end;
 
-//##JVR    TDBICustomScope.Error(nil, Caller, '1995',
     raise Exception.CreateFmt(
       'Expected Scope of type "%s", actual scope is %s',
       [AClassType.ClassName, ScopeName]
       );
   end;
+end;
+
+
+constructor TDBICustomScope.Create(AData: TObject);
+begin
+  inherited Create;
+
+  FData := AData;
+  FParams := CreateParams;
+end;
+
+
+function TDBICustomScope.CreateParams: TParams;
+begin
+  Result := nil;
+end;
+
+
+destructor TDBICustomScope.Destroy;
+begin
+  FreeAndNil(FParams);
+
+  inherited Destroy;
 end;
 
 
@@ -1825,6 +1882,24 @@ end;
 function TDBICustomScope.GetEnabled: Boolean;
 begin
   Result := Assigned(FData) and Assigned(FCallBack);
+end;
+
+
+function TDBICustomScope.GetName: String;
+begin
+  Result := FName;
+end;
+
+
+function TDBICustomScope.GetParams: TParams;
+begin
+  Result := FParams;
+end;
+
+
+procedure TDBICustomScope.SetName(const Value: String);
+begin
+  FName := Value;
 end;
 
 
@@ -1864,14 +1939,26 @@ begin
     TokenData.FTokenKind := FTokenKind;
     TokenData.FTokenStatus := FTokenStatus;
     TokenData.FTokenString := FTokenString;
-
-    TokenData.Row := Row;
-    TokenData.Column := Column;
-    TokenData.Position := Position;
+    TokenData.FTokenPosition[ptStart] := FTokenPosition[ptStart];
+    TokenData.FTokenPosition[ptEnd] := FTokenPosition[ptEnd];
   end
   else begin
     inherited AssignTo(Dest);
   end;
+end;
+
+
+procedure TDBILexerToken.CheckState(ALexerData: TDBILexerData);
+begin
+  // This is to assert that the position state is as expected
+
+  Assert(FTokenPosition[ptEnd].Column = ALexerData.Column);
+  Assert(FTokenPosition[ptEnd].Row = ALexerData.Row);
+  Assert(FTokenPosition[ptEnd].Position = ALexerData.Position);
+  Assert(FTokenPosition[ptEnd].Eof = ALexerData.Eof);
+  Assert(FTokenPosition[ptEnd].LexerChar = ALexerData.LexerChar);
+  Assert(FTokenPosition[ptEnd].PriorChar = ALexerData.PriorChar);
+  Assert(FTokenPosition[ptEnd].Status = ALexerData.Status);
 end;
 
 
@@ -1881,9 +1968,9 @@ end;
 }
 procedure TDBILexerToken.Clear;
 begin
-  Row := 1;
-  Column := 0;
-  Position := 0;
+  FTokenPosition[ptStart].Clear;
+  FTokenPosition[ptEnd].Clear;
+
   TokenType := Tok_UnAssigned;
   TokenKind := tkUnAssigned;
   TokenStatus := tsNone;
@@ -1971,7 +2058,7 @@ begin
     PChar(
       Format(
         'Class: %s, Position(%d = %d , %d) [%s] - %s',
-        [ClassName, Position, Row, Column, TokenString, AMessage]
+        [ClassName, TokenPosition.Position, TokenPosition.Row, TokenPosition.Column, TokenString, AMessage]
         )
       )
     );

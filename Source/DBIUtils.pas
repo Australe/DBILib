@@ -236,6 +236,7 @@ function Local(Instance: TObject): TInstanceRecord;
 procedure Check(Status: DBIResult);
 
 function DBIForceDirectories(Dir: string): Boolean;
+function DBIIsDebuggerPresent: Boolean;
 function DBIModuleName: String;
 function DBIModuleDateTime(AModuleName: String = ''): TDateTime;
 function DBIStrDateStampToDateTime(PDateStamp: PAnsiChar): TDateTime;
@@ -996,6 +997,22 @@ begin
   Result := DBIForceDirectories(ExtractFilePath(Dir)) and CreateDir(Dir);
 end;
 {$endif}
+
+
+function DBIIsDebuggerPresent: Boolean;
+var
+  IsDebuggerAttached: function: Boolean; stdcall;
+  KernelHandle: THandle;
+
+begin
+  Result := False;
+
+  KernelHandle := GetModuleHandle(kernel32);
+  @IsDebuggerAttached := GetProcAddress(KernelHandle, 'IsDebuggerPresent');
+  if @IsDebuggerAttached <> nil then begin
+    Result := IsDebuggerAttached;
+  end;
+end;
 
 
 // _____________________________________________________________________________

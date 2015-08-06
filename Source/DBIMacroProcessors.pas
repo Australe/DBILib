@@ -33,8 +33,8 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  Classes, SysUtils, DB, DBConsts, DBIConst, DBIComponents, DBIStreamAdapters, DBIUtils,
-  DBITokenizerConsts, DBITokenizers, DBIExpressionEvaluators;
+  Classes, SysUtils, Dialogs, DB, DBConsts, DBIConst, DBIUtils, DBIComponents,
+  DBIStreamAdapters, DBITokenizerConsts, DBITokenizers, DBIExpressionEvaluators;
 
 type
   TDBIParams = class(TParams)
@@ -42,14 +42,71 @@ type
     class procedure AssignDefaultValue(AParam: TParam; ADataType: TFieldType);
 
   public
+    constructor Create;
+    destructor Destroy; override;
+
     class procedure AssignDefaultParams(AParams: TDBIParams);
 
     function GetByName(
       const AParamName: String;
       const ADataType: TFieldType = ftUnknown;
       const AParamType: TParamType = ptUnknown
-      ): TParam;
+      ): TParam; virtual;
 
+  end;
+
+
+type
+  TDBIGlobalParams = class(TDBIParams)
+  public
+    function GetByName(
+      const AParamName: String;
+      const ADataType: TFieldType = ftUnknown;
+      const AParamType: TParamType = ptUnknown
+      ): TParam; override;
+
+  end;
+
+
+type
+  TDBIGlobalScope = class(TDBICustomScope)
+  protected
+    function CreateParams: TParams; override;
+    function GetEnabled: Boolean; override;
+
+  end;
+
+
+type
+  TDBICustomBindingsList = class(TStringList);
+  TDBIScopeClass = class of TDBICustomScope;
+
+  TDBIGlobalScopeStack = class(TDBIScopeStack)
+  private
+    FBindings: TDBICustomBindingsList;
+
+  protected
+    function GetBindings: TDBICustomBindingsList;
+
+  public
+    destructor Destroy; override;
+
+    procedure AddBinding(
+      const ScopeName: String;
+      const ScopeData: TObject;
+      const ScopeClass: TDBIScopeClass
+      );
+
+    function Bind(
+      const DataBindingName: String;
+      const EnumeratorName: String;
+      const KeyName: String;
+      const Recursive: Boolean = False
+      ): TDBICustomScope;
+
+    procedure ReleaseBindings;
+
+    property Bindings: TDBICustomBindingsList read GetBindings;
   end;
 
 
@@ -80,10 +137,9 @@ type
     FParams: TDBIParams;
 
   protected
-    procedure ClearParams;
+    function CreateParams: TParams; override;
 
     function GetBof: Boolean; virtual;
-    function GetEnumerableName: String;
     function GetCount: Integer; virtual;
     function GetCurrent: TObject; virtual;
     function GetEnabled: Boolean; override;
@@ -91,12 +147,9 @@ type
     function GetItemIndex: Integer; virtual;
     function GetItemName: String; virtual;
     function GetKeyName: String; virtual;
-    function GetParams: TDBIParams; virtual;
 
-    procedure SetEnumerableName(const Value: String);
-    procedure SetItemName(const Value: String); virtual;
     procedure SetKeyName(const Value: String); virtual;
-    procedure SetParams(const Value: TDBIParams); virtual;
+    procedure SetItemName(const value: String); virtual;
     procedure UpdateParams; virtual;
 
     procedure First; virtual;
@@ -105,22 +158,28 @@ type
 
     property Bof: Boolean read GetBof;
     property Count: Integer read GetCount;
-    property EnumerableName: String read GetEnumerableName write SetEnumerableName;
     property Eof: Boolean read GetEof;
     property ItemIndex: Integer read GetItemIndex;
+    property ItemName: String read GetItemName write SetItemName;
     property KeyName: String read GetKeyName write SetKeyName;
-    property Name: String read GetItemName write SetItemName;
-    property Params: TDBIParams read GetParams write SetParams;
+    property Params: TDBIParams read FParams;
 
   public
-    constructor Create(ASource: TObject); virtual;
+    constructor Create(AData: TObject); override;
     destructor Destroy; override;
 
+    procedure UpdateParentParams(AParams: TDBIParams); virtual;
   end;
-  TDBICustomEnumeratorScopeClass = class of TDBICustomEnumeratorScope;
 
 
   TDBINullEnumeratorScope = class(TDBICustomEnumeratorScope)
+  end;
+
+
+type
+  TDBIRttiEnumeratorScope = class(TDBICustomEnumeratorScope)
+  protected
+    procedure UpdateParams; override;
   end;
 
 
@@ -214,13 +273,28 @@ type
 
 
 type
-  TDBIEnumerationKeyword = (Enum_Unknown, Enum_As, Enum_ForEach, Enum_Else, Enum_EndFor, Enum_EndIf, Enum_If );
-  TDBIEnumerationKeywords = set of TDBIEnumerationKeyword;
+  TDBIStandardKeyword = (
+    Keyword_Unknown,
+    Keyword_As,
+    Keyword_Boolean,
+    Keyword_DateTime,
+    Keyword_Double,
+    Keyword_Define,
+    Keyword_ForEach,
+    Keyword_Else,
+    Keyword_EndFor,
+    Keyword_EndIf,
+    Keyword_If,
+    Keyword_Integer,
+    Keyword_Short,
+    Keyword_String
+    );
+  TDBIStandardKeywords = set of TDBIStandardKeyword;
 
   TDBIGenericMacroLexer = class(TDBICustomMacroLexer)
   protected
-    function GetDotString(Params: TParams): String;
-    function GetKeyword: TDBIEnumerationKeyword;
+    function GetDotString(Scope: TDBIScopeStack): String;
+    function GetKeyword: TDBIStandardKeyword;
 
     procedure LexInitialise; override;
     procedure LexEscape;
@@ -231,45 +305,34 @@ type
     procedure UptoToken;
 
   public
-    function Check(Keywords: TDBIEnumerationKeywords): String; overload;
-    function Fetch(Keywords: TDBIEnumerationKeywords): String; overload;
-    function Have(Keywords: TDBIEnumerationKeywords): Boolean; overload;
-    function Skip(Keywords: TDBIEnumerationKeywords): String; overload;
+    function Check(Keywords: TDBIStandardKeywords): String; overload;
+    function Fetch(Keywords: TDBIStandardKeywords): String; overload;
+    function Have(Keywords: TDBIStandardKeywords): Boolean; overload;
+    function Skip(Keywords: TDBIStandardKeywords): String; overload;
 
-    property Keyword: TDBIEnumerationKeyword read GetKeyword;
+    property Keyword: TDBIStandardKeyword read GetKeyword;
   end;
 
 
 type
   TDBIMacroProcessorIncludeEvent = function(const IncludeName: string): string of object;
 
-  TDBICustomBindingsList = class(TStringList);
-
   TDBIGenericMacroProcessor = class(TDBICustomMacroProcessor)
   private
-    FBindings: TDBICustomBindingsList;
     FEvaluator: TDBIExpressionEvaluator;
     FLexer: TDBIGenericMacroLexer;
+    FMacroName: String;
+    FMacroValue: String;
+    FNullParam: TParam;
     FOnInclude: TDBIMacroProcessorIncludeEvent;
     FOrigin: TDBICompoundComponent;
-    FMacroName: String;
-    FParams: TDBIParams;
+    FScope: TDBIGlobalScopeStack;
 
   protected
-    procedure AddBinding(
-      const ResourceName: String;
-      const ResourceData: TObject;
-      const ResourceClass: TDBICustomEnumeratorScopeClass
-      );
-
-    function GetBindings: TDBICustomBindingsList;
-    function GetEnumeratorScope(
-      const BindingName: String;
-      const Recursive: Boolean
-      ): TDBICustomEnumeratorScope;
+    function CreateScope: TDBIScopeStack; override;
+    function FindParam(const ParamName: String): TParam;
 
     function GetEvaluator: TDBIExpressionEvaluator;
-//##JVR    function GetKeyword: TDBIEnumerationKeyword;
     function GetLexerClassType: TDBICustomAsciiLexerClass; override;
 
     function GetMemberComponent(const AName: String): TComponent;
@@ -279,9 +342,8 @@ type
       Sender: TObject; const ParamName: String; var ParamValue: Variant
       ): Boolean; override;
 
-    function GetParams: TDBIParams; virtual;
-
     function ProcessComments: Boolean; virtual;
+    function ProcessDefine(const ParamType: TDBIStandardKeyword; const ExpectedTypes: TDBITokenTypes): Boolean;
     function ProcessElse: Boolean;
     function ProcessEndFor: Boolean;
     function ProcessEndIf: Boolean;
@@ -296,10 +358,9 @@ type
     function ProcessIf: Boolean;
     function ProcessMacros: Boolean; virtual;
 
-    procedure ReleaseBindings;
-
     property Evaluator: TDBIExpressionEvaluator read GetEvaluator;
     property Input: TDBIGenericMacroLexer read FLexer;
+    property NullParam: TParam read FNullParam;
     property OnInclude: TDBIMacroProcessorIncludeEvent read FOnInclude write FOnInclude;
 
   public
@@ -307,43 +368,14 @@ type
     destructor Destroy; override;
     procedure Process; override;
 
-    property Params: TDBIParams read GetParams;
-    property Bindings: TDBICustomBindingsList read GetBindings;
+    property Scope: TDBIGlobalScopeStack read FScope;
   end;
-
-
-(*##JVR
-  TDBIIteratorProcessor = class(TDBICustomIteratorProcessor)
-  private
-    FConduit: TDBIStreamFormatter;
-
-  protected
-    function DoIncludeEvent(const Value: String): String;
-
-    function GetConduit: TDBIStreamFormatter;
-    function GetRootComponent: TDBICompoundComponent;
-    function GetTemplate(const Index: String): String;
-
-    property Template[const Index: String]: String read GetTemplate;
-
-  public
-    destructor Destroy; override;
-    procedure Publish(
-      AComponent: TDBICompoundComponent;
-      const ATemplateName: String;
-      const AFileName: TFileName
-      );
-
-    property Conduit: TDBIStreamFormatter read GetConduit;
-
-  end;
-//*)
 
 
 implementation
 
 uses
-  Windows, TypInfo, Controls, DBClient, DBIDataset, DBIObjectListDatasets, Dialogs;
+  Windows, Controls, TypInfo, DBClient, DBITypInfo, DBIDataset, DBIObjectListDatasets;
 
 
 const
@@ -351,7 +383,7 @@ const
   paramMax = '.max';
   paramCount = '.count';
   paramLevel = '.level';
-  paramName = '.name';
+  paramItemName = '.name';
   paramClassName = '.classname';
   paramCaption = '.caption';
   paramDataType = '.datatype';
@@ -398,184 +430,45 @@ end;
 
 
 
-{ TDBIComponentProcessor }
-(*##JVR
-// _____________________________________________________________________________
-{**
-  Jvr - 19/03/2008 08:04:16 - Initial code.<br />
-}
-destructor TDBIIteratorProcessor.Destroy;
-begin
-  FConduit.Free;
-  FConduit := nil;
-
-  FOrigin.Free;
-  FOrigin := nil;
-
-  inherited Destroy;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 08/08/2006 17:51:36 - Initial code.<br>
-}
-
-function TDBIIteratorProcessor.GetConduit: TDBIStreamFormatter;
-begin
-  if not Assigned(FConduit) then begin
-    FConduit := TDBIStreamFormatter.Create;
-  end;
-  Result := FConduit;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 23/03/2011 15:44:02 - Initial code.<br />
-}
-function TDBIIteratorProcessor.GetRootComponent: TDBICompoundComponent;
-begin
-  Result := FOrigin.GetRootComponent as TDBICompoundComponent;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 23/03/2011 15:34:52 - Initial code.<br />
-}
-function TDBIIteratorProcessor.GetTemplate(const Index: String): String;
-const
-  Caller = 'GetTemplate';
-
-var
-  TemplateComponent: TComponent;
-  TemplateInfo: PPropInfo;
-
-begin
-  Result := '';
-
-  if (Index <> '') then begin
-    TemplateComponent := GetRootComponent.GetMemberComponent(Index, TDBICompoundComponent);
-    if Assigned(TemplateComponent) then begin
-      TemplateInfo := TypInfo.GetPropInfo(TemplateComponent, 'Text');
-      if Assigned(TemplateInfo) then begin
-        Input.Text := GetStrProp(TemplateComponent, TemplateInfo);
-        Process;
-        Result := Output.Text;
-      end;
-    end;
-
-    if (Result = '') then begin
-      raise Exception.CreateFmt(Caller + '::450::' + 'Template "%s" not found!', [Index]);
-//##JVR      Error(nil, Caller, '180', 'Template "%s" not found!', [Index]);
-    end
-  end;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 31/03/2011 09:35:57 - Initial code.<br />
-}
-procedure TDBIIteratorProcessor.Publish(
-  AComponent: TDBICompoundComponent;
-  const ATemplateName: String;
-  const AFileName: TFileName
-  );
-begin
-  FOrigin := AComponent;
-  OnInclude := DoIncludeEvent;
-  try
-    if Assigned(AComponent) and (AComponent.ChildCount > 0) then begin
-      Conduit.WriteLine(Template[ATemplateName]);
-      Conduit.SaveToFile(AFileName);
-    end;
-  finally
-    OnInclude := nil;
-    FOrigin := nil;
-  end;
-end;
-
-
-function TDBIIteratorProcessor.DoIncludeEvent(const Value: String): String;
-begin
-  //##NOP
-end;
-
-{##JVR
-const
-  Prompt = 'Resource'#13'  "%s"'#13#13'Requires'#13'  "%s"'#13#13'Required resource not found!';
-
-var
-  Item: TComponent;
-
-begin
-  if Assigned(FOrigin) then begin
-    Item := FOrigin.GetMemberComponent(Trim(Value), XLeaf);
-
-    if not Assigned(Item) then begin
-      Result := '';
-      MessageDlg(Format(Prompt, ['(FItemComponent as XCompoundComponent).CompoundName', Value]), mtWarning, [mbOK], 0);
-    end
-    else begin
-      Result := (Item as XLeaf).DisplayText;
-    end;
-  end;
-end;
-//}
-//*)
-
-
-
-
-
 { TDBICustomEnumeratorProcessor }
 
-procedure TDBIGenericMacroProcessor.AddBinding(
-  const ResourceName: String;
-  const ResourceData: TObject;
-  const ResourceClass: TDBICustomEnumeratorScopeClass
-  );
-begin
-  Bindings.AddObject(ResourceName, ResourceClass.Create(ResourceData))
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 23/02/2005 18:02:23 - Initial code.<br>
-}
 constructor TDBIGenericMacroProcessor.Create;
 begin
   inherited Create;
 
+  FNullParam := TParam.Create(nil);
+  FNullParam.AsString := '0';
+
   FLexer := GetInput as TDBIGenericMacroLexer;
-end;
 
-
-destructor TDBIGenericMacroProcessor.Destroy;
-begin
-  ReleaseBindings;
-  FreeAndNil(FEvaluator);
-  FreeAndNil(FParams);
-
-  inherited Destroy;
+  Scope.Push(TDBIGlobalScope.Create);
 end;
 
 
 // _____________________________________________________________________________
 {**
-  Jvr - 19/01/2006 13:50:34 - Initial code.<br>
+  Jvr - 19/01/2009 11:15:15 - Initial code.<br>
 }
-function TDBIGenericMacroProcessor.GetBindings: TDBICustomBindingsList;
+function TDBIGenericMacroProcessor.CreateScope: TDBIScopeStack;
 begin
-  if not Assigned(FBindings) then begin
-    FBindings := TDBICustomBindingsList.Create;
-    FBindings.Duplicates := dupError;
-    FBindings.Sorted := True;
-  end;
-  Result := FBindings;
+  FScope := TDBIGlobalScopeStack.Create;
+
+  Result := FScope;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 08/08/2006 17:57:54 - Initial code.<br>
+}
+destructor TDBIGenericMacroProcessor.Destroy;
+begin
+  Scope.Pop.Free;
+
+  FreeAndNil(FNullParam);
+  FreeAndNil(FEvaluator);
+
+  inherited Destroy;
 end;
 
 
@@ -583,51 +476,18 @@ end;
 {**
   Jvr - 23/02/2005 18:05:09 - Initial code.<br>
 }
-function TDBIGenericMacroProcessor.GetEnumeratorScope(
-  const BindingName: String;
-  const Recursive: Boolean
-  ): TDBICustomEnumeratorScope;
-var
-  ItemIndex: Integer;
-
+function TDBIGenericMacroProcessor.FindParam(const ParamName: String): TParam;
 begin
-  ItemIndex := Bindings.IndexOf(BindingName);
-  if (ItemIndex >= 0) then begin
-    Result := Scope.Push(Bindings.Objects[ItemIndex] as TDBICustomScope) as TDBICustomEnumeratorScope;
+  Result := Scope.FindParam(ParamName);
+
+  if Scope.Top.Enabled then begin
+    if not Assigned(Result) and (Pos('.', ParamName) > 1) then begin
+      Input.SyntaxError('Undeclared identifier "%s"', [ParamName]);
+    end;
   end
   else begin
-    raise Exception.CreateFmt('Enumeration failed, Data "%s" not available', [BindingName]);
+    Result := NullParam;
   end;
-
-{##JVR
-  // Try to Create a Component Traversal Scope
-  if Recursive then begin
-    Result := Scope.Push(
-      TDBIComponentTraversalScope.Create(GetMemberComponent(EnumerableName))
-      ) as TDBICustomEnumeratorScope;
-  end;
-
-  // If there is NO Component Scope, then try a Component Enumerator Scope
-  if not Assigned(Result) then begin
-    Result := Scope.Push(
-      TDBIComponentEnumeratorScope.Create(GetMemberComponent(EnumerableName))
-      ) as TDBICustomEnumeratorScope;
-  end;
-
-  // If there is NO Component Scope, then try a Params Scope
-  if not Assigned(Result) then begin
-    Result := Scope.Push(
-      TDBIParamsEnumeratorScope.Create(GetMemberComponentParams(EnumerableName))
-      ) as TDBICustomEnumeratorScope;
-  end;
-
-  // Otherwise create a null scope as a place holder to provide proper program flow
-  if not Assigned(Result) then begin
-    Result := Scope.Push(
-      TDBINullEnumeratorScope.Create(nil)
-      ) as TDBICustomEnumeratorScope;
-  end;
-//}
 end;
 
 
@@ -643,25 +503,6 @@ begin
   Result := FEvaluator;
 end;
 
-(*##JVR
-// _____________________________________________________________________________
-{**
-  Jvr - 08/08/2006 17:57:54 - Initial code.<br>
-}
-function TDBIGenericMacroProcessor.GetKeyword: TDBIEnumerationKeyword;
-var
-  Index: Integer;
-
-begin
-  Index := GetEnumValue(TypeInfo(TDBIEnumerationKeyword), 'Enum_' + Input.Token.TokenString);
-  if (Index <> -1) then begin
-    Result := TDBIEnumerationKeyword(Index);
-  end
-  else begin
-    Result := Enum_Unknown;
-  end;
-end;
-//*)
 
 // _____________________________________________________________________________
 {**
@@ -720,25 +561,19 @@ var
   Param: TParam;
 
 begin
-  Param := Params.FindParam(ParamName);
-  Result := Assigned(Param);
-  if Result then begin
-    ParamValue := Param.Value;
-  end;
-end;
+  Result := True;
 
+  if Scope.Top.Enabled then begin
+    Param := FindParam(ParamName);
 
-// _____________________________________________________________________________
-{**
-  Jvr - 19/01/2009 11:15:15 - Initial code.<br>
-}
-function TDBIGenericMacroProcessor.GetParams: TDBIParams;
-begin
-  if not Assigned(FParams) then begin
-    FParams := TDBIParams.Create;
-    TDBIParams.AssignDefaultParams(FParams);
+    Result := Assigned(Param);
+    if Result then begin
+      ParamValue := Param.Value;
+    end
+  end
+  else begin
+    ParamValue := '';
   end;
-  Result := FParams;
 end;
 
 
@@ -763,7 +598,6 @@ begin
     end;
   end;
 
-//##JVR  Result := Output.Text;
 end;
 
 
@@ -779,6 +613,107 @@ end;
 
 // _____________________________________________________________________________
 {**
+  Jvr - 25/09/2006 15:33:05 - Initial code.<br>
+}
+function TDBIGenericMacroProcessor.ProcessDefine(
+  const ParamType: TDBIStandardKeyword;
+  const ExpectedTypes: TDBITokenTypes
+  ): Boolean;
+const
+  Caller = 'ProcessDefine';
+
+var
+  Params: TDBIParams;
+  EOL: Boolean;
+
+begin
+  // Swallow Type ( #boolean, #define, #double, #integer, #short, #string )
+  Input.Fetch([Tok_Identifier]);
+  Input.Skip([tkWhiteSpace]);
+
+  // Get Macro Name
+  FMacroName := ProcessGetMacroName;
+  Input.Skip([tkWhiteSpace]);
+
+  // Now create the appropriate typed parameter
+  FMacroValue := ProcessGetMacroValue(ExpectedTypes);
+
+  // Do we remove whitespace at EOL
+  EOL := Input.Have([Tok_BackSlash]);
+
+  // Get Closing Bracket
+  Input.Fetch([Tok_CloseCurlyBracket]);
+
+  // Eat whitespace til EOL
+  if EOL then begin
+    Input.Skip([Tok_Space, Tok_HorizontalTab]);
+    Input.Have([Tok_LineBreak]);
+  end;
+
+  if Scope.Top.Enabled then begin
+    Params := Scope.Top.Params as TDBIParams;
+
+    case ParamType of
+      Keyword_Boolean: begin
+        Params.GetByName(FMacroName).AsBoolean := CompareText('True', FMacroValue) = 0;
+      end;
+
+      Keyword_DateTime: begin
+        if (FMacroValue = '') then begin
+          Params.GetByName(FMacroName).AsDateTime := Now;
+        end
+        else begin
+          Params.GetByName(FMacroName).AsString := FMacroValue;
+          Params.GetByName(FMacroName).AsDateTime := Params.GetByName(FMacroName).AsDateTime;
+        end;
+      end;
+
+      Keyword_Double: begin
+        if (FMacroValue = '') then begin
+          Params.GetByName(FMacroName).AsFloat := 0;
+        end
+        else begin
+          Evaluator.Expression := FMacroValue;
+          Params.GetByName(FMacroName).AsFloat := Evaluator.Result;
+        end;
+      end;
+
+      Keyword_Integer: begin
+        if (FMacroValue = '') then begin
+          Params.GetByName(FMacroName).AsInteger := 0;
+        end
+        else begin
+          Evaluator.Expression := FMacroValue;
+          Params.GetByName(FMacroName).AsInteger := Round(Evaluator.Result);
+        end;
+      end;
+
+      Keyword_Short: begin
+        if (FMacroValue = '') then begin
+          Params.GetByName(FMacroName).AsSmallint := 0;
+        end
+        else begin
+          Evaluator.Expression := FMacroValue;
+          Params.GetByName(FMacroName).AsSmallint := Round(Evaluator.Result);
+        end;
+      end;
+
+      Keyword_String: begin
+        Params.GetByName(FMacroName).AsString := FMacroValue;
+      end;
+
+      else { Keyword_Define } begin
+        Params.GetByName(FMacroName).AsString := FMacroValue;
+      end;
+    end;
+  end;
+
+  Result := True;
+end;
+
+
+// _____________________________________________________________________________
+{**
   Jvr - 10/08/2006 22:53:26 - Initial code.<br>
 }
 function TDBIGenericMacroProcessor.ProcessElse: Boolean;
@@ -787,7 +722,7 @@ var
 
 begin
   // Swallow keyword 'Else', Whitespace and Closing Bracket
-  Input.Fetch([Tok_Identifier]);
+  Input.Fetch([Keyword_Else]);
   Input.Skip([tkWhiteSpace]);
 
   // Do we remove whitespace at EOL
@@ -823,7 +758,7 @@ var
 
 begin
   // Swallow keyword 'endfor', Whitespace and Closing Bracket
-  Result := Input.Keyword = Enum_EndFor;
+  Result := Input.Keyword = Keyword_EndFor;
   if Result then begin
     Input.Fetch([Tok_Identifier]);
     Input.Skip([tkWhiteSpace]);
@@ -877,7 +812,7 @@ var
 
 begin
   // Swallow keyword 'endif', Whitespace and Closing Bracket
-  Input.Fetch([Tok_Identifier]);
+  Input.Fetch([Keyword_Endif]);
   Input.Skip([tkWhiteSpace]);
 
   // Do we remove whitespace at EOL
@@ -890,17 +825,6 @@ begin
   if EOL then begin
     Input.Skip([Tok_Space, Tok_HorizontalTab]);
     Input.Have([Tok_LineBreak]);
-  end;
-
-  Result := Assigned(Scope.Top);
-  if not Result then begin
-    ShowMessageFmt('Position(%d = %d ,  %d) [%s]'#13'%s', [
-      Input.Token.Position,
-      Input.Token.Row,
-      Input.Token.Column,
-      Input.Token.AsString,
-      Input.Text
-      ]);
   end;
 
   Result := Scope.Top.CheckType(TDBIIfThenElseScope);
@@ -932,7 +856,7 @@ begin
   EnumeratorKeyName := '';
 
   // Swallow Keyword "foreach"
-  Input.Fetch([Tok_Identifier]);
+  Input.Fetch([Keyword_Foreach]);
   Input.Skip([tkWhiteSpace]);
 
   // Is it Recursive
@@ -945,15 +869,18 @@ begin
   end;
 
   // Get name of Enumerable
-  EnumerableName := (Input as TDBIGenericMacroLexer).GetDotString(Params);
+  EnumerableName := (Input as TDBIGenericMacroLexer).GetDotString(Scope);
   Input.Skip([tkWhiteSpace]);
 
   // Get "as" keyword
-  Input.Fetch([Enum_As]);
+  Input.Fetch([Keyword_As]);
   Input.Skip([tkWhiteSpace]);
 
-  // Get name of Enumerator
+  // Get name of Enumerator  ##HACK
   EnumeratorName := Input.Fetch([Tok_Identifier]);
+  if Input.Have([Tok_Dot]) then begin
+    EnumeratorName := EnumeratorName + '.' + Input.Fetch([Tok_Identifier]);
+  end;
   Input.Skip([tkWhiteSpace]);
 
   // Do we have a Key name? then reassign Key name and get Enumerator name
@@ -978,19 +905,15 @@ begin
   end;
 
   // Create and Push the scope Object onto the stack
-  EnumeratorScope := GetEnumeratorScope(EnumerableName, Recursive);
+  EnumeratorScope := Scope.Bind(EnumerableName, EnumeratorName, EnumeratorKeyName, Recursive) as TDBICustomEnumeratorScope;
 
-  // Initialise the Enumerator Scope Object and start the enumoration
+  // Initialise the Enumerator Scope Object and start the enumeration
   Result := Assigned(EnumeratorScope);
   if Result then begin
-    EnumeratorScope.Params := Params;
-    EnumeratorScope.Name := EnumeratorName;
-    EnumeratorScope.KeyName := EnumeratorKeyName;
-    EnumeratorScope.EnumerableName := EnumerableName;
     EnumeratorScope.Assign(Input.Token);
+    EnumeratorScope.CheckState(Input.LexerData);
 
-    // Ok go!
-    if EnumeratorScope.Enabled and (EnumeratorScope.Count > 0) then begin
+    if (EnumeratorScope.Count > 0) then begin
       EnumeratorScope.First;
 
       // Restore Lexer position and state
@@ -1039,7 +962,6 @@ function TDBIGenericMacroProcessor.ProcessGetMacroValue(
   ): String;
 const
   Caller = 'ProcessGetMacroValue';
-  ErrMsg = 'Syntax Error at [Line: %d, Offset: %d]'#13'Failed to get macro, "%s"';
 
 var
   InterimName: String;
@@ -1056,7 +978,7 @@ begin
       // Deal with previously define macros
       if (Input.Token.TokenKind = tkMacro) then begin
         InterimName := Input.Token.TokenString;
-        Param := Params.FindParam(InterimName);
+        Param := FindParam(InterimName);
         if not Assigned(Param) then begin
           Result := Result + '${' + Input.Token.TokenString + '}';
           { TODO 4 -oJvr -cProcessGetMacroValue(() :
@@ -1092,7 +1014,7 @@ begin
 
    except
     on E: Exception do
-      raise Exception.CreateFmt(Caller + '::1020::' + ErrMsg, [Input.Token.Row, Input.Token.Column, InterimName]);
+      Input.SyntaxError('Failed to get macro "%s" - %s', [InterimName, E.Message], Self, Caller);
   end;
 end;
 
@@ -1101,24 +1023,23 @@ end;
 {**
   Jvr - 10/08/2006 22:54:32 - Initial code.<br>
 }
-{$ifndef UseExpressions}
 function TDBIGenericMacroProcessor.ProcessIf: Boolean;
 const
   Caller = 'ProcessIf';
 
 var
   ComparisonType: TDBITokenType;
-  Value: Double;
+  FloatValue: Double;
   StringValue: String;
-  Retval: Integer;
   IfThenElse: TDBIIfThenElseScope;
   EOL: Boolean;
+  Param: TParam;
 
 begin
   Result := False;
   try
     // Swallow keyword 'If' / 'ElseIf'
-    Input.Fetch([Tok_Identifier]);
+    Input.Fetch([Keyword_If]);
     Input.Skip([tkWhiteSpace]);
     FMacroName := ProcessGetMacroName;
 
@@ -1129,38 +1050,40 @@ begin
 
     Input.Skip([tkWhiteSpace]);
 
-    // Is it a string literal
-    if (Params.GetByName(FMacroName).DataType = ftString) or (Input.Token.TokenType = Tok_SingleQuote) then begin
-      Input.Fetch([Tok_SingleQuote]);
-      StringValue := ProcessGetMacroValue(
-        [],
-        [Tok_OpenCurlyBracket, Tok_CloseCurlyBracket, Tok_SingleQuote, Tok_Eof]
-        );
-      Input.Fetch([Tok_SingleQuote]);
+    Param := FindParam(FMacroName);
+    if Assigned(Param) then begin
+      // Is it a string literal
+      if (Param.DataType = ftString) or (Input.Token.TokenType = Tok_SingleQuote) then begin
+        Input.Fetch([Tok_SingleQuote]);
+        StringValue := ProcessGetMacroValue(
+          [],
+          [Tok_OpenCurlyBracket, Tok_CloseCurlyBracket, Tok_SingleQuote, Tok_Eof]
+          );
+        Input.Fetch([Tok_SingleQuote]);
 
-      Retval := CompareText(Params.GetByName(FMacroName).AsString, StringValue);
-      case ComparisonType of
-        Tok_Smaller:      Result := Retval < 0;
-        Tok_Greater:      Result := Retval > 0;
-        Tok_GreaterEqual: Result := Retval >= 0;
-        Tok_Equality:     Result := Retval = 0;
-        Tok_InEquality:   Result := Retval <> 0;
-        Tok_NotEqual:     Result := Retval <> 0;
-        Tok_SmallerEqual: Result := Retval <= 0;
-      end;
-    end
-    else begin
-      Evaluator.Expression := ProcessGetMacroValue([]);
-      Value := Evaluator.Result;
+        case ComparisonType of
+          Tok_Smaller:      Result := CompareText(Param.AsString, StringValue) < 0;
+          Tok_Greater:      Result := CompareText(Param.AsString, StringValue) > 0;
+          Tok_GreaterEqual: Result := CompareText(Param.AsString, StringValue) >= 0;
+          Tok_Equality:     Result := CompareText(Param.AsString, StringValue) = 0;
+          Tok_InEquality:   Result := CompareText(Param.AsString, StringValue) <> 0;
+          Tok_NotEqual:     Result := CompareText(Param.AsString, StringValue) <> 0;
+          Tok_SmallerEqual: Result := CompareText(Param.AsString, StringValue) <= 0;
+        end;
+      end
+      else begin
+        Evaluator.Expression := ProcessGetMacroValue([]);
+        FloatValue := Evaluator.Result;
 
-      case ComparisonType of
-        Tok_Smaller:      Result := Params.GetByName(FMacroName).AsFloat < Value;
-        Tok_Greater:      Result := Params.GetByName(FMacroName).AsFloat > Value;
-        Tok_GreaterEqual: Result := Params.GetByName(FMacroName).AsFloat >= Value;
-        Tok_Equality:     Result := Params.GetByName(FMacroName).AsFloat = Value;
-        Tok_InEquality:   Result := Params.GetByName(FMacroName).AsFloat <> Value;
-        Tok_NotEqual:     Result := Params.GetByName(FMacroName).AsFloat <> Value;
-        Tok_SmallerEqual: Result := Params.GetByName(FMacroName).AsFloat <= Value;
+        case ComparisonType of
+          Tok_Smaller:      Result := Param.AsFloat < FloatValue;
+          Tok_Greater:      Result := Param.AsFloat > FloatValue;
+          Tok_GreaterEqual: Result := Param.AsFloat >= FloatValue;
+          Tok_Equality:     Result := Param.AsFloat = FloatValue;
+          Tok_InEquality:   Result := Param.AsFloat <> FloatValue;
+          Tok_NotEqual:     Result := Param.AsFloat <> FloatValue;
+          Tok_SmallerEqual: Result := Param.AsFloat <= FloatValue;
+        end;
       end;
     end;
 
@@ -1187,58 +1110,6 @@ begin
   IfThenElse.State := msIf;
   IfThenElse.TokenString := FMacroName;
 end;
-
-
-{$else}
-
-
-function TDBIGenericMacroProcessor.ProcessIf: Boolean;
-const
-  Caller = 'ProcessIf';
-
-var
-//  ComparisonType: TDBITokenType;
-//  Value: Double;
-//  StringValue: String;
-//  Retval: Integer;
-  IfThenElse: TDBIIfThenElseScope;
-  Expression: String;
-  EOL: Boolean;
-
-begin
-  Result := False;
-  try
-    // Swallow keyword 'If' / 'ElseIf'
-    Input.Fetch([Tok_Identifier]);
-//##JVR    Input.Skip([tkWhiteSpace]);
-
-    // Fetch the whole expression upto Closing Bracket '}'
-    Expression := Lexer.Upto([Tok_CloseCurlyBracket]);
-
-    // Do we remove whitespace at EOL
-    EOL := Input.Have([Tok_BackSlash]);
-
-    // Get Closing Bracket
-    Input.Fetch([Tok_CloseCurlyBracket]);
-
-    // Eat whitespace til EOL
-    if EOL then begin
-      Input.Skip([Tok_Space, Tok_HorizontalTab]);
-      Input.Have([Tok_LineBreak]);
-    end;
-
-  except
-    on E: Exception do
-      raise Exception.CreateFmt(Caller + '::1105::' + 'Failed on ProcessIf, "%s"', [FMacroName]);
-  end;
-
-  // Check the Parent Scope to make sure it is enabled
-  IfThenElse := Scope.Push(TDBIIfThenElseScope.Create) as TDBIIfThenElseScope;
-  IfThenElse.Condition := Result;
-  IfThenElse.State := msIf;
-  IfThenElse.TokenString := FMacroName;
-end;
-{$endif}
 
 
 // _____________________________________________________________________________
@@ -1251,37 +1122,24 @@ const
 
 begin
   // Swallow the Leadin {#
-  Input.Skip([Tok_OpenCurlyBracket_Hash]);
+  if Input.Have([Tok_OpenCurlyBracket_Hash]) then begin
+    Input.Skip([tkWhiteSpace]);
+  end;
 
   Result := (tsMacro in Input.Token.TokenStatus);
   if Result then begin
     case Input.Keyword of
-      Enum_ForEach: Result := ProcessForEach;
-      Enum_Else: Result := ProcessElse;
-      Enum_EndFor: Result := ProcessEndFor;
-      Enum_EndIf: Result := ProcessEndIf;
-      Enum_If: Result := ProcessIf;
+      Keyword_Define: Result := ProcessDefine(Input.Keyword, []);
+      Keyword_ForEach: Result := ProcessForEach;
+      Keyword_Else: Result := ProcessElse;
+      Keyword_EndFor: Result := ProcessEndFor;
+      Keyword_EndIf: Result := ProcessEndIf;
+      Keyword_If: Result := ProcessIf;
 
     else
       Result := False;
-      SyntaxError(Caller, 'Unexpected token type "%s"', [Input.Token.TokenName]);
+      Input.SyntaxError('Unexpected token type "%s"', [Input.Token.TokenName], Self, Caller);
     end;
-  end;
-
-end;
-
-
-procedure TDBIGenericMacroProcessor.ReleaseBindings;
-var
-  Index: Integer;
-
-begin
-  if Assigned(FBindings) then begin
-    for Index := FBindings.Count-1 downto 0 do begin
-      FBindings.Objects[Index].Free;
-    end;
-
-    FreeAndNil(FBindings);
   end;
 end;
 
@@ -1381,13 +1239,8 @@ var
 
 begin
   Fields := GetCursor.Fields;
-//##JVR  Assert(Assigned(Dataset));
-
-//##JVR  Params.GetByName(Name + paramCount).AsInteger := Dataset.RecordCount;
-//##JVR  Params.GetByName(Name + paramID).AsInteger := Dataset.RecNo;
-
   for ParamIndex := 0 to Count-1 do begin
-    ParamName := Name + '.' + Fields[ParamIndex].FieldName;
+    ParamName := ItemName + '.' + Fields[ParamIndex].FieldName;
     Param := Params.FindParam(ParamName);
 
     if not Assigned(Param) then begin
@@ -1465,7 +1318,7 @@ begin
   if ItemIndex < Count then begin
     Item := GetCurrent as TDBICompoundComponent;
 
-    Params.GetByName(Name + paramLevel).AsInteger := Item.Tag;
+    Params.GetByName(ItemName + paramLevel).AsInteger := Item.Tag;
   end;
 end;
 
@@ -1528,21 +1381,19 @@ begin
   if ItemIndex < Count then begin
     Item := GetCurrent as TDBICompoundComponent;
 
-//##JVR    Params.GetByName(Name + paramCount).AsInteger := Count;
-    Params.GetByName(Name + paramName).AsString := Item.Name;
-    Params.GetByName(Name + paramClassName).AsString := Item.ClassName;
-    Params.GetByName(Name + paramCaption).AsString := GetCaption;
-//##JVR    Params.GetByName(Name + paramID).AsInteger := Item.ComponentIndex;
-    Params.GetByName(Name + paramPathName).AsString := Item.CompoundName;
+    Params.GetByName(ItemName + paramItemName).AsString := Item.Name;
+    Params.GetByName(ItemName + paramClassName).AsString := Item.ClassName;
+    Params.GetByName(ItemName + paramCaption).AsString := GetCaption;
+    Params.GetByName(ItemName + paramPathName).AsString := Item.CompoundName;
 
     if (Item.Parent is TDBICompoundComponent) then begin
       Item := Item.Parent as TDBICompoundComponent;
 
-      Params.GetByName(Name + paramParentClassName).AsString := Item.ClassName;
-      Params.GetByName(Name + paramParentID).AsInteger := Item.ComponentIndex;
-      Params.GetByName(Name + paramParentCaption).AsString := GetCaption;
-//##PARAM      Params.GetByName(Name + paramParentName).AsString := Item.Name;
-//##PARAM      Params.GetByName(Name + paramParentPathName).AsString := Item.CompoundName;
+      Params.GetByName(ItemName + paramParentClassName).AsString := Item.ClassName;
+      Params.GetByName(ItemName + paramParentID).AsInteger := Item.ComponentIndex;
+      Params.GetByName(ItemName + paramParentCaption).AsString := GetCaption;
+//##PARAM      Params.GetByName(ItemName + paramParentName).AsString := Item.Name;
+//##PARAM      Params.GetByName(ItemName + paramParentPathName).AsString := Item.CompoundName;
     end;
   end;
 end;
@@ -1563,8 +1414,8 @@ begin
   if ItemIndex < Count then begin
     Param := GetCurrent as TParam;
 
-    Params.GetByName(Name + paramValue).Value := Param.Value;
-    Params.GetByName(Name + paramDataType).Value := DataTypeName(Param.DataType);
+    Params.GetByName(ItemName + paramValue).Value := Param.Value;
+    Params.GetByName(ItemName + paramDataType).Value := DataTypeName(Param.DataType);
   end;
 end;
 
@@ -1597,11 +1448,8 @@ begin
   if ItemIndex < Count then begin
     Item := GetCurrent as TCollectionItem;
 
-//##JVR    Params.GetByName(Name + paramCount).AsInteger := Count;
-    Params.GetByName(Name + paramName).AsString := Item.DisplayName;
-//##JVR    Params.GetByName(Name + paramID).AsInteger := Item.Index;
-    Params.GetByName(Name + paramPathName).AsString := Item.GetNamePath;
-    Params.GetByName(Name + paramParentID).AsInteger := -1;
+    Params.GetByName(ItemName + paramItemName).AsString := Item.DisplayName;
+    Params.GetByName(ItemName + paramPathName).AsString := Item.GetNamePath;
   end;
 end;
 
@@ -1655,11 +1503,61 @@ begin
       ItemValue := Strings[ItemIndex];
     end;
 
-    Params.GetByName(Name + paramValue).AsString := ItemValue;
-//##JVR    Params.GetByName(Name + paramCount).AsInteger := Count;
-//##JVR    Params.GetByName(Name + paramID).AsInteger := ItemIndex;
-    Params.GetByName(Name + paramName).AsString := Strings.Names[ItemIndex];
-    Params.GetByName(Name + paramDataType).Value := DataTypeName(ftString);
+    Params.GetByName(ItemName + paramValue).AsString := ItemValue;
+    Params.GetByName(ItemName + paramItemName).AsString := Strings.Names[ItemIndex];
+    Params.GetByName(ItemName + paramDataType).Value := DataTypeName(ftString);
+  end;
+end;
+
+
+
+
+
+{ TDBIRttiEnumeratorScope }
+
+procedure TDBIRttiEnumeratorScope.UpdateParams;
+var
+{$ifdef AllowClassTypes}
+  PropInstance: TObject;
+{$endif}
+  PropIndex: integer;
+  PropInfo: PPropInfo;
+  PropList: TList;
+  PropName: String;
+
+begin
+  inherited UpdateParams;
+
+  PropList := Local(TList.Create).Obj as TList;
+
+  DBIGetPropertyList(Self.ClassInfo, PropList);
+  for PropIndex := 0 to PropList.Count-1 do begin
+    PropInfo := PropList[PropIndex];
+    PropName := ItemName + '.' + String(PropInfo^.Name);
+
+    case PropInfo^.PropType^.Kind of
+      tkString, tkLString, tkWString {$ifdef DELPHI2009}, tkUString {$endif} {$ifdef fpc}, tkAString {$endif}:
+        Params.GetByName(PropName).AsString := TypInfo.GetStrProp(Self, PropInfo);
+
+      tkFloat:
+        Params.GetByName(PropName).AsFloat := TypInfo.GetFloatProp(Self, PropInfo);
+
+      tkInteger:
+        Params.GetByName(PropName).AsInteger := TypInfo.GetOrdProp(Self, PropInfo);
+
+      tkInt64:
+        Params.GetByName(PropName).AsInteger := TypInfo.GetInt64Prop(Self, PropInfo);
+
+      tkEnumeration:
+        Params.GetByName(PropName).AsString := TypInfo.GetEnumProp(Self, PropInfo);
+{$ifdef AllowClassTypes}
+      tkClass: begin
+        PropInstance := GetObjectProp(Self, PropInfo, TClass(nil));
+      end;
+{$endif}
+    else
+      raise Exception.CreateFmt('Property type for "%s" not supported', [PropName]);
+    end;
   end;
 end;
 
@@ -1669,17 +1567,29 @@ end;
 
 { TDBICustomEnumeratorScope }
 
-constructor TDBICustomEnumeratorScope.Create(ASource: TObject);
+constructor TDBICustomEnumeratorScope.Create(AData: TObject);
 begin
-  inherited Create;
+  inherited Create(AData);
 
-  Data := ASource;
+  //##DEBUG
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 08/10/2009 07:30:09 - Initial code.<br />
+}
+function TDBICustomEnumeratorScope.CreateParams: TParams;
+begin
+  FParams := TDBIParams.Create;
+
+  Result := FParams;
 end;
 
 
 destructor TDBICustomEnumeratorScope.Destroy;
 begin
-  ClearParams;
+  //##DEBUG
 
   inherited Destroy;
 end;
@@ -1699,12 +1609,6 @@ end;
 function TDBICustomEnumeratorScope.GetBof: Boolean;
 begin
   Result := ItemIndex <= 0;
-end;
-
-
-function TDBICustomEnumeratorScope.GetEnumerableName: String;
-begin
-  Result := Params.GetByName(Name + paramPathName).AsString;
 end;
 
 
@@ -1746,7 +1650,18 @@ end;
 }
 function TDBICustomEnumeratorScope.GetItemIndex: Integer;
 begin
-  Result := FItemIndex;
+  if Count > 0 then begin
+    Result := FItemIndex;
+  end
+  else begin
+    Result := -1;
+  end;
+end;
+
+
+function TDBICustomEnumeratorScope.GetItemName: String;
+begin
+  Result := FItemName;
 end;
 
 
@@ -1754,27 +1669,9 @@ end;
 {**
   Jvr - 01/04/2011 13:53:11 - Initial code.<br />
 }
-function TDBICustomEnumeratorScope.GetItemName: String;
-begin
-  Result := FItemName;
-end;
-
-
 function TDBICustomEnumeratorScope.GetKeyName: String;
 begin
   Result := FKeyName;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 08/10/2009 07:30:09 - Initial code.<br />
-}
-function TDBICustomEnumeratorScope.GetParams: TDBIParams;
-begin
-  Assert(Assigned(FParams));
-
-  Result := FParams;
 end;
 
 
@@ -1795,7 +1692,7 @@ end;
 }
 function TDBICustomEnumeratorScope.Next: Boolean;
 begin
-  Result := ItemIndex < Count;
+  Result := ItemIndex < (Count-1);
   if Result then begin
     Inc(FItemIndex);
     UpdateParams;
@@ -1803,9 +1700,9 @@ begin
 end;
 
 
-procedure TDBICustomEnumeratorScope.SetEnumerableName(const Value: String);
+procedure TDBICustomEnumeratorScope.SetItemName(const value: String);
 begin
-  Params.GetByName(Name + paramPathName).AsString := Value;
+  FItemName := Value;
 end;
 
 
@@ -1813,25 +1710,9 @@ end;
 {**
   Jvr - 29/05/2007 18:11:51 - Initial code.<br>
 }
-procedure TDBICustomEnumeratorScope.SetItemName(const Value: String);
-begin
-  FItemName := Value;
-end;
-
-
 procedure TDBICustomEnumeratorScope.SetKeyName(const Value: String);
 begin
   FKeyName := Value;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 14/10/2009 08:58:43 - Initial code.<br />
-}
-procedure TDBICustomEnumeratorScope.SetParams(const Value: TDBIParams);
-begin
-  FParams := Value;
 end;
 
 
@@ -1841,27 +1722,25 @@ end;
 }
 procedure TDBICustomEnumeratorScope.UpdateParams;
 begin
-  Params.GetByName(EnumerableName + paramMin).AsInteger := 0;
-  Params.GetByName(EnumerableName + paramMax).AsInteger := Count-1;
-  Params.GetByName(EnumerableName + paramCount).AsInteger := Count;
-
   if (KeyName <> '') then begin
-    Params.GetByName(Name + '.' + KeyName).AsInteger := ItemIndex;
+    Params.GetByName(KeyName).AsInteger := ItemIndex;
   end;
 end;
 
 
-procedure TDBICustomEnumeratorScope.ClearParams;
+// _____________________________________________________________________________
+{**
+  Jvr - 14/10/2009 08:58:43 - Initial code.<br />
+}
+procedure TDBICustomEnumeratorScope.UpdateParentParams(AParams: TDBIParams);
 begin
-  Params.FindParam(EnumerableName + paramMin).Free;
-  Params.FindParam(EnumerableName + paramMax).Free;
-  Params.FindParam(EnumerableName + paramCount).Free;
-
-  Params.FindParam(Name + paramName).Free;
-  Params.FindParam(Name + paramID).Free;
-  Params.FindParam(Name + paramPathName).Free;
-  Params.FindParam(Name + paramParentID).Free;
+  if Assigned(AParams) then begin
+    AParams.GetByName(Name + paramMin).AsInteger := 0;
+    AParams.GetByName(Name + paramMax).AsInteger := Count-1;
+    AParams.GetByName(Name + paramCount).AsInteger := Count;
+  end;
 end;
+
 
 
 
@@ -1890,21 +1769,136 @@ end;
 
 
 
-{ TDBIMacroLexer }
+{ TDBIGlobalScopeStack }
 
-function TDBIGenericMacroLexer.Check(Keywords: TDBIEnumerationKeywords): String;
-const
-  ErrMsg = 'Unexpected Keyword "%s" at [ %d, %d ]';
+procedure TDBIGlobalScopeStack.AddBinding(
+  const ScopeName: String;
+  const ScopeData: TObject;
+  const ScopeClass: TDBIScopeClass
+  );
+var
+  Scope: TDBICustomScope;
 
 begin
-  Result := Token.TokenString;
-  if not (Keyword in Keywords) then begin
-    raise EAnalyserError.CreateFmt(ErrMsg, [Token.TokenString, Token.Row, Token.Column]);
+  Scope := ScopeClass.Create(ScopeData);
+  Scope.Name := ScopeName;
+
+  Bindings.AddObject(ScopeName, Scope);
+
+  if (Scope is TDBICustomEnumeratorScope) then begin
+    (Scope as TDBICustomEnumeratorScope).UpdateParentParams(Global.Params as TDBIParams);
   end;
 end;
 
 
-function TDBIGenericMacroLexer.Fetch(Keywords: TDBIEnumerationKeywords): String;
+// _____________________________________________________________________________
+{**
+  Jvr - 23/02/2005 18:02:23 - Initial code.<br>
+}
+function TDBIGlobalScopeStack.Bind(
+  const DataBindingName: String;
+  const EnumeratorName: String;
+  const KeyName: String;
+  const Recursive: Boolean = False
+  ): TDBICustomScope;
+var
+  ItemIndex: Integer;
+  Enumerator: TDBICustomEnumeratorScope;
+
+begin
+  ItemIndex := Bindings.IndexOf(DataBindingName);
+  if (ItemIndex >= 0) then begin
+    Enumerator := Push(Bindings.Objects[ItemIndex] as TDBICustomScope) as TDBICustomEnumeratorScope;
+    Enumerator.Name := DataBindingName;
+    Enumerator.ItemName := EnumeratorName;
+    Enumerator.KeyName := KeyName;
+
+    Result := Enumerator;
+  end
+  else begin
+    raise Exception.CreateFmt(
+      'Undeclared databinding "%s" for Enumerator "%s"',
+      [DataBindingName, EnumeratorName]
+      );
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 19/01/2006 13:50:34 - Initial code.<br>
+}
+destructor TDBIGlobalScopeStack.Destroy;
+begin
+  ReleaseBindings;
+  FreeAndNil(FBindings);
+
+  inherited Destroy;
+end;
+
+
+function TDBIGlobalScopeStack.GetBindings: TDBICustomBindingsList;
+begin
+  if not Assigned(FBindings) then begin
+    FBindings := TDBICustomBindingsList.Create;
+    FBindings.Duplicates := dupError;
+    FBindings.Sorted := True;
+  end;
+  Result := FBindings;
+end;
+
+
+procedure TDBIGlobalScopeStack.ReleaseBindings;
+var
+  Index: Integer;
+
+begin
+  if Assigned(FBindings) and (FBindings.Count > 0) then begin
+    FBindings.Changing;
+    try
+      for Index := FBindings.Count-1 downto 0 do begin
+        FBindings.Objects[Index].Free;
+      end;
+      FBindings.Clear;
+    finally
+      FBindings.Changed;
+    end;
+  end;
+end;
+
+
+
+
+
+{ TDBIGlobalScope }
+
+function TDBIGlobalScope.CreateParams: TParams;
+begin
+  Result := TDBIGlobalParams.Create;
+end;
+
+
+function TDBIGlobalScope.GetEnabled: Boolean;
+begin
+  Result := True;
+end;
+
+
+
+
+
+{ TDBIMacroLexer }
+
+function TDBIGenericMacroLexer.Check(Keywords: TDBIStandardKeywords): String;
+begin
+  Result := Token.TokenString;
+  if not (Keyword in Keywords) then begin
+    SyntaxError('Unexpected Keyword "%s"', [Token.TokenString]);
+  end;
+end;
+
+
+function TDBIGenericMacroLexer.Fetch(Keywords: TDBIStandardKeywords): String;
 begin
   Result := Token.TokenString;
   Check(Keywords);
@@ -1916,10 +1910,8 @@ end;
 {**
   Jvr - 11/08/2006 00:47:29 - Initial code.<br>
 }
-function TDBIGenericMacroLexer.GetDotString(Params: TParams): String;
+function TDBIGenericMacroLexer.GetDotString(Scope: TDBIScopeStack): String;
 const
-  Caller = 'GetDotString';
-  ErrMsg = 'Syntax Error at [Line: %d, Offset: %d]'#13'Failed to get macro, "%s"';
   ExpectedTypes = [];
 
 var
@@ -1940,7 +1932,7 @@ begin
       if (Token.TokenKind = tkMacro) then begin
         InterimName := Token.TokenString;
 
-        Param := Params.FindParam(InterimName);
+        Param := Scope.FindParam(InterimName);
         if not Assigned(Param) then begin
           Result := Result + '${' + Token.TokenString + '}';
           { TODO 4 -oJvr -cProcessGetMacroValue(() :
@@ -1973,7 +1965,7 @@ begin
 
    except
     on E: Exception do
-      raise Exception.CreateFmt(Caller + '::1785::' + ErrMsg, [Token.Row, Token.Column, InterimName]);
+      SyntaxError('Failed to get macro "%s"', [InterimName]);
   end;
 end;
 
@@ -1982,22 +1974,22 @@ end;
 {**
   Jvr - 08/08/2006 17:57:54 - Initial code.<br>
 }
-function TDBIGenericMacroLexer.GetKeyword: TDBIEnumerationKeyword;
+function TDBIGenericMacroLexer.GetKeyword: TDBIStandardKeyword;
 var
   Index: Integer;
 
 begin
-  Index := GetEnumValue(TypeInfo(TDBIEnumerationKeyword), 'Enum_' + Token.TokenString);
+  Index := GetEnumValue(TypeInfo(TDBIStandardKeyword), 'Keyword_' + Token.TokenString);
   if (Index <> -1) then begin
-    Result := TDBIEnumerationKeyword(Index);
+    Result := TDBIStandardKeyword(Index);
   end
   else begin
-    Result := Enum_Unknown;
+    Result := Keyword_Unknown;
   end;
 end;
 
 
-function TDBIGenericMacroLexer.Have(Keywords: TDBIEnumerationKeywords): Boolean;
+function TDBIGenericMacroLexer.Have(Keywords: TDBIStandardKeywords): Boolean;
 begin
   Result := (Keyword in Keywords);
   if Result then begin;
@@ -2061,7 +2053,7 @@ begin
 end;
 
 
-function TDBIGenericMacroLexer.Skip(Keywords: TDBIEnumerationKeywords): String;
+function TDBIGenericMacroLexer.Skip(Keywords: TDBIStandardKeywords): String;
 begin
   Result := '';
   while (Keyword in Keywords) and not Eof do begin
@@ -2219,6 +2211,21 @@ begin
 end;
 
 
+constructor TDBIParams.Create;
+begin
+  inherited Create;
+
+  //##DEBUG
+end;
+
+destructor TDBIParams.Destroy;
+begin
+  //##DEBUG
+
+  inherited Destroy;
+end;
+
+
 function TDBIParams.GetByName(
   const AParamName: String;
   const ADataType: TFieldType = ftUnknown;
@@ -2240,6 +2247,22 @@ begin
   end;
 end;
 
+
+
+
+
+{ TDBIGlobalParams }
+
+function TDBIGlobalParams.GetByName(
+  const AParamName: String;
+  const ADataType: TFieldType;
+  const AParamType: TParamType
+  ): TParam;
+begin
+  Result := inherited GetByName(AParamName, ADataType, AParamType);
+
+  //##DEBUG
+end;
 
 
 end.

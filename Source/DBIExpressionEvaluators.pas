@@ -31,7 +31,7 @@ unit DBIExpressionEvaluators;
 interface
 
 uses
-  Classes, SysUtils, DB, DBITokenizers;
+  Classes, SysUtils;
 
 type
   PDBIShortString = ^TDBIShortString;
@@ -203,7 +203,6 @@ type
   TDBIExpressionParser = class
   private
     FExpr: PAnsiChar;
-//##JVR    FOrigExpr: PAnsiChar;
     FOrigExpression: AnsiString;
     FParsed: Boolean;
     FOperandStack: TDBIStringStack;
@@ -248,32 +247,13 @@ type
 
     property Expression: String read GetExpression write SetExpression;
     property RPNExpression: String read GetRPNExpression;
-//##JVR    property Value: Double read GetValue;
     property Variable[const AName: AnsiString]: Double read GetVariable write SetVariable;
 
-    //##JVR
     property Result: Double read GetValue;
   end;
 
-
-//##JVR  TXiExpressionEvaluator = class(TDBIExpressionParser);
 type
-  TDBIExpressionEvaluator = class(TDBIExpressionParser)
-  private
-    FProcessor: TDBICustomMacroProcessor;
-    FParams: TParams;
-
-  protected
-    function GetParam(Sender: TObject; const ParamName: String; var ParamValue: Variant): Boolean;
-    procedure SetExpression(const Value: String); override;
-
-  public
-    constructor Create(const AExpression: String); override;
-    destructor Destroy; override;
-
-    property Params: TParams read FParams write FParams;
-
-  end;
+  TDBIExpressionEvaluator = class(TDBIExpressionParser);
 
 
 implementation
@@ -328,65 +308,6 @@ end;
 
 
 
-
-{ TDBIExpressionEvaluator }
-
-type
-  TDBIExpressionProcessor = class(TDBICustomMacroProcessor);
-
-constructor TDBIExpressionEvaluator.Create(const AExpression: String);
-begin
-  inherited Create(AExpression);
-
-  FProcessor := TDBIExpressionProcessor.Create;
-  TDBIExpressionProcessor(FProcessor).OnGetParam := GetParam;
-end;
-
-
-destructor TDBIExpressionEvaluator.Destroy;
-begin
-  FreeAndNil(FProcessor);
-
-  inherited Destroy;
-end;
-
-
-function TDBIExpressionEvaluator.GetParam(
-  Sender: TObject;
-  const ParamName: String;
-  var ParamValue: Variant
-  ): Boolean;
-var
-  Param: TParam;
-
-begin
-  Param := Params.FindParam(ParamName);
-
-  Result := Assigned(Param);
-  if Result then begin
-    ParamValue := Param.Value;
-  end;
-end;
-
-
-procedure TDBIExpressionEvaluator.SetExpression(const Value: String);
-begin
-  if Assigned(FProcessor) then begin
-    FProcessor.Output.Clear;
-    FProcessor.Input.Text := Value;
-    FProcessor.Process;
-
-    inherited SetExpression(FProcessor.Output.Text);
-  end
-  else begin
-    inherited SetExpression(Value);
-  end;
-end;
-
-
-
-
-
 { TDBIExpressionParser }
 
 procedure TDBIExpressionParser.CheckBadParserState(
@@ -419,8 +340,6 @@ end;
 
 destructor TDBIExpressionParser.Destroy;
 begin
-//##JVR  Expression := '';
-
   FreeAndNil(FOperandStack);
   FreeAndNil(FOperatorStack);
   FreeAndNil(FVarList);
@@ -606,7 +525,6 @@ var
   begin
     Result := FunctionOperator in FunctionOperators;
     if Result then begin
-
       case FunctionOperator of
         fnFrac: DblStack.Push(Frac(DblStack.Pop));
         fnInt: DblStack.Push(Int(DblStack.Pop));
@@ -614,7 +532,7 @@ var
         fnTrunc: DblStack.Push(Trunc(DblStack.Pop));
       end;
     end;
-  end;  { UserFunction }
+  end;
 
 
   procedure PerformCalculation;
@@ -623,16 +541,8 @@ var
     if Expr[Index] = UnaryMinus then begin
       DblStack.Push(-DblStack.Pop);
     end
-{##JVR
-    //##JVR Unary Round operator !
-//##JVR    else if Expr[Index] = fnRound then begin
-    else if not CallFunction(Expr[Index]) then begin
-    if(TFunctionOperator(Ord(Expr[Index]) and $7F) in FunctionOperators then begin
-      DblStack.Push(CallFunction(TFunctionOperator(Ord(Expr[Index]) and $7F)));
-    end
-//}
+
     // Standard two value operators
-//##JVR    else begin
     else if not UserFunction(TDBIFunctionOperator(Ord(Expr[Index]) and $7F)) then begin
       Operand2 := DblStack.Pop;
       Operand1 := DblStack.Pop;
@@ -664,12 +574,11 @@ begin
     Index := 0;
     while (Index < Length(Expr)) do begin
       Inc(Index);
-//##JVR      if (Expr[Index] = ' ') then begin
+
       if IsWhiteSpace(Expr[Index]) then begin
         if Expr[Index+1] in NumberSet then begin
           OperandSt := '';
-          while (Index < Length(Expr)) and (Expr[Index+1] in NumberSet) do
-          begin
+          while (Index < Length(Expr)) and (Expr[Index+1] in NumberSet) do begin
             OperandSt := OperandSt + Expr[Index+1];
             Inc(Index);
           end;
@@ -677,8 +586,7 @@ begin
         end
         else begin
           OperandSt := '';
-          while (Index < Length(Expr)) and (Expr[Index+1] in IdentifierSet) do
-          begin
+          while (Index < Length(Expr)) and (Expr[Index+1] in IdentifierSet) do begin
             OperandSt := OperandSt + Expr[Index+1];
             Inc(Index);
           end;
@@ -686,9 +594,7 @@ begin
         end
       end
       else begin
-        //##JVR
         PerformCalculation;
-
       end;
     end;
     Result := DblStack.Pop;
@@ -898,7 +804,7 @@ begin
   TempStr[0] := AnsiChar(Succ(FExpr - aStartPos));
   TempStr[1] := ' ';
   Move(aStartPos^, TempStr[2], FExpr - aStartPos);
-//##JVR  FOperandStack.Push(TempStr);
+
   Operator := GetFunctionOperator(String(TempStr));
   if (Operator > #0) then begin
     FOperatorStack.Push(Operator);
@@ -1546,7 +1452,6 @@ begin
   inherited Create;
   
   FSize := 1024;
-//##JVR  FStack := StrAlloc(FSize);
   GetMem(FStack, FSize);
   FStackPointer := -1;
 end;
@@ -1557,11 +1462,7 @@ begin
   if (FStack <> nil) then begin
     FreeMem(FStack, FSize);
   end;
-{##JVR
-  if (FStack <> nil) then begin
-    StrDispose(FStack);
-  end;
-//}
+
   inherited Destroy;
 end;
 
@@ -1615,12 +1516,9 @@ var
   PNewStack: PAnsiChar;
 
 begin
-//##JVR  PNewStack := StrAlloc(NewCapacity);
   GetMem(PNewStack, NewCapacity);
-
   Move(FStack^, PNewStack^, FSize);
 
-//##JVR  StrDispose(FStack);
   if (FStack <> nil) then begin
     FreeMem(FStack, FSize);
   end;

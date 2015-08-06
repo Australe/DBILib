@@ -147,13 +147,6 @@ type
   TDBITokenKinds = set of TDBITokenKind;
 
 type
-  TDBITokenPosition = record
-    Column: Integer;
-    Row: Integer;
-    Position: Integer;
-  end;
-
-type
   TDBILexerState = (
     tsToggle,            // Mask to detect if TokenState is Toggle
     tsMask,              // Mask to detect if TokenState is Mask
