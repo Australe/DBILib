@@ -33,49 +33,8 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  Classes, SysUtils, Dialogs, DB, DBConsts, DBIConst, DBIUtils, DBIComponents,
+  Classes, SysUtils, Types, Dialogs, DB, DBConsts, DBIConst, DBIUtils, DBIComponents,
   DBIStreamAdapters, DBITokenizerConsts, DBITokenizers, DBIExpressionEvaluators;
-
-type
-  TDBIParams = class(TParams)
-  protected
-    class procedure AssignDefaultValue(AParam: TParam; ADataType: TFieldType);
-
-  public
-    constructor Create;
-    destructor Destroy; override;
-
-    class procedure AssignDefaultParams(AParams: TDBIParams);
-
-    function GetByName(
-      const AParamName: String;
-      const ADataType: TFieldType = ftUnknown;
-      const AParamType: TParamType = ptUnknown
-      ): TParam; virtual;
-
-  end;
-
-
-type
-  TDBIGlobalParams = class(TDBIParams)
-  public
-    function GetByName(
-      const AParamName: String;
-      const ADataType: TFieldType = ftUnknown;
-      const AParamType: TParamType = ptUnknown
-      ): TParam; override;
-
-  end;
-
-
-type
-  TDBIGlobalScope = class(TDBICustomScope)
-  protected
-    function CreateParams: TParams; override;
-    function GetEnabled: Boolean; override;
-
-  end;
-
 
 type
   TDBICustomBindingsList = class(TStringList);
@@ -87,14 +46,15 @@ type
 
   protected
     function GetBindings: TDBICustomBindingsList;
+    function GetGlobal: TDBICustomScope; override;
 
   public
     destructor Destroy; override;
 
     procedure AddBinding(
       const ScopeName: String;
-      const ScopeData: TObject;
-      const ScopeClass: TDBIScopeClass
+      const ScopeClass: TDBIScopeClass;
+      const ScopeData: TObject
       );
 
     function Bind(
@@ -132,25 +92,19 @@ type
   TDBICustomEnumeratorScope = class(TDBICustomScope)
   private
     FItemIndex: Integer;
-    FItemName: String;
     FKeyName: String;
-    FParams: TDBIParams;
 
   protected
-    function CreateParams: TParams; override;
-
     function GetBof: Boolean; virtual;
     function GetCount: Integer; virtual;
     function GetCurrent: TObject; virtual;
     function GetEnabled: Boolean; override;
     function GetEof: Boolean; virtual;
     function GetItemIndex: Integer; virtual;
-    function GetItemName: String; virtual;
     function GetKeyName: String; virtual;
 
     procedure SetKeyName(const Value: String); virtual;
-    procedure SetItemName(const value: String); virtual;
-    procedure UpdateParams; virtual;
+    procedure UpdateParams; override;
 
     procedure First; virtual;
     function Next: Boolean; virtual;
@@ -160,15 +114,14 @@ type
     property Count: Integer read GetCount;
     property Eof: Boolean read GetEof;
     property ItemIndex: Integer read GetItemIndex;
-    property ItemName: String read GetItemName write SetItemName;
     property KeyName: String read GetKeyName write SetKeyName;
-    property Params: TDBIParams read FParams;
 
   public
     constructor Create(AData: TObject); override;
     destructor Destroy; override;
 
-    procedure UpdateParentParams(AParams: TDBIParams); virtual;
+    procedure UpdateParentParams(AParams: TDBIParamsAdapter); virtual;
+
   end;
 
 
@@ -177,18 +130,18 @@ type
 
 
 type
-  TDBIRttiEnumeratorScope = class(TDBICustomEnumeratorScope)
-  protected
-    procedure UpdateParams; override;
-  end;
-
-
-type
   TDBIStringsEnumeratorScope = class(TDBICustomEnumeratorScope)
   protected
     function GetCount: Integer; override;
-    function GetCurrent: TObject; override;
-    procedure UpdateParams; override;
+    function GetDataType: String;
+    function GetStrings: TStrings;
+    function GetName: String; override;
+    function GetValue: String;
+
+  published
+    property DataType: String read GetDataType;
+    property Name;
+    property Value: String read GetValue;
 
   end;
 
@@ -440,8 +393,6 @@ begin
   FNullParam.AsString := '0';
 
   FLexer := GetInput as TDBIGenericMacroLexer;
-
-  Scope.Push(TDBIGlobalScope.Create);
 end;
 
 
@@ -463,8 +414,6 @@ end;
 }
 destructor TDBIGenericMacroProcessor.Destroy;
 begin
-  Scope.Pop.Free;
-
   FreeAndNil(FNullParam);
   FreeAndNil(FEvaluator);
 
@@ -623,7 +572,7 @@ const
   Caller = 'ProcessDefine';
 
 var
-  Params: TDBIParams;
+  Params: TDBIParamsAdapter;
   EOL: Boolean;
 
 begin
@@ -651,7 +600,7 @@ begin
   end;
 
   if Scope.Top.Enabled then begin
-    Params := Scope.Top.Params as TDBIParams;
+    Params := Scope.Top.Params;
 
     case ParamType of
       Keyword_Boolean: begin
@@ -1231,27 +1180,8 @@ end;
 
 
 procedure TDBICustomDatasetEnumeratorScope.UpdateParams;
-var
-  Fields: TFields;
-  Param: TParam;
-  ParamIndex: Integer;
-  ParamName: String;
-
 begin
-  Fields := GetCursor.Fields;
-  for ParamIndex := 0 to Count-1 do begin
-    ParamName := ItemName + '.' + Fields[ParamIndex].FieldName;
-    Param := Params.FindParam(ParamName);
-
-    if not Assigned(Param) then begin
-      Param := Params.Add as TParam;
-    end;
-
-    Param.AssignField(Fields[ParamIndex]);
-    Param.Name := ParamName;
-
-    //TODO: paramDataType is missing
-  end;
+  Params.AssignFromFields(GetCursor.Fields, ItemName);
 end;
 
 
@@ -1461,103 +1391,33 @@ end;
 
 function TDBIStringsEnumeratorScope.GetCount: Integer;
 begin
-  Result := (Data as TStrings).Count;
+  Result := GetStrings.Count;
 end;
 
-
-function TDBIStringsEnumeratorScope.GetCurrent: TObject;
+function TDBIStringsEnumeratorScope.GetStrings: TStrings;
 begin
-  Result := (Data as TStrings).Objects[ItemIndex];
+  Result := (Data as TStrings);
 end;
 
+function TDBIStringsEnumeratorScope.GetDataType: String;
+begin
+  Result := DataTypeName(ftString);
+end;
 
-procedure TDBIStringsEnumeratorScope.UpdateParams;
+function TDBIStringsEnumeratorScope.GetName: String;
+begin
+  Result := GetStrings.Names[ItemIndex];
+end;
+
+function TDBIStringsEnumeratorScope.GetValue: String;
 var
-  ItemValue: String;
-  Strings: TStrings;
-
-  // Provides Backward compatibility
-  function GetValueFromIndex(Index: Integer): string;
-  var
-    Offset: Integer;
-
-  begin
-    Result := Strings[Index];
-    Offset := AnsiPos('=', Result);
-    if (Offset > 0) then begin
-      System.Delete(Result, 1, Offset);
-    end
-    else begin
-      Result := '';
-    end;
-  end;
+  Offset: Integer;
 
 begin
-  inherited UpdateParams;
-
-  // If Items remaining then Update the Scoped Parameters for the current item
-  if (ItemIndex < Count) then begin
-    Strings := (Data as TStrings);
-    ItemValue := GetValueFromIndex(ItemIndex);
-    if (ItemValue = '') then begin
-      ItemValue := Strings[ItemIndex];
-    end;
-
-    Params.GetByName(ItemName + paramValue).AsString := ItemValue;
-    Params.GetByName(ItemName + paramItemName).AsString := Strings.Names[ItemIndex];
-    Params.GetByName(ItemName + paramDataType).Value := DataTypeName(ftString);
-  end;
-end;
-
-
-
-
-
-{ TDBIRttiEnumeratorScope }
-
-procedure TDBIRttiEnumeratorScope.UpdateParams;
-var
-{$ifdef AllowClassTypes}
-  PropInstance: TObject;
-{$endif}
-  PropIndex: integer;
-  PropInfo: PPropInfo;
-  PropList: TList;
-  PropName: String;
-
-begin
-  inherited UpdateParams;
-
-  PropList := Local(TList.Create).Obj as TList;
-
-  DBIGetPropertyList(Self.ClassInfo, PropList);
-  for PropIndex := 0 to PropList.Count-1 do begin
-    PropInfo := PropList[PropIndex];
-    PropName := ItemName + '.' + String(PropInfo^.Name);
-
-    case PropInfo^.PropType^.Kind of
-      tkString, tkLString, tkWString {$ifdef DELPHI2009}, tkUString {$endif} {$ifdef fpc}, tkAString {$endif}:
-        Params.GetByName(PropName).AsString := TypInfo.GetStrProp(Self, PropInfo);
-
-      tkFloat:
-        Params.GetByName(PropName).AsFloat := TypInfo.GetFloatProp(Self, PropInfo);
-
-      tkInteger:
-        Params.GetByName(PropName).AsInteger := TypInfo.GetOrdProp(Self, PropInfo);
-
-      tkInt64:
-        Params.GetByName(PropName).AsInteger := TypInfo.GetInt64Prop(Self, PropInfo);
-
-      tkEnumeration:
-        Params.GetByName(PropName).AsString := TypInfo.GetEnumProp(Self, PropInfo);
-{$ifdef AllowClassTypes}
-      tkClass: begin
-        PropInstance := GetObjectProp(Self, PropInfo, TClass(nil));
-      end;
-{$endif}
-    else
-      raise Exception.CreateFmt('Property type for "%s" not supported', [PropName]);
-    end;
+  Result := GetStrings.Strings[ItemIndex];
+  Offset := AnsiPos('=', Result);
+  if (Offset > 0) then begin
+    System.Delete(Result, 1, Offset);
   end;
 end;
 
@@ -1579,14 +1439,6 @@ end;
 {**
   Jvr - 08/10/2009 07:30:09 - Initial code.<br />
 }
-function TDBICustomEnumeratorScope.CreateParams: TParams;
-begin
-  FParams := TDBIParams.Create;
-
-  Result := FParams;
-end;
-
-
 destructor TDBICustomEnumeratorScope.Destroy;
 begin
   //##DEBUG
@@ -1659,12 +1511,6 @@ begin
 end;
 
 
-function TDBICustomEnumeratorScope.GetItemName: String;
-begin
-  Result := FItemName;
-end;
-
-
 // _____________________________________________________________________________
 {**
   Jvr - 01/04/2011 13:53:11 - Initial code.<br />
@@ -1700,12 +1546,6 @@ begin
 end;
 
 
-procedure TDBICustomEnumeratorScope.SetItemName(const value: String);
-begin
-  FItemName := Value;
-end;
-
-
 // _____________________________________________________________________________
 {**
   Jvr - 29/05/2007 18:11:51 - Initial code.<br>
@@ -1722,6 +1562,8 @@ end;
 }
 procedure TDBICustomEnumeratorScope.UpdateParams;
 begin
+  inherited UpdateParams;
+
   if (KeyName <> '') then begin
     Params.GetByName(KeyName).AsInteger := ItemIndex;
   end;
@@ -1732,7 +1574,7 @@ end;
 {**
   Jvr - 14/10/2009 08:58:43 - Initial code.<br />
 }
-procedure TDBICustomEnumeratorScope.UpdateParentParams(AParams: TDBIParams);
+procedure TDBICustomEnumeratorScope.UpdateParentParams(AParams: TDBIParamsAdapter);
 begin
   if Assigned(AParams) then begin
     AParams.GetByName(Name + paramMin).AsInteger := 0;
@@ -1773,10 +1615,11 @@ end;
 
 procedure TDBIGlobalScopeStack.AddBinding(
   const ScopeName: String;
-  const ScopeData: TObject;
-  const ScopeClass: TDBIScopeClass
+  const ScopeClass: TDBIScopeClass;
+  const ScopeData: TObject
   );
 var
+  GlobalParams: TDBIParamsAdapter;
   Scope: TDBICustomScope;
 
 begin
@@ -1785,8 +1628,9 @@ begin
 
   Bindings.AddObject(ScopeName, Scope);
 
+  GlobalParams := Global.Params;  // Instantiate
   if (Scope is TDBICustomEnumeratorScope) then begin
-    (Scope as TDBICustomEnumeratorScope).UpdateParentParams(Global.Params as TDBIParams);
+    (Scope as TDBICustomEnumeratorScope).UpdateParentParams(GlobalParams);
   end;
 end;
 
@@ -1848,11 +1692,46 @@ begin
 end;
 
 
+type
+  TDBIProtectedScope = class(TDBICustomGlobalScope);
+
+function TDBIGlobalScopeStack.GetGlobal: TDBICustomScope;
+var
+  Index: Integer;
+  Scope: TDBIProtectedScope;
+
+begin
+  if Items.Count <= 0 then begin
+    for Index := 0 to Bindings.Count-1 do begin
+      if Bindings.Objects[Index] is TDBICustomGlobalScope then begin
+        Scope := TDBIProtectedScope(Bindings.Objects[Index]);
+        Push(Scope);
+        Scope.UpdateParams;
+      end;
+    end;
+  end;
+
+  Result := inherited GetGlobal;
+end;
+
+
 procedure TDBIGlobalScopeStack.ReleaseBindings;
 var
   Index: Integer;
+  Scope: TDBICustomGlobalScope;
 
 begin
+  // Remove Global Binding Objects from Scope
+  for Index := Items.Count-1 downto 0 do begin
+    if (TObject(Items[Index]) is TDBICustomGlobalScope) then begin
+      Scope := TDBICustomGlobalScope(Items[Index]);
+      if Bindings.IndexOfObject(Scope) >= 0 then begin
+        Items.Remove(Scope);
+      end;
+    end;
+  end;
+
+  // Remove all Binding objects from Bindings and Free them
   if Assigned(FBindings) and (FBindings.Count > 0) then begin
     FBindings.Changing;
     try
@@ -1864,23 +1743,6 @@ begin
       FBindings.Changed;
     end;
   end;
-end;
-
-
-
-
-
-{ TDBIGlobalScope }
-
-function TDBIGlobalScope.CreateParams: TParams;
-begin
-  Result := TDBIGlobalParams.Create;
-end;
-
-
-function TDBIGlobalScope.GetEnabled: Boolean;
-begin
-  Result := True;
 end;
 
 
@@ -2133,135 +1995,6 @@ begin
       Break;
     end;
   end;
-end;
-
-
-
-
-
-{ TDBIParams }
-
-// _____________________________________________________________________________
-{**
-  Jvr - 19/01/2009 12:27:19 - Initial code.<br>
-}
-class procedure TDBIParams.AssignDefaultParams(AParams: TDBIParams);
-const
-  Caller = 'AssignDefaultParams';
-
-begin
-  try
-    { Add pre-defined parameters }
-    AParams.GetByName('TimeStamp').AsString := FormatDateTime('mm/dd/yyyy hh:nn:ss:zzz', now);
-    AParams.GetByName('DateStamp').AsString := FormatDateTime('mm/dd/yyyy', now);
-    AParams.GetByName('Today').AsString := FormatDateTime('dd/mm/yyyy', now);
-    AParams.GetByName('Time').AsString := FormatDateTime('hh:nn:ss', now);
-    AParams.GetByName('Year').AsString := FormatDateTime('yyyy', now);
-    AParams.GetByName('Date').AsString := FormatDateTime('dd/mm/yyyy', now);
-    AParams.GetByName('Month').AsString := FormatDateTime('mm', now);
-    AParams.GetByName('Day').AsString := FormatDateTime('dd', now);
-    AParams.GetByName('ShortMonth').AsString := FormatDateTime('mmm', now);
-    AParams.GetByName('ShortDay').AsString := FormatDateTime('ddd', now);
-    AParams.GetByName('LongMonth').AsString := FormatDateTime('mmmm', now);
-    AParams.GetByName('LongDay').AsString := FormatDateTime('dddd', now);
-    AParams.GetByName('Now').AsDateTime := Now;
-
-    { TODO 3 -oJvr -cTXiCustomMacroProcessor.AssignDefaultParams() :
-      01/10/2008 10:02:51
-    }
-    AParams.GetByName('Who').AsString := TDBIHostInfo.GetUserName;
-    AParams.GetByName('UserName').AsString := TDBIHostInfo.GetUserName;
-    AParams.GetByName('Machine.UserName').AsString := TDBIHostInfo.GetUserName;
-    AParams.GetByName('Machine.ComputerName').AsString := TDBIHostInfo.GetComputerName;
-
-  except
-    on E: Exception do
-      raise Exception.CreateFmt('%s::%s::1895#13%s', [
-        Self.ClassName, Caller, 'Failed to assign default params'
-        ]);
-
-  end;
-end;
-
-
-class procedure TDBIParams.AssignDefaultValue(AParam: TParam; ADataType: TFieldType);
-const
-  DefaultStringValue = #39#39;
-
-begin
-  AParam.DataType := ADataType;
-  case ADataType of
-    ftString,
-    ftFixedChar,
-    ftMemo: AParam.Value := DefaultStringValue;
-
-    ftAutoInc,
-    ftBoolean,
-    ftSmallint,
-    ftInteger,
-    ftWord,
-    ftFloat,
-    ftCurrency,
-    ftLargeint: AParam.Value := 0;
-
-    ftDateTime: AParam.Value := DBISignifyNullDateTime;
-  else
-    DatabaseError(Format(SUnknownFieldType, [AParam.Name]));
-  end;
-end;
-
-
-constructor TDBIParams.Create;
-begin
-  inherited Create;
-
-  //##DEBUG
-end;
-
-destructor TDBIParams.Destroy;
-begin
-  //##DEBUG
-
-  inherited Destroy;
-end;
-
-
-function TDBIParams.GetByName(
-  const AParamName: String;
-  const ADataType: TFieldType = ftUnknown;
-  const AParamType: TParamType = ptUnknown
-  ): TParam;
-begin
-  Result := FindParam(AParamName);
-  if not Assigned(Result) then begin
-    Result := Add as TParam;
-    Result.Name := AParamName;
-  end;
-
-  if (AParamType <> ptUnknown) then begin
-    Result.ParamType := AParamType;
-  end;
-
-  if (ADataType <> ftUnknown) then begin
-    AssignDefaultValue(Result, ADataType);
-  end;
-end;
-
-
-
-
-
-{ TDBIGlobalParams }
-
-function TDBIGlobalParams.GetByName(
-  const AParamName: String;
-  const ADataType: TFieldType;
-  const AParamType: TParamType
-  ): TParam;
-begin
-  Result := inherited GetByName(AParamName, ADataType, AParamType);
-
-  //##DEBUG
 end;
 
 
