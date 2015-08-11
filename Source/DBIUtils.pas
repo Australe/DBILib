@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2015, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -210,14 +210,14 @@ type
 
   end;
 
-
+{$ifndef fpc}
 type
   TDBIMouseInfo = class(TPersistent)
   public
     class function GetShiftState: TShiftState;
 
   end;
-
+{$endif}
 
 type
   ILocalInstance = interface(IUnknown)
@@ -328,7 +328,7 @@ end;
 
 
 { TDBIMouseInfo }
-
+{$ifndef fpc}
 class function TDBIMouseInfo.GetShiftState: TShiftState;
 var
   KeyState: TKeyboardState;
@@ -337,7 +337,7 @@ begin
   GetKeyboardState(KeyState);
   Result := KeyboardStateToShiftState(KeyState);
 end;
-
+{$endif}
 
 
 

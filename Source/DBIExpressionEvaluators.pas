@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2015, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -1330,7 +1330,7 @@ begin
       2;  // The Length byte and the hidden end null
 
     // Align the new Pointer
-    PNewString := Pointer((LongInt(PNewString) + 3) and $FFFFFFFC);
+    PNewString := Pointer((LongWord(PNewString) + 3) and $FFFFFFFC);
 
     // If there's not enough room for the new String, get a new chunk
     if (PDBIStackPageHeader(FPage)^.PLimit - PNewString) < (SizeOf(Pointer) + Length(Value) + 2) then

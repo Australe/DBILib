@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2015, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -31,7 +31,7 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  Classes, SysUtils, DB, DBITypInfo, DBIStreamAdapters, DBITokenizerConsts;
+  Classes, SysUtils, DBITypInfo, DBIStreamAdapters, DBITokenizerConsts;
 
 type
   EAnalyserError = class(Exception);
@@ -103,150 +103,6 @@ type
     property TokenString: String read GetTokenString write SetTokenString;
     property TokenType: TDBITokenType read FTokenType write FTokenType;
 
-  end;
-
-
-type
-  TDBIParamsAdapter = class(TPersistent)
-  private
-    FParams: TParams;
-
-  protected
-    class procedure AssignDefaultValue(AParam: TParam; ADataType: TFieldType);
-
-  public
-    constructor Create(AParams: TParams); virtual;
-
-    procedure AssignFromFields(Fields: TFields; const ItemName: String = '');
-
-    function FindParam(const Value: String): TParam;
-
-    function GetByName(
-      const AParamName: String;
-      const ADataType: TFieldType = ftUnknown;
-      const AParamType: TParamType = ptUnknown
-      ): TParam; virtual;
-
-    property Params: TParams read FParams;
-  end;
-
-
-type
-  TDBICustomScope = class;
-  TDBICustomScopeClass = class of TDBICustomScope;
-  TDBICustomScopeCallback = procedure(AScope: TDBICustomScope) of object;
-
-  TDBICustomScope = class(TDBILexerToken)
-  private
-    FCallBack: TDBICustomScopeCallback;
-    FData: TObject;
-    FItemName: String;
-    FName: String;
-    FParams: TParams;
-    FParamsAdapter: TDBIParamsAdapter;
-    FParent: TDBICustomScope;
-
-  protected
-    function CreateParams: TParams;
-    function GetEnabled: Boolean; virtual;
-    function GetItemName: String; virtual;
-    function GetName: String; virtual;
-    function GetParams: TDBIParamsAdapter; virtual;
-
-    procedure SetItemName(const value: String); virtual;
-    procedure SetName(const Value: String); virtual;
-
-    procedure UpdateParams; virtual;
-
-    property CallBack: TDBICustomScopeCallback read FCallback write FCallback;
-    property Data: TObject read FData write FData;
-    property Parent: TDBICustomScope read FParent write FParent;
-
-  public
-    constructor Create(AData: TObject = nil); virtual;
-    destructor Destroy; override;
-
-    function CheckType(AClassType: TDBICustomScopeClass): Boolean;
-
-    property Enabled: Boolean read GetEnabled;
-    property ItemName: String read GetItemName write SetItemName;
-    property Name: String read GetName write SetName;
-    property Params: TDBIParamsAdapter read GetParams;
-
-  end;
-
-
-type
-  TDBICustomGlobalScope = class(TDBICustomScope)
-  protected
-    function GetItemName: String; override;
-    function GetEnabled: Boolean; override;
-
-  end;
-
-
-type
-  TDBIGlobalScope = class(TDBICustomGlobalScope)
-  protected
-    function GetComputerName: String;
-    function GetDate: String;
-    function GetDateStamp: String;
-    function GetDay: String;
-    function GetLongDay: String;
-    function GetLongMonth: String;
-    function GetMonth: String;
-    function GetNow: TDateTime;
-    function GetShortDay: String;
-    function GetShortMonth: String;
-    function GetTime: String;
-    function GetTimeStamp: String;
-    function GetToday: String;
-    function GetUserName: String;
-    function GetYear: String;
-
-  published
-    property ComputerName: String read GetComputerName;
-    property Date: String read GetDate;
-    property DateStamp: String read GetDateStamp;
-    property Day: String read GetDay;
-    property LongDay: String read GetLongDay;
-    property LongMonth: String read GetLongMonth;
-    property Month: String read GetMonth;
-    property Now: TDateTime read GetNow;
-    property ShortDay: String read GetShortDay;
-    property ShortMonth: String read GetShortMonth;
-    property Time: String read GetTime;
-    property TimeStamp: String read GetTimeStamp;
-    property Today: String read GetToday;
-    property UserName: String read GetUserName;
-    property Year: String read GetYear;
-
-  end;
-
-
-type
-  TDBIScopeStack = class(TPersistent)
-  private
-    FItems: TList;
-
-  protected
-    procedure Clear;
-
-    function GetGlobal: TDBICustomScope; virtual;
-    function GetItems: TList;
-    function GetTop: TDBICustomScope;
-
-    property Global: TDBICustomScope read GetGlobal;
-    property Items: TList read GetItems;
-
-  public
-    destructor Destroy; override;
-
-    function FindParam(const ParamName: String): TParam;
-    function Push(Item: TDBICustomScope): TDBICustomScope;
-    function Pop: TDBICustomScope;
-
-    property Top: TDBICustomScope read GetTop;
   end;
 
 
@@ -401,16 +257,11 @@ type
   private
     FInput: TDBIAbstractLexer;
     FOutput: TDBIStreamFormatter;
-    FScope: TDBIScopeStack;
 
   protected
-    function CreateScope: TDBIScopeStack; virtual;
-    procedure EnabledHandler(Sender: TObject; var Enabled: Boolean);
-
     function GetInput: TDBICustomAsciiLexer;
     function GetLexerClassType: TDBICustomAsciiLexerClass; virtual; abstract;
     function GetOutput: TDBIStreamFormatter;
-    function GetScope: TDBIScopeStack; virtual;
 
   public
     constructor Create; virtual;
@@ -477,8 +328,6 @@ uses
 {$endif}
   Windows,
   TypInfo,
-  DBConsts,
-  DBIConst,
   DBIUtils;
 
 
@@ -619,28 +468,11 @@ end;
 
 { TDBICustomParser }
 
-type
-  TDBIProtectedStreamFormatter = class(TDBIStreamFormatter);
-
 constructor TDBICustomParser.Create;
 begin
   inherited Create;
 
-  FScope := CreateScope;
-
-  // Register Callback to ensure that the output.enabled property
-  // correctly reflects the scope.enabled;
-  TDBIProtectedStreamFormatter(Output).EnabledCallback := EnabledHandler;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 04/04/2011 09:14:12 - Initial code.<br />
-}
-function TDBICustomParser.CreateScope: TDBIScopeStack;
-begin
-  Result := TDBIScopeStack.Create;
+  // Place holder (to allow constructor to be virtual)
 end;
 
 
@@ -650,23 +482,10 @@ end;
 }
 destructor TDBICustomParser.Destroy;
 begin
-  FreeAndNil(FScope);
   FreeAndNil(FOutput);
   FreeAndNil(FInput);
 
   inherited Destroy;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 07/01/2011 12:28:05 - Initial code.<br />
-}
-procedure TDBICustomParser.EnabledHandler(Sender: TObject; var Enabled: Boolean);
-begin
-  if Enabled and Assigned(GetScope.Top) then begin
-    Enabled := GetScope.Top.Enabled;
-  end;
 end;
 
 
@@ -693,12 +512,6 @@ begin
     FOutput := TDBIStreamFormatter.Create;
   end;
   Result := FOutput;
-end;
-
-
-function TDBICustomParser.GetScope: TDBIScopeStack;
-begin
-  Result := FScope;
 end;
 
 
@@ -1798,454 +1611,6 @@ begin
     if (tsMask in Value) then begin
       Token.TokenStatus := LexerStatus;
     end;
-  end;
-end;
-
-
-
-
-
-{ TDBIScopeStack }
-
-// _____________________________________________________________________________
-{**
-  Jvr - 04/04/2011 09:21:51 - Initial code.<br />
-}
-procedure TDBIScopeStack.Clear;
-var
-  Scope: TDBICustomScope;
-
-begin
-  if Assigned(FItems) then begin
-    while FItems.Count > 0 do begin
-      Scope := Items[FItems.Count-1];
-      FItems.Remove(Scope);
-      FreeAndNil(Scope);
-    end;
-  end;
-end;
-
-
-destructor TDBIScopeStack.Destroy;
-begin
-  Clear;
-  FreeAndNil(FItems);
-
-  inherited Destroy;
-end;
-
-
-function TDBIScopeStack.FindParam(const ParamName: String): TParam;
-var
-  Index: Integer;
-  Scope: TDBICustomScope;
-
-begin
-  Result := nil;
-
-  for Index := Items.Count-1 downto 0 do begin
-    Scope := Items[Index];
-
-    if Assigned(Scope) and Assigned(Scope.Params) then begin
-      Result := Scope.GetParams.FindParam(ParamName);
-    end;
-
-    if Assigned(Result) then begin
-      Break;
-    end;
-  end;
-end;
-
-
-function TDBIScopeStack.GetGlobal: TDBICustomScope;
-begin
-  if Items.Count <= 0 then begin
-    Push(TDBIGlobalScope.Create);
-  end;
-  Result := nil;
-  if Items.Count > 0 then begin
-    Result := Items[0];
-  end;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 04/04/2011 09:22:04 - Initial code.<br />
-}
-function TDBIScopeStack.GetItems: TList;
-begin
-  if not Assigned(FItems) then begin
-    FItems := TList.Create;
-  end;
-  Result := FItems;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 04/04/2011 09:23:41 - Initial code.<br />
-}
-function TDBIScopeStack.GetTop: TDBICustomScope;
-begin
-  Result := nil;
-  if Items.Count > 0 then begin
-    Result := Items[Items.Count-1];
-  end;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 04/04/2011 09:24:32 - Initial code.<br />
-}
-function TDBIScopeStack.Pop: TDBICustomScope;
-begin
-  { TODO -ovip -cTDBIScopeStack.Pop() : ##TPL - Pop Scope from the stack }
-  Result := Items[Items.Count-1];
-  Items.Remove(Result);
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 04/04/2011 09:25:57 - Initial code.<br />
-}
-function TDBIScopeStack.Push(Item: TDBICustomScope): TDBICustomScope;
-begin
-  { TODO -ovip -cTDBIScopeStack.Push() : ##TPL - Push Scope on to the stack }
-  Result := Item;
-  if Assigned(Result) then begin
-    Result.Parent := Top;
-    Items.Add(Result);
-  end;
-end;
-
-
-
-
-
-{ TDBIGlobalScope }
-
-function TDBIGlobalScope.GetComputerName: String;
-begin
-  Result := TDBIHostInfo.GetComputerName;
-end;
-
-function TDBIGlobalScope.GetDate: String;
-begin
-  Result := FormatDateTime('dd/mm/yyyy', SysUtils.Now);
-end;
-
-function TDBIGlobalScope.GetDateStamp: String;
-begin
-  Result := FormatDateTime('mm/dd/yyyy', SysUtils.Now);
-end;
-
-function TDBIGlobalScope.GetDay: String;
-begin
-  Result := FormatDateTime('dd', SysUtils.Now);
-end;
-
-function TDBIGlobalScope.GetLongDay: String;
-begin
-  Result := FormatDateTime('dddd', SysUtils.Now);
-end;
-
-function TDBIGlobalScope.GetLongMonth: String;
-begin
-  Result := FormatDateTime('mmmm', SysUtils.Now);
-end;
-
-function TDBIGlobalScope.GetMonth: String;
-begin
-  Result := FormatDateTime('mm', SysUtils.Now);
-end;
-
-function TDBIGlobalScope.GetNow: TDateTime;
-begin
-  Result := SysUtils.Now;
-end;
-
-function TDBIGlobalScope.GetShortDay: String;
-begin
-  Result := FormatDateTime('ddd', SysUtils.Now);
-end;
-
-function TDBIGlobalScope.GetShortMonth: String;
-begin
-  Result := FormatDateTime('mmm', SysUtils.Now);
-end;
-
-function TDBIGlobalScope.GetTime: String;
-begin
-  Result := FormatDateTime('hh:nn:ss', SysUtils.Now);
-end;
-
-function TDBIGlobalScope.GetTimeStamp: String;
-begin
-  Result := FormatDateTime('mm/dd/yyyy hh:nn:ss:zzz', SysUtils.Now);
-end;
-
-function TDBIGlobalScope.GetToday: String;
-begin
-  Result := FormatDateTime('dd/mm/yyyy', SysUtils.Now);
-end;
-
-function TDBIGlobalScope.GetUserName: String;
-begin
-  Result := TDBIHostInfo.GetUserName;
-end;
-
-function TDBIGlobalScope.GetYear: String;
-begin
-  Result := FormatDateTime('yyyy', SysUtils.Now);
-end;
-
-
-
-
-
-{ TDBICustomGlobalScope }
-
-function TDBICustomGlobalScope.GetEnabled: Boolean;
-begin
-  Result := True;
-end;
-
-function TDBICustomGlobalScope.GetItemName: String;
-begin
-  Result := GetName;
-end;
-
-
-
-
-
-{ TDBICustomScope }
-
-function TDBICustomScope.CheckType(AClassType: TDBICustomScopeClass): Boolean;
-var
-  ScopeName: String;
-
-begin
-  Result := Self is AClassType;
-
-  if not Result then begin
-    if Assigned(Self) then begin
-      ScopeName := Self.ClassName;
-    end
-    else begin
-      ScopeName := '<nil>, probably a syntax error!';
-    end;
-
-    raise Exception.CreateFmt(
-      'Expected Scope of type "%s", actual scope is %s',
-      [AClassType.ClassName, ScopeName]
-      );
-  end;
-end;
-
-
-constructor TDBICustomScope.Create(AData: TObject);
-begin
-  inherited Create;
-
-  FData := AData;
-  FParams := CreateParams;
-  FParamsAdapter := TDBIParamsAdapter.Create(FParams);
-end;
-
-
-function TDBICustomScope.CreateParams: TParams;
-begin
-  Result := TParams.Create;
-end;
-
-
-destructor TDBICustomScope.Destroy;
-begin
-  FreeAndNil(FParamsAdapter);
-  FreeAndNil(FParams);
-
-  inherited Destroy;
-end;
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 31/03/2011 12:44:04 - Initial code.<br />
-}
-function TDBICustomScope.GetEnabled: Boolean;
-begin
-  Result := Assigned(FData) and Assigned(FCallBack);
-end;
-
-
-function TDBICustomScope.GetItemName: String;
-begin
-  Result := FItemName;
-end;
-
-
-function TDBICustomScope.GetName: String;
-begin
-  Result := FName;
-end;
-
-
-function TDBICustomScope.GetParams: TDBIParamsAdapter;
-begin
-  Result := FParamsAdapter;
-end;
-
-
-procedure TDBICustomScope.SetItemName(const value: String);
-begin
-  FItemName := Value;
-end;
-
-
-procedure TDBICustomScope.SetName(const Value: String);
-begin
-  FName := Value;
-end;
-
-
-procedure TDBICustomScope.UpdateParams;
-var
-{$ifdef AllowClassTypes}
-  PropInstance: TObject;
-{$endif}
-  PropIndex: integer;
-  PropInfo: PPropInfo;
-  PropList: TList;
-  PropName: String;
-
-begin
-  PropList := Local(TList.Create).Obj as TList;
-
-  DBIGetPropertyList(Self.ClassInfo, PropList);
-  for PropIndex := 0 to PropList.Count-1 do begin
-    PropInfo := PropList[PropIndex];
-    PropName := ItemName + '.' + String(PropInfo^.Name);
-
-    case PropInfo^.PropType^.Kind of
-      tkString, tkLString, tkWString {$ifdef DELPHI2009}, tkUString {$endif} {$ifdef fpc}, tkAString {$endif}:
-        Params.GetByName(PropName).AsString := TypInfo.GetStrProp(Self, PropInfo);
-
-      tkFloat:
-        Params.GetByName(PropName).AsFloat := TypInfo.GetFloatProp(Self, PropInfo);
-
-      tkInteger:
-        Params.GetByName(PropName).AsInteger := TypInfo.GetOrdProp(Self, PropInfo);
-
-      tkInt64:
-        Params.GetByName(PropName).AsInteger := TypInfo.GetInt64Prop(Self, PropInfo);
-
-      tkEnumeration:
-        Params.GetByName(PropName).AsString := TypInfo.GetEnumProp(Self, PropInfo);
-{$ifdef AllowClassTypes}
-      tkClass: begin
-        PropInstance := GetObjectProp(Self, PropInfo, TClass(nil));
-      end;
-{$endif}
-    else
-      raise Exception.CreateFmt('Property type for "%s" not supported', [PropName]);
-    end;
-  end;
-end;
-
-
-
-
-
-{ TDBIParamsAdapter }
-
-// _____________________________________________________________________________
-{**
-  Jvr - 19/01/2009 12:27:19 - Initial code.<br>
-}
-class procedure TDBIParamsAdapter.AssignDefaultValue(AParam: TParam; ADataType: TFieldType);
-const
-  DefaultStringValue = '';
-
-begin
-  AParam.DataType := ADataType;
-  case ADataType of
-    ftString,
-    ftFixedChar,
-    ftMemo: AParam.Value := DefaultStringValue;
-
-    ftAutoInc,
-    ftBoolean,
-    ftSmallint,
-    ftInteger,
-    ftWord,
-    ftFloat,
-    ftCurrency,
-    ftLargeint: AParam.Value := 0;
-
-    ftDateTime: AParam.Value := DBISignifyNullDateTime;
-  else
-    DatabaseError(Format(SUnknownFieldType, [AParam.Name]));
-  end;
-end;
-
-
-procedure TDBIParamsAdapter.AssignFromFields(Fields: TFields; const ItemName: String = '');
-var
-  FieldIndex: Integer;
-  FieldName: String;
-  Param: TParam;
-
-begin
-  for FieldIndex := 0 to Fields.Count-1 do begin
-    FieldName := ItemName + '.' + Fields[FieldIndex].FieldName;
-    Param := Params.FindParam(FieldName);
-
-    if not Assigned(Param) then begin
-      Param := Params.Add as TParam;
-    end;
-
-    Param.AssignField(Fields[FieldIndex]);
-    Param.Name := FieldName;
-  end;
-end;
-
-
-constructor TDBIParamsAdapter.Create(AParams: TParams);
-begin
-  inherited Create;
-
-  FParams := AParams;
-end;
-
-
-function TDBIParamsAdapter.FindParam(const Value: String): TParam;
-begin
-  Result := Params.FindParam(Value);
-end;
-
-
-function TDBIParamsAdapter.GetByName(
-  const AParamName: String;
-  const ADataType: TFieldType = ftUnknown;
-  const AParamType: TParamType = ptUnknown
-  ): TParam;
-begin
-  Result := Params.FindParam(AParamName);
-  if not Assigned(Result) then begin
-    Result := Params.Add as TParam;
-    Result.Name := AParamName;
-  end;
-
-  if (AParamType <> ptUnknown) then begin
-    Result.ParamType := AParamType;
-  end;
-
-  if (ADataType <> ftUnknown) then begin
-    AssignDefaultValue(Result, ADataType);
   end;
 end;
 

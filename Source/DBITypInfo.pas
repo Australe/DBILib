@@ -1,6 +1,6 @@
 // _____________________________________________________________________________
 {
-  Copyright (C) 1996-2014, All rights reserved, John Vander Reest
+  Copyright (C) 1996-2015, All rights reserved, John Vander Reest
 
   This source is free software; you may redistribute, use and/or modify it under
   the terms of the GNU Lesser General Public License as published by the
@@ -32,6 +32,33 @@ interface
 
 uses
   Classes, Contnrs, TypInfo, DB, DBIObjectListDatasets;
+
+type
+  TDBIParamsAdapter = class(TPersistent)
+  private
+    FParams: TParams;
+
+  protected
+    class procedure AssignDefaultValue(AParam: TParam; ADataType: TFieldType);
+
+  public
+    constructor Create(AParams: TParams = nil); virtual;
+    destructor Destroy; override;
+
+    procedure AssignFromFields(Fields: TFields; const ItemName: String = '');
+    procedure AssignFromProperties(Instance: TObject; const ItemName: String = '');
+
+    function FindParam(const Value: String): TParam;
+
+    function GetByName(
+      const AParamName: String;
+      const ADataType: TFieldType = ftUnknown;
+      const AParamType: TParamType = ptUnknown
+      ): TParam; virtual;
+
+    property Params: TParams read FParams;
+  end;
+
 
 type
   TDBIEnumName = class(TPersistent)
@@ -153,20 +180,6 @@ type
   end;
 
 
-{##JVR
-type
-  TDBIAnsiStrProp = class
-  public
-    class function GetValue(Instance: TObject; const PropName: String): AnsiString;
-
-    class function GetExtendedValue(Instance: TObject; const PropName: String): AnsiString;
-
-    class procedure SetValue(Instance: TObject; const PropName: String; const AData: AnsiString);
-
-  end;
-//}
-
-
   procedure DBIGetPropertyList(ClassInfo: PTypeInfo; List: TList);
 
   function DBIAnsiGetStrProp(Instance: TObject; const PropName: String): AnsiString;
@@ -192,8 +205,10 @@ uses
   RtlConsts,
   {$endif}
   Consts,
+  DBConsts,
 {$endif}
   SysUtils,
+  DBIConst,
   DBIUtils,
   DBIIntfConsts,
   DBIInterfaces;
@@ -690,31 +705,7 @@ begin
   Result := TypInfo.GetTypeData(PropInfo^.PropType{$ifndef fpc}^{$endif});
 end;
 
-{##JVR
-function GetPropInfo(TypeInfo: PTypeInfo; const PropName: string): PPropInfo;
-begin
-  Result := InternalGetPropInfo(TypeInfo, PropName);
-end;
 
-function GetPropInfo(TypeInfo: PTypeInfo; const PropName: string; AKinds: TTypeKinds): PPropInfo;
-begin
-  Result := InternalGetPropInfo(TypeInfo, PropName);
-  if (Result <> nil) and
-     (AKinds <> []) and
-     not (Result^.PropType^^.Kind in AKinds) then
-    Result := nil;
-end;
-
-function IsPublishedProp(Instance: TObject; const PropName: string): Boolean;
-begin
-  Result := InternalGetPropInfo(PTypeInfo(Instance.ClassInfo), PropName) <> nil;
-end;
-
-function IsPublishedProp(AClass: TClass; const PropName: string): Boolean;
-begin
-  Result := InternalGetPropInfo(PTypeInfo(AClass.ClassInfo), PropName) <> nil;
-end;
-//}
 class function TDBIPropType.IsPublishedProp(AClass: TClass; const PropName: String): Boolean;
 begin
   Result := (AClass <> nil) and (TypInfo.GetPropInfo(PTypeInfo(AClass.ClassInfo), PropName) <> nil);
@@ -807,6 +798,162 @@ begin
   List.Clear;
   for ID := Low to High do begin
     List.Add(New(ID, GetName));
+  end;
+end;
+
+
+
+
+
+{ TDBIParamsAdapter }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 19/01/2009 12:27:19 - Initial code.<br>
+}
+class procedure TDBIParamsAdapter.AssignDefaultValue(AParam: TParam; ADataType: TFieldType);
+const
+  DefaultStringValue = '';
+
+begin
+  AParam.DataType := ADataType;
+  case ADataType of
+    ftString,
+    ftFixedChar,
+    ftMemo: AParam.Value := DefaultStringValue;
+
+    ftAutoInc,
+    ftBoolean,
+    ftSmallint,
+    ftInteger,
+    ftWord,
+    ftFloat,
+    ftCurrency,
+    ftLargeint: AParam.Value := 0;
+
+    ftDateTime: AParam.Value := DBISignifyNullDateTime;
+  else
+    DatabaseError(Format(SUnknownFieldType, [AParam.Name]));
+  end;
+end;
+
+
+procedure TDBIParamsAdapter.AssignFromFields(Fields: TFields; const ItemName: String = '');
+var
+  FieldIndex: Integer;
+  FieldName: String;
+  Param: TParam;
+
+begin
+  for FieldIndex := 0 to Fields.Count-1 do begin
+    FieldName := ItemName + '.' + Fields[FieldIndex].FieldName;
+    Param := Params.FindParam(FieldName);
+
+    if not Assigned(Param) then begin
+      Param := Params.Add as TParam;
+    end;
+
+    Param.AssignField(Fields[FieldIndex]);
+    Param.Name := FieldName;
+  end;
+end;
+
+
+procedure TDBIParamsAdapter.AssignFromProperties(Instance: TObject; const ItemName: String);
+var
+{$ifdef AllowClassTypes}
+  PropInstance: TObject;
+{$endif}
+  PropIndex: integer;
+  PropInfo: PPropInfo;
+  PropList: TList;
+  PropName: String;
+
+begin
+  PropList := Local(TList.Create).Obj as TList;
+
+  DBIGetPropertyList(Instance.ClassInfo, PropList);
+  for PropIndex := 0 to PropList.Count-1 do begin
+    PropInfo := PropList[PropIndex];
+    PropName := ItemName + '.' + String(PropInfo^.Name);
+
+    case PropInfo^.PropType^.Kind of
+      tkString, tkLString, tkWString {$ifdef DELPHI2009}, tkUString {$endif} {$ifdef fpc}, tkAString {$endif}:
+        GetByName(PropName).AsString := TypInfo.GetStrProp(Instance, PropInfo);
+
+      tkFloat:
+        GetByName(PropName).AsFloat := TypInfo.GetFloatProp(Instance, PropInfo);
+
+      tkInteger:
+        GetByName(PropName).AsInteger := TypInfo.GetOrdProp(Instance, PropInfo);
+
+      tkInt64:
+        GetByName(PropName).AsInteger := TypInfo.GetInt64Prop(Instance, PropInfo);
+
+      tkEnumeration:
+        GetByName(PropName).AsString := TypInfo.GetEnumProp(Instance, PropInfo);
+{$ifdef AllowClassTypes}
+      tkClass: begin
+        PropInstance := GetObjectProp(Instance, PropInfo, TClass(nil));
+      end;
+{$endif}
+    else
+      raise Exception.CreateFmt('Property type for "%s" not supported', [PropName]);
+    end;
+  end;
+end;
+
+
+type
+  TDBIDefaultParams = class(TParams);
+
+constructor TDBIParamsAdapter.Create(AParams: TParams = nil);
+begin
+  inherited Create;
+
+  if Assigned(AParams) then begin
+    FParams := AParams;
+  end
+  else begin
+    FParams := TDBIDefaultParams.Create;
+  end;
+end;
+
+
+destructor TDBIParamsAdapter.Destroy;
+begin
+  if (FParams is TDBIDefaultParams) then begin
+    FreeAndNil(FParams);
+  end;
+
+  inherited Destroy;
+end;
+
+
+function TDBIParamsAdapter.FindParam(const Value: String): TParam;
+begin
+  Result := Params.FindParam(Value);
+end;
+
+
+function TDBIParamsAdapter.GetByName(
+  const AParamName: String;
+  const ADataType: TFieldType = ftUnknown;
+  const AParamType: TParamType = ptUnknown
+  ): TParam;
+begin
+  Result := Params.FindParam(AParamName);
+  if not Assigned(Result) then begin
+    Result := Params.Add as TParam;
+    Result.Name := AParamName;
+  end;
+
+  if (AParamType <> ptUnknown) then begin
+    Result.ParamType := AParamType;
+  end;
+
+  if (ADataType <> ftUnknown) then begin
+    AssignDefaultValue(Result, ADataType);
   end;
 end;
 
