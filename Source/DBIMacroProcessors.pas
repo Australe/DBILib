@@ -1098,7 +1098,7 @@ begin
 
    except
     on E: Exception do
-      Input.SyntaxError('Failed to get macro "%s" - %s', [InterimName, E.Message], Self, Caller);
+      raise Exception.CreateFmt(Caller + '::1100::' + 'Failed to get macro "%s"'#13'%s', [InterimName, E.Message]);
   end;
 end;
 
@@ -1376,6 +1376,10 @@ end;
 
 procedure TDBICustomDatasetEnumeratorScope.UpdateParams;
 begin
+  if (KeyName <> '') then begin
+    Params.GetByName(KeyName).AsInteger := ItemIndex;
+  end;
+
   Params.AssignFromFields(GetCursor.Fields, ItemName);
 end;
 
@@ -1913,13 +1917,13 @@ end;
 procedure TDBIGlobalScopeStack.ReleaseBindings;
 var
   Index: Integer;
-  Scope: TDBICustomGlobalScope;
+  Scope: TDBICustomScope;
 
 begin
   // Remove Global Binding Objects from Scope
   for Index := Items.Count-1 downto 0 do begin
-    if (TObject(Items[Index]) is TDBICustomGlobalScope) then begin
-      Scope := TDBICustomGlobalScope(Items[Index]);
+    if (TObject(Items[Index]) is TDBICustomScope) then begin
+      Scope := TDBICustomScope(Items[Index]);
       if Bindings.IndexOfObject(Scope) >= 0 then begin
         Items.Remove(Scope);
       end;

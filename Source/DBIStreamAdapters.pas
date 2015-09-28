@@ -49,7 +49,6 @@ type
     function GetCanModify: Boolean;
     function GetEof: Boolean;
     function GetPosition: Integer;
-    function GetStream: TStream; virtual;
     function GetText: String;
 
     procedure ReleaseStream;
@@ -62,7 +61,7 @@ type
     property Eof: Boolean read GetEof;
     property Modified: Boolean read FModified;
     property ReadOnly: Boolean read FReadOnly write SetReadOnly;
-    property Stream: TStream read GetStream write SetStream;
+    property Stream: TStream read FStream write SetStream;
     property Text: String read GetText write SetText;
 
   protected
@@ -336,19 +335,6 @@ end;
 
 // _____________________________________________________________________________
 {**
-  Jvr - 18/03/2005 14:43:39 - Initial code.<br>
-}
-function TDBICustomStreamAdapter.GetStream: TStream;
-begin
-  if not Assigned(FStream) then begin
-    FStream := TMemoryStream.Create;
-  end;
-  Result := FStream;
-end;
-
-
-// _____________________________________________________________________________
-{**
   Jvr - 17/03/2005 17:57:36 - Initial code.<br>
 }
 function TDBICustomStreamAdapter.GetText: String;
@@ -520,6 +506,10 @@ begin
   ReleaseStream;
   FStream := Value;
   FOwnsData := not Assigned(Value);
+
+  if FOwnsData then begin
+    FStream := TMemoryStream.Create;
+  end;
 end;
 
 

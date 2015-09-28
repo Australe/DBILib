@@ -66,7 +66,7 @@ const
     { ptGitConfig   }  '\.git\config',
     { ptGit         }  'C:\Program Files\git\bin\git.exe',
     { ptGrep        }  'C:\Program Files\Git\bin\grep.exe',
-    { ptXE3         }  'C:\Program Files\Embarcadero\RAD Studio\11.0\Source\',
+    { ptXE3         }  'C:\Program Files\Embarcadero\RAD Studio\10.0\Source\',
     { pt2006        }  'C:\Program Files\Borland\BDS\4.0\Source\',
     { ptSource      }  'O:\Prj\omSource\',
     { pt3rdParty    }  'O:\Prj\3rdParty\'
