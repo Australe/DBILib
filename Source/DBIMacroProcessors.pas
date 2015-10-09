@@ -481,6 +481,7 @@ const
   paramMin = '.min';
   paramMax = '.max';
   paramCount = '.count';
+  paramHasNext = '.hasnext';
   paramLevel = '.level';
   paramItemName = '.name';
   paramClassName = '.classname';
@@ -1128,16 +1129,19 @@ begin
     FMacroName := ProcessGetMacroName;
 
     Input.Skip([tkWhiteSpace]);
-    Input.Check(Tok_Comparision);
     ComparisonType := Input.Token.TokenType;
-    Input.NextToken;
+    if not Input.Have(Tok_Comparison) then begin
+      ComparisonType := Tok_None;
+    end;
 
     Input.Skip([tkWhiteSpace]);
 
     Param := FindParam(FMacroName);
     if Assigned(Param) then begin
-      // Is it a string literal
-      if (Param.DataType = ftString) or (Input.Token.TokenType = Tok_SingleQuote) then begin
+      if (ComparisonType = Tok_None) then begin //process as if it's a boolean
+        Result := CompareText(Param.AsString, 'True') = 0;
+      end
+      else if (Input.Token.TokenType = Tok_SingleQuote) then begin //process as if it's a string
         Input.Fetch([Tok_SingleQuote]);
         StringValue := ProcessGetMacroValue(
           [],
@@ -1155,7 +1159,7 @@ begin
           Tok_SmallerEqual: Result := CompareText(Param.AsString, StringValue) <= 0;
         end;
       end
-      else begin
+      else begin //process as if it's a numeric
         Evaluator.Expression := ProcessGetMacroValue([]);
         FloatValue := Evaluator.Result;
 
@@ -1185,7 +1189,7 @@ begin
 
   except
     on E: Exception do
-      raise Exception.CreateFmt(Caller + '::1105::' + 'Failed on ProcessIf, "%s"', [FMacroName]);
+      raise Exception.CreateFmt(Caller + '::1105::' + 'Failed on ProcessIf, "%s"'#13'%s', [FMacroName, E.Message]);
   end;
 
   // Check the Parent Scope to make sure it is enabled
@@ -1376,6 +1380,8 @@ end;
 
 procedure TDBICustomDatasetEnumeratorScope.UpdateParams;
 begin
+  Params.GetByName(ItemName + paramHasNext).AsBoolean := ItemIndex < (Count - 1);
+
   if (KeyName <> '') then begin
     Params.GetByName(KeyName).AsInteger := ItemIndex;
   end;
@@ -1762,6 +1768,8 @@ end;
 procedure TDBICustomEnumeratorScope.UpdateParams;
 begin
   inherited UpdateParams;
+
+  Params.GetByName(ItemName + paramHasNext).AsBoolean := ItemIndex < (Count - 1);
 
   if (KeyName <> '') then begin
     Params.GetByName(KeyName).AsInteger := ItemIndex;

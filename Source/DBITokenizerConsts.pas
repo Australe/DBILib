@@ -312,7 +312,7 @@ const
   Tok_Slash = Tok_Divide;
 
   // Special sets
-  Tok_Comparision = [
+  Tok_Comparison = [
     Tok_Smaller,
     Tok_Greater,
     Tok_GreaterEqual,
