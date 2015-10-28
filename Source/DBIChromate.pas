@@ -59,9 +59,10 @@ type
 
   TDBIChromate = class(TDBICustomChromate)
   public
-    class function Build(AOwner: TComponent; AParent: TWinControl): TDBIChromate;
+    class function Build(AOwner: TComponent; AParent: TWinControl): TDBIChromate; virtual;
     class function Register: Boolean;
 
+    destructor Destroy; override;
   end;
 
 
@@ -136,25 +137,6 @@ type
 
 type
   TDBIChromateActionIndex = (
-    // Bookmarks
-    bmAPI,
-    bmArchitecture,
-    bmBuilding,
-    bmDemo,
-    bmDesigner,
-    bmExperiment,
-    bmFiles,
-    bmForum,
-    bmGeneral,
-    bmJavaScript,
-    bmLibrary,
-    bmProject,
-    bmSource,
-    bmTrouble,
-    bmTutorial,
-    bmWindows,
-
-    // Menu Actions
     aiBack,
     aiClose,
     aiDebugging,
@@ -352,6 +334,7 @@ type
     function GetMenuOwner: TComponent;
     function GetParent: TWinControl;
     function GetPopupMenu: TPopupMenu;
+    procedure GetPopupMenuBookmarks;
     function GetPopupMenuBreak: TMenuItem;
     function GetPopupMenuItem(PopupAction: TCustomAction): TMenuItem;
     function GetSplitter: TSplitter;
@@ -555,22 +538,17 @@ end;
 
 procedure TDBIChromateBrowser.ActionBookmarkExecute(Sender: TObject);
 const
-  Prompt = 'Sorry Sender is not of type "TAction"';
+  Prompt = 'Sorry Sender is not of type "TMenuitem"'; //##JVR"TAction"';
 
 var
-  ActionName: String;
-  Index: TDBIChromateActionIndex;
+  PageUrl: String;
 
 begin
-  if (Sender is TAction) then begin
-    ActionName := TAction(Sender).Name;
+  if (Sender is TMenuItem) then begin
+    PageUrl := TMenuItem(Sender).Hint;
 
-    for Index := Low(TDBIChromateActionIndex) to High(TDBIChromateActionIndex) do begin
-      if (ActionName = TypInfo.GetEnumName(TypeInfo(TDBIChromateActionIndex), Ord(Index))) then begin
-        Page(GetActionItems[Index].Data);
-
-        Break;
-      end;
+    if (PageUrl <> '') then begin
+      Chromium.Load(PageUrl);
     end;
   end
 
@@ -1245,25 +1223,6 @@ end;
 class function TDBIChromateBrowser.GetActionItems: TDBIChromateActionRecords;
 const
   CData: TDBIChromateActionRecords = (
-    // Bookmarks
-    ( Title: 'API Documentation';     Shortcut:         0; ImageIndex: -1; Data: 'http://magpcss.org/ceforum/apidocs3'; ),
-    ( Title: 'Architecture';          Shortcut:         0; ImageIndex: -1; Data: 'https://bitbucket.org/chromiumembedded/cef/wiki/Architecture.md'; ),
-    ( Title: 'Branches and Building'; Shortcut:         0; ImageIndex: -1; Data: 'https://bitbucket.org/chromiumembedded/cef/wiki/BranchesAndBuilding'; ),
-    ( Title: 'Silk Demo Application'; Shortcut:         0; ImageIndex: -1; Data: 'http://localhost:9000/app/'; ),
-    ( Title: 'Designer';              Shortcut: {F11} 122; ImageIndex: -1; Data: 'http://localhost:9000/designer/index.html'; ),
-    ( Title: 'Trapdoor Embedded Demo';Shortcut: {F6}  117; ImageIndex: -1; Data: 'http://localhost:9000/app/assets/trapdoor/identity/identity.html'; ),
-    ( Title: 'File Explorer';         Shortcut:         0; ImageIndex: -1; Data: 'local://c/'; ),
-    ( Title: 'Google Groups';         Shortcut:         0; ImageIndex: -1; Data: 'https://groups.google.com/forum/?fromgroups#!forum/delphichromiumembedded'; ),
-    ( Title: 'General Usage';         Shortcut:         0; ImageIndex: -1; Data: 'https://bitbucket.org/chromiumembedded/cef/wiki/GeneralUsage'; ),
-    ( Title: 'Javascript Integration';Shortcut:         0; ImageIndex: -1; Data: 'https://bitbucket.org/chromiumembedded/cef/wiki/JavaScriptIntegration.md'; ),
-    ( Title: 'Chromium Libraries';    Shortcut:         0; ImageIndex: -1; Data: 'https://code.google.com/p/chromium/issues/detail?id=321626'; ),
-    ( Title: 'Project Page';          Shortcut:         0; ImageIndex: -1; Data: 'https://bitbucket.org/chromiumembedded/cef'; ),
-    ( Title: 'Chromium Source Code';  Shortcut:         0; ImageIndex: -1; Data: 'http://www.chromium.org/developers/how-tos/getting-around-the-chrome-source-code'; ),
-    ( Title: 'Troublesome DLLS';      Shortcut:         0; ImageIndex: -1; Data: 'https://code.google.com/p/chromium/codesearch#chromium/src/content/common/sandbox_win.cc&q=ktroublesome&sq=package%3achromium&type=cs&l=43'; ),
-    ( Title: 'Tutorial';              Shortcut:         0; ImageIndex: -1; Data: 'https://bitbucket.org/chromiumembedded/cef/wiki/Tutorial'; ),
-    ( Title: 'Chrome Windows Build';  Shortcut:         0; ImageIndex: -1; Data: 'https://chromium.googlesource.com/chromium/reference_builds/chrome_win/+/master'; ),
-
-    // Menu Actions
     ( Title: 'Back';                  Shortcut:                0; ImageIndex: Ord(bbBack);   Data: ''; ),
     ( Title: 'Close';                 Shortcut: {Ctrl+F4}  16499; ImageIndex: -1;            Data: ''; ),
     ( Title: 'Developer Tools';       Shortcut: {F12}        123; ImageIndex: -1;            Data: ''; ),
@@ -1312,7 +1271,6 @@ var
 
 begin
   case Index of
-    bmAPI..bmWindows:      MethodName := 'Bookmark';
     aiZoomIn..aiZoomReset: MethodName := 'Zoom';
   else
     MethodName := TypInfo.GetEnumName(TypeInfo(TDBIChromateActionIndex), Ord(Index));
@@ -1402,33 +1360,55 @@ begin
     GetPopupMenuItem(ActionItem[aiZoomReset]);
     GetPopupMenuBreak;
 
-    GetPopupMenuItem(ActionItem[aiJavascript]);
-    GetPopupMenuItem(ActionItem[aiPageSource]);
-    GetPopupMenuItem(ActionItem[aiPageText]);
-    GetPopupMenuItem(ActionItem[aiHookDom]);
-    GetPopupMenuItem(ActionItem[bmFiles]);
-    GetPopupMenuBreak;
+    if IsDeveloper then begin
+      GetPopupMenuItem(ActionItem[aiJavascript]);
+      GetPopupMenuItem(ActionItem[aiPageSource]);
+      GetPopupMenuItem(ActionItem[aiPageText]);
+      GetPopupMenuItem(ActionItem[aiHookDom]);
+      GetPopupMenuBreak;
+    end;
 
-    GetPopupMenuItem(ActionItem[bmDemo]);
-    GetPopupMenuItem(ActionItem[bmDesigner]);
-    GetPopupMenuItem(ActionItem[bmExperiment]);
-    GetPopupMenuBreak;
-
-    GetPopupMenuItem(ActionItem[bmProject]);
-    GetPopupMenuItem(ActionItem[bmTutorial]);
-    GetPopupMenuItem(ActionItem[bmBuilding]);
-    GetPopupMenuItem(ActionItem[bmGeneral]);
-    GetPopupMenuItem(ActionItem[bmJavascript]);
-    GetPopupMenuItem(ActionItem[bmArchitecture]);
-    GetPopupMenuBreak;
-    GetPopupMenuItem(ActionItem[bmAPI]);
-    GetPopupMenuItem(ActionItem[bmSource]);
-    GetPopupMenuItem(ActionItem[bmLibrary]);
-    GetPopupMenuItem(ActionItem[bmWindows]);
-    GetPopupMenuItem(ActionItem[bmTrouble]);
-    GetPopupMenuItem(ActionItem[bmForum]);
+    if IsDeveloper then begin
+      GetPopupMenuBookmarks;
+    end;
   end;
   Result := FPopupMenu;
+end;
+
+
+procedure TDBIChromateBrowser.GetPopupMenuBookmarks;
+const
+  SectionName = 'bookmarks';
+
+var
+  Filename: String;
+  IniFile: TDBIIniFile;
+  MenuItem: TMenuItem;
+  SectionIndex: Integer;
+  Section: TStrings;
+
+begin
+  FileName := ChangeFileExt(ParamStr(0), '.ini');
+
+  if FileExists(FileName) then begin
+    IniFile := Local(TDBIIniFile.Create(FileName)).Obj as TDBIIniFile;
+    Section := IniFile.GetSection(SectionName);
+
+    if Section.Count > 0 then begin
+      for SectionIndex := 0 to Section.Count-1 do begin
+        MenuItem := TMenuItem.Create(GetMenuOwner);
+        MenuItem.Caption := '-';
+
+        if (Section.ValueFromIndex[SectionIndex] <> '-') then begin
+          MenuItem.Caption := Section.Names[SectionIndex];
+          MenuItem.Hint := Section.ValueFromIndex[SectionIndex];
+          MenuItem.OnClick := ActionBookmarkExecute;
+        end;
+
+        FPopupMenu.Items.Add(MenuItem);
+      end;
+    end;
+  end;
 end;
 
 
@@ -1615,7 +1595,7 @@ end;
 
 class function TDBIChromateBrowser.IsDeveloper: Boolean;
 begin
-  Result := CompareText('jvr', TDBIHostInfo.GetUserName) = 0;
+  Result := {False; //##JVR} CompareText('jvr', TDBIHostInfo.GetUserName) = 0;
 end;
 
 
@@ -1732,6 +1712,14 @@ begin
   Result := Self.Create(AOwner);
   Result.Parent := AParent;
   Result.Align := alClient;
+end;
+
+
+destructor TDBIChromate.Destroy;
+begin
+  //##DEBUG
+
+  inherited Destroy;
 end;
 
 

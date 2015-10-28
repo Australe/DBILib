@@ -34,7 +34,19 @@ uses
 {$ifndef fpc}
   Forms,
 {$endif}  
-  Windows, Messages, Classes, SysUtils, DB, DBIConst, DBIIntfConsts;
+  Windows, Messages, Classes, SysUtils, DB, DBIConst, DBIIntfConsts, IniFiles;
+
+type
+  TDBIIniFile = class(TMemIniFile)
+  protected
+    function CreateSection(const ASection: String): TStrings;
+
+  public
+    function GetSection(const Value: String): TStrings;
+    procedure WriteSectionValues(const ASection: String; Strings: TStrings);
+
+  end;
+
 
 type
   TDBIDebugKind = (
@@ -1396,6 +1408,79 @@ class procedure TDBIDebugInfo.LogMsg(const Kind: TDBIDebugKind; const Msg: Strin
 begin
   if {%H-}(Kind in DBIDebugKinds) then begin
     Windows.OutputDebugString(PChar(Format(Msg, Args)));
+  end;
+end;
+
+
+
+
+
+{ TDBIIniFile }
+
+// _____________________________________________________________________________
+{**
+  Jvr - 18/04/2008 13:24:59 - Initial code.<br />
+}
+function TDBIIniFile.CreateSection(const ASection: String): TStrings;
+const
+  DummyKey = '_Dummy42zxc';
+
+begin
+  Result := nil;
+  try
+    WriteString(ASection, DummyKey, DummyKey);
+    DeleteKey(ASection, DummyKey);
+    Result := GetSection(ASection);
+  except
+    Result.Free;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 18/04/2008 11:54:36 - Initial code.<br />
+}
+procedure TDBIIniFile.WriteSectionValues(const ASection: String; Strings: TStrings);
+var
+  SectionItem: TStrings;
+
+begin
+  Assert(Assigned(Strings));
+  Strings.BeginUpdate;
+  try
+    SectionItem := GetSection(ASection);
+    if not Assigned(SectionItem) then begin
+      SectionItem := CreateSection(ASection);
+    end;
+
+    Assert(Assigned(SectionItem));
+    SectionItem.Assign(Strings); // XE3: Note, "Assign" also copies "Sorted" property in XE3 (not in 2006).
+   finally
+    Strings.EndUpdate;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 18/04/2008 12:06:36 - Initial code.<br />
+}
+function TDBIIniFile.GetSection(const Value: String): TStrings;
+var
+  Sections: TStrings;
+  Index: integer;
+
+begin
+  Sections := Local(TStringList.Create).Obj as TStrings;
+  ReadSections(Sections);
+
+  Index := Sections.IndexOf(Value);
+  if (Index < 0) then begin
+    Result := nil;
+  end
+  else begin
+    Result := TStrings(Sections.Objects[Index]);
   end;
 end;
 
