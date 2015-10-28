@@ -190,6 +190,9 @@ type
   TDBIChromateBrowserOptions = set of TDBIChromateBrowserOption;
 
 type
+  TDBIPageClass = class of TTabSheet;
+
+type
   TDBIChromateBrowser = class(TComponent)
   private
     FActionItems: array[TDBIChromateActionIndex] of TAction;
@@ -341,6 +344,9 @@ type
       ): TNotifyEvent;
 
   protected
+    class function CreateBrowser(AParent: TWinControl): TDBIChromateBrowser; virtual;
+    class function CreateBrowserPage(PageControl: TPageControl; PageClass: TDBIPageClass): TDBIChromateBrowser; virtual;
+
     function GetChromate: TDBIChromate;
     function GetControlsOwner: TComponent;
     function GetMenuOwner: TComponent;
@@ -357,6 +363,8 @@ type
     function GetTools: TDBIDeveloperTools;
     function GetUrlAddress: String; virtual;
     function GetUrlDefault: String; virtual;
+
+    class function IsDeveloper: Boolean;
 
     procedure SendMessageRenderer(const Msg: String);
 
@@ -402,6 +410,7 @@ type
     property ToolsFileOpen: TFileOpen read FToolsFileOpen;
 
   public
+    destructor Destroy; override;
     procedure Console(const Msg: String; Args: array of const);
 
     procedure Close;
@@ -441,33 +450,6 @@ type
   end;
 
 
-type
-  TDBIChromatePage = class(TTabSheet)
-  private
-    FBrowser: TDBIChromateBrowser;
-
-  protected
-    function GetBrowser: TDBIChromateBrowser;
-    function GetBrowserClass: TDBIChromateBrowserClass; virtual;
-
-    procedure DoHide; override;
-    procedure DoShow; override;
-
-  public
-    class function Build(APageControl: TPageControl): TDBIChromatePage;
-
-    property Browser: TDBIChromateBrowser read GetBrowser;
-  end;
-
-
-type
-  TDBIChromateDesignerPage = class(TDBIChromatePage)
-  protected
-    function GetBrowserClass: TDBIChromateBrowserClass; override;
-
-  end;
-
-
 implementation
 
 {$define UseFileScheme True}
@@ -476,7 +458,8 @@ uses
 {$ifdef UseFileScheme}
   CefFileScheme,
 {$endif}
-  Consts, TypInfo, Graphics, Forms, Dialogs, ToolWin, UITypes, Variants; //##JVR, DBIChromateExtensions;
+  Consts, TypInfo, Graphics, Forms, Dialogs, ToolWin, UITypes, Variants, DBIUtils;
+
 
 
 
@@ -486,65 +469,6 @@ function TDBIChromiumHelper.GetHandler: ICefClient;
 begin
   Result := Self.FHandler;
 end;
-
-
-
-
-{ TDBIChromateDesignerPage }
-
-function TDBIChromateDesignerPage.GetBrowserClass: TDBIChromateBrowserClass;
-begin
-  Result := TDBIChromateDesigner;
-end;
-
-
-
-
-
-{ TDBIChromatePage }
-
-class function TDBIChromatePage.Build(APageControl: TPageControl): TDBIChromatePage;
-begin
-  Assert(Assigned(APageControl));
-
-  Result := Self.Create(APageControl.Owner);
-  Result.PageControl := APageControl;
-  Result.Caption := 'New Tab';
-
-  APageControl.ActivePage := Result;
-end;
-
-
-procedure TDBIChromatePage.DoHide;
-begin
-  Browser.ActionList.State := asSuspended;
-end;
-
-
-procedure TDBIChromatePage.DoShow;
-begin
-  Browser.ActionList.State := asNormal;
-end;
-
-
-function TDBIChromatePage.GetBrowser: TDBIChromateBrowser;
-begin
-  if not Assigned(FBrowser) then begin
-    FBrowser := GetBrowserClass.Create(Self.Owner);
-    FBrowser.SetParent(Self);
-    FBrowser.SetupPage;
-    FBrowser.Home;
-  end;
-  Result := FBrowser;
-end;
-
-
-function TDBIChromatePage.GetBrowserClass: TDBIChromateBrowserClass;
-begin
-  Result := TDBIChromateBrowser;
-end;
-
-
 
 
 
@@ -683,6 +607,14 @@ begin
 end;
 
 
+procedure TDBIChromateBrowser.ActionDebuggingExecute(Sender: TObject);
+begin
+  Tools.Visible := not Tools.Visible;
+  Splitter.Visible := Tools.Visible;
+  Splitter.Top := Chromium.Height;
+end;
+
+
 procedure TDBIChromateBrowser.ActionHomeExecute(Sender: TObject);
 begin
   if (Chromium.Browser <> nil) then begin
@@ -718,19 +650,35 @@ begin
   end;
 end;
 
+type
+  TDBITabSheetClass = class of TTabSheet;
 
 procedure TDBIChromateBrowser.ActionNewExecute(Sender: TObject);
 var
   Browser: TDBIChromateBrowser;
+  PageControl: TPageControl;
+  PageClass: TDBIPageClass;
+  Page: TTabSheet;
 
 begin
   if (GetParent is TTabSheet) then begin
-    Browser :=TDBIChromatePage.Build((GetParent as TTabSheet).PageControl).Browser;
 
+    Page := (GetParent as TTabSheet);
+    PageClass := TDBIPageClass(Page.ClassType);
+    PageControl := Page.PageControl;
+
+    Page := PageClass.Create(PageControl.Owner);
+    Page.PageControl := PageControl;
+    Page.Caption := 'New Tab';
+
+    Browser := CreateBrowser(Page);
     Browser.ActionList.Images := ActionList.Images;
     Browser.Toolbar.DisabledImages := Toolbar.DisabledImages;
     Browser.Toolbar.Images := Toolbar.Images;
     Browser.Toolbar.Visible := True;
+//##JVR    Browser.Home;
+
+    PageControl.ActivePage := Page;
   end;
 end;
 
@@ -886,6 +834,29 @@ begin
       aiZoomReset: Chromium.Browser.Host.ZoomLevel := 0;
     end;
   end;
+end;
+
+
+class function TDBIChromateBrowser.CreateBrowser(AParent: TWinControl): TDBIChromateBrowser;
+begin
+  Result := Self.Create(AParent.Owner);
+  Result.SetParent(AParent);
+  Result.SetupPage;
+//  Result.Home;
+end;
+
+
+class function TDBIChromateBrowser.CreateBrowserPage(PageControl: TPageControl; PageClass: TDBIPageClass): TDBIChromateBrowser;
+var
+  Page: TTabSheet;
+
+begin
+  Page := PageClass.Create(PageControl.Owner);
+  Page.PageControl := PageControl;
+  Page.Caption := 'New Tab';
+  PageControl.ActivePage := Page;
+
+  Result := CreateBrowser(Page);
 end;
 
 
@@ -1064,6 +1035,8 @@ begin
   end;
 end;
 
+
+(*##JVR
 type
   TDBICustomChromateData = class(TPersistent)
   end;
@@ -1110,7 +1083,7 @@ procedure TProtectedAction.SetMessage(Value: ICefProcessMessage);
 begin
   Data.Message := Value;
 end;
-
+//*)
 
 
 procedure TDBIChromateBrowser.ChromiumProcessMessageReceived(
@@ -1197,17 +1170,17 @@ begin
 end;
 
 
-procedure TDBIChromateBrowser.ActionDebuggingExecute(Sender: TObject);
-begin
-  Tools.Visible := not Tools.Visible;
-  Splitter.Visible := Tools.Visible;
-  Splitter.Top := Chromium.Height;
-end;
-
-
 procedure TDBIChromateBrowser.DemoShowMessageExecute(Sender: TObject);
 begin
   ShowMessage('This Message is an action in Delphi called from an Html web page');
+end;
+
+
+destructor TDBIChromateBrowser.Destroy;
+begin
+  //##DEBUG
+
+  inherited Destroy;
 end;
 
 
@@ -1278,7 +1251,7 @@ const
     ( Title: 'Branches and Building'; Shortcut:         0; ImageIndex: -1; Data: 'https://bitbucket.org/chromiumembedded/cef/wiki/BranchesAndBuilding'; ),
     ( Title: 'Silk Demo Application'; Shortcut:         0; ImageIndex: -1; Data: 'http://localhost:9000/app/'; ),
     ( Title: 'Designer';              Shortcut: {F11} 122; ImageIndex: -1; Data: 'http://localhost:9000/designer/index.html'; ),
-    ( Title: 'Trapdoor Embedded Demo';Shortcut: {F6}  117; ImageIndex: -1; Data: 'http://localhost:9000/app/assets/trapdoor/investor/investor.html'; ), //##JVR http://localhost:9000/designer/huntsman.html'; ),
+    ( Title: 'Trapdoor Embedded Demo';Shortcut: {F6}  117; ImageIndex: -1; Data: 'http://localhost:9000/app/assets/trapdoor/identity/identity.html'; ),
     ( Title: 'File Explorer';         Shortcut:         0; ImageIndex: -1; Data: 'local://c/'; ),
     ( Title: 'Google Groups';         Shortcut:         0; ImageIndex: -1; Data: 'https://groups.google.com/forum/?fromgroups#!forum/delphichromiumembedded'; ),
     ( Title: 'General Usage';         Shortcut:         0; ImageIndex: -1; Data: 'https://bitbucket.org/chromiumembedded/cef/wiki/GeneralUsage'; ),
@@ -1408,15 +1381,17 @@ begin
     FPopupMenu := TPopupMenu.Create(GetMenuOwner);
     FPopupMenu.Images := Toolbar.Images;
 
-    GetPopupMenuItem(ActionItem[aiNew]);
-    GetPopupMenuItem(ToolsFileOpen);
-    GetPopupMenuBreak;
-    GetPopupMenuItem(ActionItem[aiSave]);
-    GetPopupMenuItem(ActionItem[aiClose]);
-    GetPopupMenuBreak;
-    GetPopupMenuItem(ActionItem[aiLoad]);
-    GetPopupMenuItem(ActionItem[aiPrint]);
-    GetPopupMenuBreak;
+    if IsDeveloper then begin
+      GetPopupMenuItem(ActionItem[aiNew]);
+      GetPopupMenuItem(ToolsFileOpen);
+      GetPopupMenuBreak;
+      GetPopupMenuItem(ActionItem[aiSave]);
+      GetPopupMenuItem(ActionItem[aiClose]);
+      GetPopupMenuBreak;
+      GetPopupMenuItem(ActionItem[aiLoad]);
+      GetPopupMenuItem(ActionItem[aiPrint]);
+      GetPopupMenuBreak;
+    end;
 
     GetPopupMenuItem(ActionItem[aiDebugging]);
     GetPopupMenuItem(ActionItem[aiToolbar]);
@@ -1634,9 +1609,13 @@ end;
 
 procedure TDBIChromateBrowser.Home;
 begin
-  if (ParamCount > 0) then begin
-    Chromium.Load(GetUrlDefault);
-  end;
+  Chromium.Load(GetUrlDefault);
+end;
+
+
+class function TDBIChromateBrowser.IsDeveloper: Boolean;
+begin
+  Result := CompareText('jvr', TDBIHostInfo.GetUserName) = 0;
 end;
 
 
@@ -1647,25 +1626,27 @@ end;
 
 
 function TDBIChromateBrowser.Page(const Url: String): TDBIChromateBrowser;
-begin
-//##JVR  Result := nil;
+var
+  PageControl: TPageControl;
+  PageClass: TDBIPageClass;
 
-//##JVR  if (GetParent is TTabSheet) then begin
-    Result := Self;
+begin
+  Result := Self;
 
   if (GetParent is TTabSheet) then begin
     if (Result.GetUrlAddress <> '') then begin
-      Result := TDBIChromatePage.Build((GetParent as TTabSheet).PageControl).Browser;
+      PageControl := (GetParent as TTabSheet).PageControl;
+      PageClass := TDBIPageClass((GetParent as TTabSheet).ClassType);
+
+      Result := CreateBrowserPage(PageControl, PageClass);
       Result.ActionList.Images := ActionList.Images;
       Result.Toolbar.DisabledImages := Toolbar.DisabledImages;
       Result.Toolbar.Images := Toolbar.Images;
-//##JVR      Result.Toolbar.Visible := True;
     end;
   end;
 
-    Result.Toolbar.Visible := True;
-    Result.Chromium.Load(Url);
-//##JVR  end;
+  Result.Toolbar.Visible := True;
+  Result.Chromium.Load(Url);
 end;
 
 
@@ -1735,7 +1716,6 @@ const
   Script = 'document.querySelector("#designer").loadFromFile(''activities.demo\\first'');';
 
 begin
-//##JVR  ShowMessage('This is a test - Select any file from the file open dialog'#13'Click Open'#13'The designer will open the "first.scala" form!');
   if (Chromium.Browser <> nil) then begin
     Chromium.Browser.MainFrame.ExecuteJavaScript(Script, 'about:blank', 0);
   end;
@@ -2037,8 +2017,6 @@ begin
 
     Chromium.Browser.Host.CloseDevTools;
     FToolsClient.WindowHandle := 0;
-
-//##JVR    FToolsClient.DestroyWindowHandle;
     FToolsClient.Free;
     FToolsClient := nil;
   end;
@@ -2159,7 +2137,6 @@ function TDBIDeveloperToolsClient.GetHandle: HWND;
 begin
   if (WindowHandle = 0) or not Windows.IsWindow(WindowHandle) then begin
     WindowHandle := GetWindowHandle;
-//##JVR    Windows.SetWindowText(WindowHandle, 'John Vander Reest');
   end;
   Result := WindowHandle;
 end;
@@ -2179,7 +2156,6 @@ end;
 function TDBIDeveloperToolsClient.GetVisible: Boolean;
 begin
   Result := Windows.IsWindow(GetWindowHandle);
-//##JVR    Windows.IsWindow(WindowHandle) and Windows.IsWindowVisible(WindowHandle);
 end;
 
 
