@@ -199,7 +199,7 @@ type
       const Browser: ICefBrowser;
       const Frame: ICefFrame;
       const Url: UString
-      );
+      ); virtual;
 
     procedure ChromiumBeforeContextMenu(
       Sender: TObject;
@@ -207,7 +207,7 @@ type
       const Frame: ICefFrame;
       const Params: ICefContextMenuParams;
       const Model: ICefMenuModel
-      );
+      ); virtual;
 
     procedure ChromiumBeforeDownload(
       Sender: TObject;
@@ -228,7 +228,7 @@ type
       var Settings: TCefBrowserSettings;
       var NoJavascriptAccess: Boolean;
       out Result: Boolean
-      );
+      ); virtual;
 
     procedure ChromiumBeforeResourceLoad(
       Sender: TObject;
@@ -236,7 +236,7 @@ type
       const Frame: ICefFrame;
       const Request: ICefRequest;
       out Result: Boolean
-      );
+      ); virtual;
 
     procedure ChromiumContextMenuCommand(
       Sender: TObject;
@@ -246,14 +246,14 @@ type
       CommandId: Integer;
       EventFlags: TCefEventFlags;
       out Result: Boolean
-      );
+      ); virtual;
 
     procedure ChromiumDownloadUpdated(
       Sender: TObject;
       const Browser: ICefBrowser;
       const DownloadItem: ICefDownloadItem;
       const Callback: ICefDownloadItemCallback
-      );
+      ); virtual;
 
     procedure ChromiumKeyEvent(
       Sender: TObject;
@@ -261,7 +261,7 @@ type
       const Event: PCefKeyEvent;
       OSEvent: PMsg;
       out Result: Boolean
-      );
+      ); virtual;
 
     procedure ChromiumLoadEnd(
       Sender: TObject;
@@ -274,7 +274,7 @@ type
       Sender: TObject;
       const Browser: ICefBrowser;
       const Frame: ICefFrame
-      );
+      ); virtual;
 
     procedure ChromiumProcessMessageReceived(
       Sender: TObject;
@@ -282,19 +282,19 @@ type
       SourceProcess: TCefProcessId;
       const Message: ICefProcessMessage;
       out Result: Boolean
-      );
+      ); virtual;
 
     procedure ChromiumStatusMessage(
       Sender: TObject;
       const Browser: ICefBrowser;
       const Value: UString
-      );
+      ); virtual;
 
     procedure ChromiumTitleChange(
       Sender: TObject;
       const Browser: ICefBrowser;
       const Title: UString
-      );
+      ); virtual;
 
 
   protected
@@ -331,6 +331,7 @@ type
 
     function GetChromate: TDBIChromate;
     function GetControlsOwner: TComponent;
+    function GetCookieManager: ICefCookieManager;
     function GetMenuOwner: TComponent;
     function GetParent: TWinControl;
     function GetPopupMenu: TPopupMenu;
@@ -351,12 +352,14 @@ type
 
     procedure SendMessageRenderer(const Msg: String);
 
+    procedure SetCookie(const Index: String; const Value: String);
     procedure SetOptions(const Value: TDBIChromateBrowserOptions);
     procedure SetParent(Value: TWinControl);
     procedure SetStatusMessage(const Value: String);
     function SetupPage: TDBIChromateBrowser;
 
     property Chromium: TDBIChromate read GetChromate;
+    property CookieManager: ICefCookieManager read GetCookieManager;
     property Splitter: TSplitter read GetSplitter;
     property StatusBar: TDBITooltip read GetStatusBar;
     property ToolButton[const Index: TDBIChromateToolButtonIndex]: TToolButton read GetToolButton;
@@ -682,7 +685,7 @@ begin
       Source := StringReplace(Source, '>', '&gt;', [rfReplaceAll]);
       Source := '<html><body>Source:<pre>' + Source + '</pre></body></html>';
 
-      Chromium.Browser.MainFrame.LoadString(Source, '');
+      Chromium.Browser.MainFrame.LoadString(Source, 'source://html');
     end
     );
 end;
@@ -701,7 +704,7 @@ begin
       Source := StringReplace(Source, '>', '&gt;', [rfReplaceAll]);
       Source := '<html><body>Text:<pre>' + Source + '</pre></body></html>';
 
-      Chromium.Browser.MainFrame.LoadString(Source, '');
+      Chromium.Browser.MainFrame.LoadString(Source, 'source://text');
     end
   );
 end;
@@ -1321,6 +1324,11 @@ begin
 end;
 
 
+function TDBIChromateBrowser.GetCookieManager: ICefCookieManager;
+begin
+  Result := TCefCookieManagerRef.Global;
+end;
+
 function TDBIChromateBrowser.GetMenuOwner: TComponent;
 begin
   Result := FParent;
@@ -1338,6 +1346,11 @@ begin
   if not Assigned(FPopupMenu) then begin
     FPopupMenu := TPopupMenu.Create(GetMenuOwner);
     FPopupMenu.Images := Toolbar.Images;
+
+    GetPopupMenuItem(ActionItem[aiHome]);
+    GetPopupMenuItem(ActionItem[aiBack]);
+    GetPopupMenuItem(ActionItem[aiNext]);
+    GetPopupMenuBreak;
 
     if IsDeveloper then begin
       GetPopupMenuItem(ActionItem[aiNew]);
@@ -1368,9 +1381,7 @@ begin
       GetPopupMenuBreak;
     end;
 
-    if IsDeveloper then begin
-      GetPopupMenuBookmarks;
-    end;
+    GetPopupMenuBookmarks;
   end;
   Result := FPopupMenu;
 end;
@@ -1642,6 +1653,24 @@ begin
   MessageDlg(Prompt, mtWarning, [mbOK], 0);
 end;
 {$endif}
+
+
+procedure TDBIChromateBrowser.SetCookie(const Index: String; const Value: String);
+const
+  CookieUrl = 'http://localhost:9000';
+  CookieDomain = '';
+  CookiePath = '';
+
+var
+  Success: Boolean;
+
+begin
+  Success := CookieManager.SetCookie(
+    CookieUrl, Index, Value, CookieDomain, CookiePath, False, True, True, Now, Now, Now+1
+    );
+
+  Assert(Success);
+end;
 
 
 procedure TDBIChromateBrowser.SetOptions(const Value: TDBIChromateBrowserOptions);
