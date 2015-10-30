@@ -155,7 +155,12 @@ type
     aiToolbar,
     aiZoomIn,
     aiZoomOut,
-    aiZoomReset
+    aiZoomReset,
+    aiUserDefined1,
+    aiUserDefined2,
+    aiUserDefined3,
+    aiUserDefined4,
+    aiUserDefined5
     );
 
   TDBIChromateActionRecord = record
@@ -388,6 +393,12 @@ type
     procedure ActionSaveExecute(Sender: TObject); virtual;
     procedure ActionToolbarExecute(Sender: TObject);
     procedure ActionZoomExecute(Sender: TObject);
+
+    procedure ActionUserDefined1Execute(Sender: TObject); virtual;
+    procedure ActionUserDefined2Execute(Sender: TObject); virtual;
+    procedure ActionUserDefined3Execute(Sender: TObject); virtual;
+    procedure ActionUserDefined4Execute(Sender: TObject); virtual;
+    procedure ActionUserDefined5Execute(Sender: TObject); virtual;
 
     procedure DemoShowMessageExecute(Sender: TObject);
     procedure ToolsFileOpenExecute(Sender: TObject);
@@ -796,6 +807,36 @@ begin
   if Chromium.Browser <> nil then begin
     Toolbar.Visible := not Toolbar.Visible;
   end;
+end;
+
+
+procedure TDBIChromateBrowser.ActionUserDefined1Execute(Sender: TObject);
+begin
+  //##NOP
+end;
+
+
+procedure TDBIChromateBrowser.ActionUserDefined2Execute(Sender: TObject);
+begin
+  //##NOP
+end;
+
+
+procedure TDBIChromateBrowser.ActionUserDefined3Execute(Sender: TObject);
+begin
+  //##NOP
+end;
+
+
+procedure TDBIChromateBrowser.ActionUserDefined4Execute(Sender: TObject);
+begin
+  //##NOP
+end;
+
+
+procedure TDBIChromateBrowser.ActionUserDefined5Execute(Sender: TObject);
+begin
+  //##NOP
 end;
 
 
@@ -1244,8 +1285,12 @@ const
     ( Title: 'Toolbar';               Shortcut: {Shift+F10} 8313; ImageIndex: -1;            Data: ''; ),
     ( Title: 'Zoom &In';              Shortcut: {Ctrl++}{=}16571; ImageIndex: -1;            Data: ''; ),
     ( Title: 'Zoom &Out';             Shortcut: {Ctrl+-}   16573; ImageIndex: -1;            Data: ''; ),
-    ( Title: 'Zoom &Reset';           Shortcut: {Ctrl+0}   16432; ImageIndex: -1;            Data: ''; )
-
+    ( Title: 'Zoom &Reset';           Shortcut: {Ctrl+0}   16432; ImageIndex: -1;            Data: ''; ),
+    ( Title: 'Set Cookie';            Shortcut: {F11}        122; ImageIndex: -1;            Data: ''; ),
+    ( Title: 'User Defined II';       Shortcut: {F6}         117; ImageIndex: -1;            Data: ''; ),
+    ( Title: 'User Defined III';      Shortcut: {F4}         115; ImageIndex: -1;            Data: ''; ),
+    ( Title: 'User Defined IV';       Shortcut: {F2}         113; ImageIndex: -1;            Data: ''; ),
+    ( Title: 'User Defined V';        Shortcut:              114; ImageIndex: -1;            Data: ''; )
     );
 begin
   Result := CData;
@@ -1297,7 +1342,7 @@ end;
 function TDBIChromateBrowser.GetChromate: TDBIChromate;
 begin
   if not Assigned(FChromium) then begin
-    FChromium := TDBIChromate.Build(Self, GetParent);
+    FChromium := TDBIChromate.Build(Self.Owner, GetParent);
     FChromium.Actions := GetActionList;
 
     FChromium.OnAddressChange := ChromiumAddressChange;
@@ -1378,6 +1423,7 @@ begin
       GetPopupMenuItem(ActionItem[aiPageSource]);
       GetPopupMenuItem(ActionItem[aiPageText]);
       GetPopupMenuItem(ActionItem[aiHookDom]);
+      GetPopupMenuItem(ActionItem[aiUserDefined1]);
       GetPopupMenuBreak;
     end;
 

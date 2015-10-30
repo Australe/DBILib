@@ -174,9 +174,14 @@ type
 
 
 type
+  TDBIPropertyOption = (poAssignedProperties, poAllProperties);
   TDBIProperties = class(TStringList)
   public
-    class procedure GetProperties(AInstance: TObject; Strings: TStrings); overload;
+    class procedure GetProperties(
+      AInstance: TObject;
+      Strings: TStrings;
+      Options: TDBIPropertyOption = poAssignedProperties
+      ); overload;
   end;
 
 
@@ -562,13 +567,16 @@ end;
 {**
   Jvr - 13/09/2011 19:16:00 - Initial code.<br />
 }
-class procedure TDBIProperties.GetProperties(AInstance: TObject; Strings: TStrings);
+class procedure TDBIProperties.GetProperties(
+  AInstance: TObject;
+  Strings: TStrings;
+  Options: TDBIPropertyOption = poAssignedProperties
+  );
   function ReadProperty(PropInfo: PPropInfo): String;
   begin
     Result := '';
     if (
       Assigned(PropInfo) and
-//##JVR      Assigned(PropInfo.SetProc) and
       Assigned(PropInfo.GetProc) and
       Assigned(PropInfo.StoredProc) and
       (PropInfo^.Name <> 'Name')) then
@@ -587,7 +595,7 @@ class procedure TDBIProperties.GetProperties(AInstance: TObject; Strings: TStrin
           [PropInfo^.Name, GetEnumName(TypeInfo(TTypeKind), Ord(PropInfo^.PropType^.Kind))]
           );
       end;
-      if (Result <> '') then begin
+      if (Options = poAllProperties) or (Result <> '') then begin
         Strings.Add(String(PropInfo^.Name) + '=' + Result);
       end;
     end;
