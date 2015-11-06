@@ -417,7 +417,7 @@ end;
 
 function TDBICustomMacroProcessor.MacroExpand: Boolean;
 const
-  ErrMsg = 'Unable to subsitute macro value for parameter "%s", '#13#13'%s';
+  Caller = 'MacroExpand';
 
 var
   ParamValue: Variant;
@@ -439,8 +439,12 @@ begin
       end;
 
     except
-      on E: Exception do
-        raise Exception.CreateFmt(ErrMsg, [Input.Token.TokenString, E.Message]);
+      on EAnalyserError do begin
+        raise;
+      end;
+      on E: Exception do begin
+        Input.SyntaxError('Unable to subsitute macro value for parameter "%s". %s', [Input.Token.TokenString, E.Message], Self, Caller);
+      end;
     end;
 
     // Get the first token from the expanded input
