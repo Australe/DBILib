@@ -17,7 +17,6 @@ type
 
   protected
     function GetActionByName(const ActionName: String): TAction;
-    function GetDefaultUrl: String; virtual;
 
     procedure doOnAddressChange(
       const Browser: ICefBrowser;
@@ -51,8 +50,6 @@ type
 
     function IsMainFrame(const Browser: ICefBrowser; const Frame: ICefFrame = nil): Boolean;
     procedure LoadFromFile(const AFileName: TFileName);
-
-    property DefaultUrl: String read GetDefaultUrl write SetDefaultUrl;
 
   end;
 
@@ -1639,23 +1636,14 @@ end;
 
 
 function TDBIChromateBrowser.GetUrlDefault: String;
-var
-  Index: Integer;
-
 begin
   Result := FUrlDefault;
-
-  if (Result = '') then begin
-    for Index := 1 to ParamCount do begin
-      Result := Result + ParamStr(Index);
-    end;
-  end;
 end;
 
 
 class function TDBIChromateBrowser.IsDeveloper: Boolean;
 begin
-  Result := {False; //##JVR} CompareText('jvr', TDBIHostInfo.GetUserName) = 0;
+  Result := CompareText('jvr', TDBIHostInfo.GetUserName) = 0;
 end;
 
 
@@ -1865,9 +1853,6 @@ constructor TDBICustomChromate.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
 
-  if (GetDefaultUrl <> '') then begin
-    inherited DefaultUrl := GetDefaultUrl;
-  end;
 end;
 
 
@@ -2021,23 +2006,6 @@ begin
     end;
 
     Result := PBrowserAction^;
-  end;
-end;
-
-
-function TDBICustomChromate.GetDefaultUrl: String;
-var
-  Index: Integer;
-
-begin
-  Result := '';
-
-  for Index := 1 to ParamCount do begin
-    Result := Result + ParamStr(Index);
-  end;
-
-  if (Result = '') then begin
-    Result := inherited DefaultUrl;
   end;
 end;
 
