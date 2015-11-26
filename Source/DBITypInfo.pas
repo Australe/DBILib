@@ -174,14 +174,24 @@ type
 
 
 type
-  TDBIPropertyOption = (poAssignedProperties, poAllProperties);
+  TDBIPropertyOption = (poPropertyAssigned, poPropertyDecapitalise);
+  TDBIPropertyOptions = set of TDBIPropertyOption;
+
   TDBIProperties = class(TStringList)
+  protected
+    class function Decapitalise(const Value: String): String;
+
   public
     class procedure GetProperties(
       AInstance: TObject;
       Strings: TStrings;
-      Options: TDBIPropertyOption = poAssignedProperties
-      ); overload;
+      Options: TDBIPropertyOptions = [poPropertyAssigned]
+      ); overload; virtual;
+
+    procedure GetProperties(
+      AInstance: TObject;
+      Options: TDBIPropertyOptions = [poPropertyAssigned])
+      ; overload; virtual;
   end;
 
 
@@ -563,6 +573,15 @@ end;
 
 { TDBIPropertyList }
 
+procedure TDBIProperties.GetProperties(
+  AInstance: TObject;
+  Options: TDBIPropertyOptions = [poPropertyAssigned]
+  );
+begin
+  GetProperties(AInstance, Self, Options);
+end;
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 13/09/2011 19:16:00 - Initial code.<br />
@@ -570,7 +589,7 @@ end;
 class procedure TDBIProperties.GetProperties(
   AInstance: TObject;
   Strings: TStrings;
-  Options: TDBIPropertyOption = poAssignedProperties
+  Options: TDBIPropertyOptions = [poPropertyAssigned]
   );
   function ReadProperty(PropInfo: PPropInfo): String;
   begin
@@ -595,8 +614,13 @@ class procedure TDBIProperties.GetProperties(
           [PropInfo^.Name, GetEnumName(TypeInfo(TTypeKind), Ord(PropInfo^.PropType^.Kind))]
           );
       end;
-      if (Options = poAllProperties) or (Result <> '') then begin
-        Strings.Add(String(PropInfo^.Name) + '=' + Result);
+      if (Result <> '') or not (poPropertyAssigned in Options) then begin
+        if (poPropertyDecapitalise in Options) then begin
+          Strings.Add(Decapitalise(String(PropInfo^.Name)) + '=' + Result);
+        end
+        else begin
+          Strings.Add(String(PropInfo^.Name) + '=' + Result);
+        end;
       end;
     end;
   end;
@@ -612,6 +636,26 @@ begin
     GetPropInfos(AInstance.ClassInfo, PPropList(PropList.List));
     for PropIndex := 0 to PropList.Count - 1 do begin
       ReadProperty(PropList[PropIndex]);
+    end;
+  end;
+end;
+
+
+class function TDBIProperties.Decapitalise(const Value: String): String;
+var
+  Size: Integer;
+  PResult, PValue: PChar;
+
+begin
+  Result := Value;
+  Size := Length(Value);
+
+  if (Size > 0) then begin
+    PResult := PChar(Pointer(Result));
+    PValue := PChar(Pointer(Value));
+
+    case PValue^ of
+      'A'..'Z': PResult^ := Char(Word(PValue^) or $0020);
     end;
   end;
 end;

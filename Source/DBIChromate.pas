@@ -197,6 +197,7 @@ type
 
     FDemoShowMessage: TAction;
     FToolsFileOpen: TFileOpen;
+    FUrlDefault: String;
 
   protected
     procedure ChromiumAddressChange(
@@ -361,7 +362,8 @@ type
     procedure SetOptions(const Value: TDBIChromateBrowserOptions);
     procedure SetParent(Value: TWinControl);
     procedure SetStatusMessage(const Value: String);
-    function SetupPage: TDBIChromateBrowser;
+    procedure SetUrlAddress(const Value: String); virtual;
+    procedure SetUrlDefault(const Value: String); virtual;
 
     property Chromium: TDBIChromate read GetChromate;
     property CookieManager: ICefCookieManager read GetCookieManager;
@@ -411,15 +413,18 @@ type
     procedure Console(const Msg: String; Args: array of const);
 
     procedure Close;
-    procedure Home;
-    function Page(const Url: String): TDBIChromateBrowser;
     procedure Load; virtual;
+    procedure Navigate(const Url: String = ''); overload; virtual;
+    function Page(const Url: String): TDBIChromateBrowser;
+    function ShowNavigator: TDBIChromateBrowser;
 
     property ActionItem[const Index: TDBIChromateActionIndex]: TAction read GetActionItem;
     property ActionList: TActionList read GetActionList;
     property Options: TDBIChromateBrowserOptions read FOptions write SetOptions;
     property PopupMenu: TPopupMenu read GetPopupMenu;
     property Toolbar: TDBIChromateToolbar read GetToolbar;
+    property UrlAddress: String read GetUrlAddress write SetUrlAddress;
+    property UrlDefault: String read GetUrlDefault write SetUrlDefault;
 
   end;
   TDBIChromateBrowserClass = class of TDBIChromateBrowser;
@@ -863,7 +868,7 @@ class function TDBIChromateBrowser.CreateBrowser(AParent: TWinControl): TDBIChro
 begin
   Result := Self.Create(AParent.Owner);
   Result.SetParent(AParent);
-  Result.SetupPage;
+  Result.ShowNavigator;
 //  Result.Home;
 end;
 
@@ -1624,6 +1629,12 @@ end;
 function TDBIChromateBrowser.GetUrlAddress: String;
 begin
   Result := GetToolEdit.Text;
+
+  if (Result = '') then begin
+    Result := GetUrlDefault;
+
+    SetUrlAddress(Result);
+  end;
 end;
 
 
@@ -1632,21 +1643,13 @@ var
   Index: Integer;
 
 begin
-  Result := '';
-
-  for Index := 1 to ParamCount do begin
-    Result := Result + ParamStr(Index);
-  end;
+  Result := FUrlDefault;
 
   if (Result = '') then begin
-    Result := GetUrlAddress;
+    for Index := 1 to ParamCount do begin
+      Result := Result + ParamStr(Index);
+    end;
   end;
-end;
-
-
-procedure TDBIChromateBrowser.Home;
-begin
-  Chromium.Load(GetUrlDefault);
 end;
 
 
@@ -1659,6 +1662,16 @@ end;
 procedure TDBIChromateBrowser.Load;
 begin
   //##NOP
+end;
+
+
+procedure TDBIChromateBrowser.Navigate(const Url: String = '');
+begin
+  if (Url <> '') then begin
+    UrlAddress := Url;
+  end;
+
+  Chromium.Load(UrlAddress);
 end;
 
 
@@ -1739,7 +1752,19 @@ begin
 end;
 
 
-function TDBIChromateBrowser.SetupPage: TDBIChromateBrowser;
+procedure TDBIChromateBrowser.SetUrlAddress(const Value: String);
+begin
+  GetToolEdit.Text := Value;
+end;
+
+
+procedure TDBIChromateBrowser.SetUrlDefault(const Value: String);
+begin
+  FUrlDefault := Value;
+end;
+
+
+function TDBIChromateBrowser.ShowNavigator: TDBIChromateBrowser;
 begin
   GetActionList;
   ToolBar.Visible := True;
