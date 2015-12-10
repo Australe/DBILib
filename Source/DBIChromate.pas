@@ -451,12 +451,7 @@ type
 
 implementation
 
-{$define UseFileScheme True}
-
 uses
-{$ifdef UseFileScheme}
-  CefFileScheme,
-{$endif}
   Consts, TypInfo, Graphics, Forms, Dialogs, ToolWin, UITypes, Variants, DBIUtils;
 
 
@@ -1821,10 +1816,6 @@ begin
   if not Result then begin
     Exit;
   end;
-
-{$ifdef UseFileScheme}
-  CefRegisterSchemeHandlerFactory('local', '', TFileScheme);
-{$endif}
 end;
 
 
