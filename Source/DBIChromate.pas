@@ -451,6 +451,8 @@ type
 
 implementation
 
+{$define UseFileScheme True}
+
 uses
 {$ifdef UseFileScheme}
   CefFileScheme,
