@@ -1162,7 +1162,7 @@ begin
     if GetParent is TTabSheet then begin
       TTabSheet(GetParent).Caption := Title;
     end
-    else if (GetParent is TCustomForm) and (TCustomForm(GetParent).Caption = '') then begin
+    else if GetParent is TCustomForm then begin
       TCustomForm(GetParent).Caption := Title;
     end;
   end;
