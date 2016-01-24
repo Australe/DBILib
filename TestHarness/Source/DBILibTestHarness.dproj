@@ -21,7 +21,7 @@
     <PropertyGroup Condition="'$(Base)'!=''">
         <VerInfo_Locale>2057</VerInfo_Locale>
         <Icon_MainIcon>$(BDS)\bin\delphi_PROJECTICON.ico</Icon_MainIcon>
-        <DCC_UnitSearchPath>O:\Prj\omSource\Common\Delphi\omUtils\Source;O:\Prj\omSource\Common\Delphi\DBILib\2.00\Source;O:\Prj\3rdParty\Indy\10.5.9\Lib\Core;O:\Prj\3rdParty\Indy\10.5.9\Lib\System;O:\Prj\3rdParty\Indy\10.5.9\Lib\Protocols;O:\Prj\3rdParty\Diff\4.5\Source;O:\Prj\3rdParty\TRichView\13.6\Source;O:\Prj\3rdParty\TRichView\13.6\RichViewActions;O:\Prj\3rdParty\Envision\2.57\source;O:\prj\3rdParty\htmlviewer\9.0\Source;O:\Prj\3rdParty\VirtualTree\5.0.1\Source;O:\prj\3rdParty\RegExpr\Source;O:\prj\3rdParty\ZLibex\Source;O:\Prj\3rdParty\XLSReadWrite\4.0.65\Source;O:\Prj\3rdParty\FastMM\4.991\Source;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>O:\Prj\omSource\Common\Delphi\omUtils\Source;O:\Prj\omSource\Common\Delphi\DBILib\2.00\Source;O:\Prj\3rdParty\Indy\10.5.9\Lib\Core;O:\Prj\3rdParty\Indy\10.5.9\Lib\System;O:\Prj\3rdParty\Indy\10.5.9\Lib\Protocols;O:\Prj\3rdParty\Diff\4.5\Source;O:\Prj\3rdParty\TRichView\13.6\Source;O:\Prj\3rdParty\TRichView\13.6\RichViewActions;O:\Prj\3rdParty\Envision\2.57\source;O:\prj\3rdParty\htmlviewer\9.0\Source;O:\Prj\3rdParty\VirtualTree\5.0.1\Source;O:\prj\3rdParty\RegExpr\Source;O:\prj\3rdParty\ZLibex\Source;O:\Prj\3rdParty\FastMM\4.991\Source;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <DCC_Define>DebugExceptions;omTesting;omLogging;$(DCC_Define)</DCC_Define>
         <DCC_DcuOutput>C:\Temp\dcu\XE3</DCC_DcuOutput>
         <DCC_Namespace>Vcl;Vcl.Imaging;Vcl.Touch;Vcl.Samples;Vcl.Shell;System;Xml;Data;Datasnap;Web;Soap;$(DCC_Namespace)</DCC_Namespace>
