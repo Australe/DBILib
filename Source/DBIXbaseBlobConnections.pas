@@ -157,26 +157,26 @@ type
 
     // Blob methods
     procedure GetBlob(
-      const Position: LongWord;
+      const Position: Int64;
       const OffSet: LongWord;
       PData: Pointer;
       out Size: LongWord
       ); virtual; abstract;
 
     function PutBlob(
-      const Position: LongWord;
+      const Position: Int64;
       const OffSet: LongWord;
       PData: Pointer;
       const Size: LongWord
-      ): LongWord; virtual; abstract;
+      ): Int64; virtual; abstract;
 
   protected
     function WriteBlob(
-      const Position: LongWord;
+      const Position: Int64;
       const BlockCount: LongWord;
       const Size: LongWord;
       PData: Pointer
-      ): LongWord; virtual; abstract;
+      ): Int64; virtual; abstract;
 
     procedure SaveToStream(AStream: TStream);
 
@@ -195,7 +195,7 @@ type
     procedure DefaultMetaData; override;
 
     function GetHeaderSize: Integer; override;
-    function GetBlobSize(const Position: LongWord): LongWord;
+    function GetBlobSize(const Position: Int64): Int64;
 
     function GetNextFreeBlock: LongWord; override;
     procedure SetNextFreeBlock(const Value: LongWord); override;
@@ -206,26 +206,26 @@ type
   public
     // Blob methods
     procedure GetBlob(
-      const Position: LongWord;
+      const Position: Int64;
       const OffSet: LongWord;
       PData: Pointer;
       out Size: LongWord
       ); override;
 
     function PutBlob(
-      const Position: LongWord;
+      const Position: Int64;
       const OffSet: LongWord;
       PData: Pointer;
       const Size: LongWord
-      ): LongWord; override;
+      ): Int64; override;
 
   protected
     function WriteBlob(
-      const Position: LongWord;
+      const Position: Int64;
       const BlockCount: LongWord;
       const Size: LongWord;
       PData: Pointer
-      ): LongWord; override;
+      ): Int64; override;
 
   end;  { TDBIDbaseBlobConnection }
 
@@ -245,26 +245,26 @@ type
   public
     // Blob methods
     procedure GetBlob(
-      const Position: LongWord;
+      const Position: Int64;
       const OffSet: LongWord;
       PData: Pointer;
       out Size: LongWord
       ); override;
 
     function PutBlob(
-      const Position: LongWord;
+      const Position: Int64;
       const OffSet: LongWord;
       PData: Pointer;
       const Size: LongWord
-      ): LongWord; override;
+      ): Int64; override;
 
   protected
     function WriteBlob(
-      const Position: LongWord;
+      const Position: Int64;
       const BlockCount: LongWord;
       const Size: LongWord;
       PData: Pointer
-      ): LongWord; override;
+      ): Int64; override;
 
   end;  { TDBIFoxProBlobConnection }
 
@@ -296,7 +296,7 @@ end;
   Jvr - 09/02/2001 17:23:21.<P>
 }
 procedure TDBIDbaseBlobConnection.GetBlob(
-  const Position: LongWord;
+  const Position: Int64;
   const OffSet: LongWord;
   PData: Pointer;
   out Size: LongWord
@@ -338,12 +338,12 @@ end;  { GetBlob }
   Getting the Blob size should also position the BlobStream at the
   first blob data byte.
 }
-function TDBIDbaseBlobConnection.GetBlobSize(const Position: LongWord): LongWord;
+function TDBIDbaseBlobConnection.GetBlobSize(const Position: Int64): Int64;
 var
   PBlobInfo: PChar;
   PBlobIterator: PChar;
   BytesRead: Integer;
-  BlockCount: Integer;
+  BlockCount: Int64;
   BlockIndex: Integer;
 
 begin
@@ -352,7 +352,7 @@ begin
 
   GetMem(PBlobInfo, BlockSize);
   try
-    FBlobStream.Seek(BlockSize * Position, soFromBeginning);
+    FBlobStream.Position := BlockSize * Position;
 
     repeat
       BytesRead := FBlobStream.Read(PBlobInfo^, BlockSize);
@@ -374,7 +374,7 @@ begin
     until (Result > 0) or (BytesRead <> BlockSize);
 
     // Reposition BlobStream ready for reading the Blob
-    FBlobStream.Seek(BlockSize * Position, soFromBeginning);
+    FBlobStream.Position := BlockSize * Position;
   finally
     FreeMem(PBlobInfo);
   end;
@@ -423,11 +423,11 @@ end;  { GetNextFreeBlock }
   @Return    The new offset value for the just written Blob
 }
 function TDBIDbaseBlobConnection.PutBlob(
-  const Position: LongWord;
+  const Position: Int64;
   const OffSet: LongWord;
   PData: Pointer;
   const Size: LongWord
-  ): LongWord;
+  ): Int64;
 var
   BlobInfo: TDBIFoxProBlobInfo;
   OldBlockCount: LongWord;
@@ -530,11 +530,11 @@ end;  { SetBlockSize }
   If PData is nil then clear the Block(s) specified at 'Position' specified
 }
 function TDBIDbaseBlobConnection.WriteBlob(
-  const Position: LongWord;
+  const Position: Int64;
   const BlockCount: LongWord;
   const Size: LongWord;
   PData: Pointer
-  ): LongWord;
+  ): Int64;
 var
   PBlob: PDBIFoxProBlobField;
 
@@ -565,7 +565,7 @@ begin
         At the moment the last eight bytes are garbage because I am writing the Data field
         as if it were the full 512 bytes, thus minus the kind and size fields!!!!
       }
-      FBlobStream.Seek(BlockSize * Position, soFromBeginning);
+      FBlobStream.Position := BlockSize * Position;
       FBlobStream.Write(PBlob^.Data,  BlockCount * BlockSize);
       FModified := True;
 
@@ -635,7 +635,7 @@ end;
   Jvr - 09/02/2001 17:23:21.<P>
 }
 procedure TDBIFoxProBlobConnection.GetBlob(
-  const Position: LongWord;
+  const Position: Int64;
   const OffSet: LongWord;
   PData: Pointer;
   out Size: LongWord
@@ -647,7 +647,7 @@ begin
   Assert(Assigned(FBlobStream));
   try
     // Get the BlobSize
-    FBlobStream.Seek(BlockSize * Position, soFromBeginning);
+    FBlobStream.Position := BlockSize * Position;
     FBlobStream.Read(BlobInfo{%H-}, SizeOf(BlobInfo));
     BlobInfo.Size := SwapDWord(BlobInfo.Size);
 
@@ -681,11 +681,11 @@ end;  { GetBlob }
   @Return    The new offset value for the just written Blob
 }
 function TDBIFoxProBlobConnection.PutBlob(
-  const Position: LongWord;
+  const Position: Int64;
   const OffSet: LongWord;
   PData: Pointer;
   const Size: LongWord
-  ): LongWord;
+  ): Int64;
 var
   BlobInfo: TDBIFoxProBlobInfo;
   OldBlockCount: LongWord;
@@ -699,7 +699,7 @@ begin
     // If its not a New Blob
     if (Position <> 0) then begin
       // Get Current Blob Metadata
-      FBlobStream.Seek(BlockSize * Position, soFromBeginning);
+      FBlobStream.Position := BlockSize * Position;
       FBlobStream.Read(BlobInfo{%H-}, SizeOf(BlobInfo));
       BlobInfo.Kind := SwapDWord(BlobInfo.Kind);
       BlobInfo.Size := SwapDWord(BlobInfo.Size);
@@ -772,11 +772,11 @@ end;  { PutBlob }
   If PData is nil then clear the Block(s) specified at 'Position' specified
 }
 function TDBIFoxProBlobConnection.WriteBlob(
-  const Position: LongWord;
+  const Position: Int64;
   const BlockCount: LongWord;
   const Size: LongWord;
   PData: Pointer
-  ): LongWord;
+  ): Int64;
 const
   // TFoxProDBIBlobKind = (FoxProBlobImage, FoxProBlobMemo, FoxProBlobObject);
   FoxProBlobMemo = 1;
@@ -804,7 +804,7 @@ begin
         Result := Position;            // Memo has data, is NOT blank
       end;
 
-      FBlobStream.Seek(BlockSize * Position, soFromBeginning);
+      FBlobStream.Position := BlockSize * Position;
       FBlobStream.Write(PBlob^,  BlockCount * BlockSize);
       FModified := True;
 

@@ -248,7 +248,7 @@ begin
   NotifyDataEventCallBacks(
     LongWord(Value),
     dbiBasePropChanged,
-    Pointer(basepropDATASETCHANGED)
+    TDBIRecBuf(basepropDATASETCHANGED)
     );
 end;  { SetStrings }
 

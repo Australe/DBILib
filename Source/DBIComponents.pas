@@ -267,7 +267,7 @@ var
     PropInfo := GetPropInfo(GetClass(PropClassName), PropName);
     if (PropInfo <> nil) and (PropValue <> '') then begin
       case PropInfo^.PropType^.Kind of
-        tkChar, tkWChar, tkString, tkLString, tkWString{$ifdef DELPHIxe2}, tkUString{$endif}:
+        tkChar, tkWChar, tkString, tkLString, tkWString{$ifdef DelphiXE2}, tkUString{$endif}:
           Output := Format('    %s = %s%s%s%s', [PropName, Quote, PropValue, Quote, LineBreak]);
       else
         Output := Format('    %s = %s%s', [PropName, PropValue, LineBreak]);
@@ -292,7 +292,7 @@ var
       // Check if this component is the Parent
       Result := StrToIntDef(Section.Values[ParentAttribute], 0);
 
-      KeyName := SectionNames.Names[SectionIndex];
+      KeyName := SectionNames.Names[0];
       InstanceClassName := SectionNames.Values[KeyName];
       WriteFmt('  object %s: %s', [KeyName, InstanceClassName]);
 

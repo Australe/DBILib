@@ -125,7 +125,10 @@ const
     fldUNKNOWN,                        // tkProcVar,
     fldWIDESTRING,                     // tkUString,
     fldWIDESTRING,                     // tkUChar,
-    fldUNKNOWN                         // tkHelper
+    fldUNKNOWN,                        // tkHelper
+    fldREF,                            // tkFile
+    fldREF,                            // tkClassRef
+    fldREF                             // tkPointer
     );
 {$else}
   FieldKindMap: TDBIFieldKindMap = (
@@ -210,7 +213,10 @@ const
     fldUNKNOWN,                        // tkProcVar
     fldUNKNOWN,                        // tkUString
     fldUNKNOWN,                        // tkUChar
-    fldUNKNOWN                         // tkHelper
+    fldUNKNOWN,                        // tkHelper
+    fldUNKNOWN,                        // tkFile
+    fldUNKNOWN,                        // tkClassRef
+    fldUNKNOWN                         // tkPointer
 {$else}
     fldUNKNOWN,                        // tkUnknown
     fldUNKNOWN,                        // tkInteger
@@ -280,7 +286,10 @@ const
     ftReference,                       // tkProcVar,
     ftWideString,                      // tkUString,
     ftWideString,                      // tkUChar,
-    ftUnknown                          // tkHelper
+    ftUnknown,                         // tkHelper
+    ftReference,                       // tkFile
+    ftReference,                       // tkClassRef
+    ftReference                        // tkPointer
     );
 {$else}
   FieldKindTypeMap: TDBIFieldKindTypeMap = (
@@ -409,7 +418,7 @@ type
     function AcceptChanges: DBIResult; { Accept all current changes }
 
     function PutBlank(              { Put blank value }
-        pRecBuf      : Pointer;     { RecBuf OR }
+        pRecBuf      : TDBIRecBuf;  { RecBuf OR }
         iRecNo       : LongWord;    { iRecNo }
         iFldNo       : LongWord;
         iBlankValue  : LongWord
@@ -565,13 +574,13 @@ type
     ): DBIResult;
 
     function GetCurrentRecord(      { Return record at current cursorposition }
-        pRecBuf  : Pointer
+        pRecBuf  : TDBIRecBuf
     ): DBIResult;
 
 {$ifdef _UNUSED}
     function GetRecordBlock(        { Return block of records }
         piRecs   : PLongWord;
-        pRecBuf  : Pointer
+        pRecBuf  : TDBIRecBuf
     ): DBIResult;
 {$endif}
 
@@ -610,7 +619,7 @@ type
         SearchCond  : DBSearchCond;
         iFields     : LongWord;
         iPartLen    : LongWord;
-        pRecBuf     : Pointer
+        pRecBuf     : TDBIRecBuf
     ): DBIResult;
 {$endif}
 
@@ -622,7 +631,7 @@ type
 
 {$ifdef _UNUSED}
     function ExtractKey(            { Extract key from record }
-        pRecBuf  : Pointer;
+        pRecBuf  : TDBIRecBuf;
         pKeyBuf  : Pointer
     ): DBIResult;
 {$endif}
@@ -631,18 +640,18 @@ type
         iFields   : LongWord;
         iPartLen  : LongWord;
         pKey      : Pointer;
-        pRecBuf   : Pointer
+        pRecBuf   : TDBIRecBuf
     ): DBIResult;
 
     function GetField(              { Extract field value from record buffer }
-        pRecBuf   : Pointer;
+        pRecBuf   : TDBIRecBuf;
         iFieldNo  : LongWord;
         pFldBuf   : Pointer;
     out bBlank    : LongBool        { Returns TRUE/FALSE if blank }
     ): DBIResult;
 
     function PutField(              { Put field value into record buffer }
-        pRecBuf   : Pointer;
+        pRecBuf   : TDBIRecBuf;
         iFieldNo  : LongWord;
         pFldBuf   : Pointer         { If NULL, adds a blank value }
     ): DBIResult;
@@ -651,13 +660,13 @@ type
     { Blob functions }
 
     function GetBlobLen(            { Return length of blob }
-        pRecBuf   : Pointer;
+        pRecBuf   : TDBIRecBuf;
         iFieldNo  : LongWord;
     out iLength   : LongWord
     ): DBIResult;
 
     function GetBlob(               { Return blob }
-        pRecBuf   : Pointer;
+        pRecBuf   : TDBIRecBuf;
         iFieldNo  : LongWord;
         iOffSet   : LongWord;       { Starting position }
         pBuf      : Pointer;
@@ -665,7 +674,7 @@ type
     ): DBIResult;
 
     function PutBlob(               { Write blob data }
-        pRecBuf   : Pointer;
+        pRecBuf   : TDBIRecBuf;
         iFieldNo  : LongWord;
         iOffSet   : LongWord;       { Starting position }
         pBuf      : Pointer;
@@ -673,23 +682,23 @@ type
     ): DBIResult;
 
     function InitRecord(            { Initialize record buffer (for insertion) }
-        pRecBuf  : Pointer
+        pRecBuf  : TDBIRecBuf
     ): DBIResult;
 
     function DeleteRecord: DBIResult; { Delete current record }
 
     function ModifyRecord(          { Modify current record }
-        pRecBuf  : Pointer
+        pRecBuf  : TDBIRecBuf
     ): DBIResult;
 
     function InsertRecord(          { Insert new record }
-        pRecBuf  : Pointer
+        pRecBuf  : TDBIRecBuf
     ): DBIResult;
 
     // This is not part of the standard interface,
     // It was added to allow writethrough of fielddata
     function SyncRecord(
-        pRecBuf  : Pointer
+        pRecBuf  : TDBIRecBuf
     ): DBIResult;
 
 {$ifdef _UNUSED}
@@ -902,7 +911,7 @@ type
   TDBIDataChangeEvent = procedure(
     iClientData: TDBIClientData;
     DataChangeEventType: TDBIDataChangeEventType;
-    pRecBuf: Pointer
+    pRecBuf: TDBIRecBuf
     ) of object;
 
 type
@@ -968,7 +977,7 @@ type
     procedure NotifyDataEventCallBacks(
       iClientData: TDBIClientData;
       DataEventType: TDBIDataChangeEventType;
-      pRecBuf: Pointer
+      pRecBuf: TDBIRecBuf
       );
 
     // Field data methods to access fieldprops as a dataset
@@ -1217,7 +1226,7 @@ type
     procedure DataEventNotify(
       iClientData: TDBIClientData;
       DataEventType: TDBIDataChangeEventType;
-      pRecBuf: Pointer
+      pRecBuf: TDBIRecBuf
       );
 
   public
@@ -1310,7 +1319,7 @@ type
     function GetIndexDescs(bCurrentOnly: LongBool;
       out IdxDesc: DSIDXDesc): DBIResult; virtual;
     function GetFieldDescs(p1: pDSFLDDesc): DBIResult; virtual;
-    function GetCurrentRecord(pRecBuf: Pointer): DBIResult; virtual;
+    function GetCurrentRecord(pRecBuf: TDBIRecBuf): DBIResult; virtual;
     function GetCurrentBookMark(pBookMark: Pointer): DBIResult; virtual;
     function GetSequenceNumber(out iSeq: LongWord): DBIResult; virtual;
     function GetRecordAttribute(out Attr: DSAttr): DBIResult; virtual;
@@ -1323,7 +1332,7 @@ type
     function MoveToBookMark(pBookMark: Pointer): DBIResult; virtual;
 {$ifdef _UNUSED}
     function MoveToKey(SearchCond: DBISearchCond; iFields: LongWord;
-      iPartLen: LongWord; pRecBuf: Pointer): DBIResult; override;
+      iPartLen: LongWord; pRecBuf: TDBIRecBuf): DBIResult; override;
 {$endif}
     function CompareBookMarks(
       pBookMark1: Pointer;
@@ -1335,18 +1344,18 @@ type
       iFields: LongWord;
       iPartLen: LongWord;
       pKey: Pointer;
-      pRecBuf: Pointer
+      pRecBuf: TDBIRecBuf
       ): DBIResult; virtual;
 
     function GetField(
-      pRecBuf: Pointer;
+      pRecBuf: TDBIRecBuf;
       iFieldNo: LongWord;
       pFldBuf: Pointer;
       out bBlank: LongBool
       ): DBIResult; virtual;
 
     function PutField(
-      pRecBuf: Pointer;
+      pRecBuf: TDBIRecBuf;
       iFieldNo: LongWord;
       pFldBuf: Pointer
       ): DBIResult; virtual;
@@ -1358,13 +1367,13 @@ type
 
     { Blob functions }
     function GetBlobLen(
-      pRecBuf: Pointer;
+      pRecBuf: TDBIRecBuf;
       iFieldNo: LongWord;
       out iLength: LongWord
       ): DBIResult; virtual;
 
     function GetBlob(
-      pRecBuf: Pointer;
+      pRecBuf: TDBIRecBuf;
       iFieldNo: LongWord;
       iOffSet: LongWord;
       pBuf: Pointer;
@@ -1372,18 +1381,18 @@ type
       ): DBIResult; virtual;
 
     function PutBlob(
-      pRecBuf: Pointer;
+      pRecBuf: TDBIRecBuf;
       iFieldNo: LongWord;
       iOffSet: LongWord;
       pBuf: Pointer;
       iLength: LongWord
       ): DBIResult; virtual;
 
-    function InitRecord(pRecBuf: Pointer): DBIResult; virtual;
+    function InitRecord(pRecBuf: TDBIRecBuf): DBIResult; virtual;
     function DeleteRecord: DBIResult; virtual;
-    function ModifyRecord(pRecBuf: Pointer): DBIResult; virtual;
-    function SyncRecord(pRecBuf: Pointer): DBIResult; virtual;
-    function InsertRecord(pRecBuf: Pointer): DBIResult; virtual;
+    function ModifyRecord(pRecBuf: TDBIRecBuf): DBIResult; virtual;
+    function SyncRecord(pRecBuf: TDBIRecBuf): DBIResult; virtual;
+    function InsertRecord(pRecBuf: TDBIRecBuf): DBIResult; virtual;
     function RevertRecord: DBIResult; virtual;
 
     function AddFilter(
@@ -1488,6 +1497,9 @@ implementation
 }
 
 uses
+{$ifdef DelphiXE4}
+  AnsiStrings,
+{$endif}
   SysConst,
 {$ifdef DELPHI6}
   FmtBcd,
@@ -1715,7 +1727,7 @@ var
     );
   begin
     FillChar(FieldDesc, SizeOf(FieldDesc), #0);
-    StrLCopy(FieldDesc.szName, TDBINameBuffer(TDBIString(Name)), SizeOf(FieldDesc.szName)-1);
+    {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(FieldDesc.szName, TDBINameBuffer(TDBIString(Name)), SizeOf(FieldDesc.szName)-1);
 
     FieldDesc.iFldType := FieldTypeMap[DataType];
     FieldDesc.iUnits1 := FieldUnits1Map[FieldDesc.iFldType];
@@ -2301,7 +2313,7 @@ end;  { LoadFromStream }
 procedure TDBIDataConnection.NotifyDataEventCallBacks(
   iClientData: TDBIClientData;
   DataEventType: TDBIDataChangeEventType;
-  pRecBuf: Pointer
+  pRecBuf: TDBIRecBuf
   );
 var
   DataEventCallBackObject: TDataEventCallBackObject;
@@ -3205,7 +3217,7 @@ var
   NewIndex: TDBIndex;
   LocalCursor: TDBICursor;
   RecordBuffer: TDBICharacterBuffer;
-  pRecBuf: Pointer;
+  pRecBuf: TDBIRecBuf;
   IndexType: Integer;
   FieldProps: TFieldDescList;
   NbrOfRecords: Integer;
@@ -3249,7 +3261,7 @@ begin
       while (Position < NbrOfRecords) and (Status = DBIERR_NONE) do begin
         Status := CheckPosition(DirectionForward);
         FDataConnection.GetCurrentRecord(Position, RecordBuffer, nil);
-        pRecBuf := @RecordBuffer[0];
+        pRecBuf := TDBIRecBuf(@RecordBuffer[0]);
         NewIndex.InsertItem(pRecBuf, @(FieldProps[IdxDesc.iKeyFields[0]-1]), Position+1);
         Position := Position + 1;
       end;  { while }
@@ -3417,7 +3429,7 @@ begin
     FDataConnection.NotifyDataEventCallBacks(
       iPropValue,
       dbiBasePropChanged,
-      Pointer(eProp)
+      TDBIRecBuf(eProp)
       );
   end;  { case }
 end;  { SetProp }
@@ -3450,7 +3462,7 @@ begin
 
     // Notify the attached cursors that a property has changed
     FDataConnection.NotifyDataEventCallBacks(
-      TDBIClientData(pPropData), dbiBasePropChanged, PLongWord(eProp)
+      TDBIClientData(pPropData), dbiBasePropChanged, TDBIRecBuf(eProp)
       );
   end;  { case }
 end;  { SetProp }
@@ -3595,7 +3607,7 @@ end;  { CreateDefaultIndex }
 procedure TDBIBase.DataEventNotify(
   iClientData: TDBIClientData;
   DataEventType: TDBIDataChangeEventType;
-  pRecBuf: Pointer
+  pRecBuf: TDBIRecBuf
   );
 var
   RecNo: Integer;
@@ -3811,7 +3823,7 @@ end;  { GetFieldDescs }
     > Return DBIERR_KEYORRECDELETED<BR>
   <P>
 }
-function TDBICursor.GetCurrentRecord(pRecBuf: Pointer): DBIResult;
+function TDBICursor.GetCurrentRecord(pRecBuf: TDBIRecBuf): DBIResult;
 var
   RecordPosition: Integer;
 //##JVR  RecordAttribute: DSAttr;
@@ -3979,7 +3991,7 @@ const
 var
   Position: Integer;
   Attributes: DSAttr;
-  PRecBuf: Pointer;
+  pRecBuf: TDBIRecBuf;
 
 begin
   Result := -1;
@@ -4189,7 +4201,7 @@ function TDBICursor.GetRecordForKey(
   iFields: LongWord;
   iPartLen: LongWord;
   pKey: Pointer;
-  pRecBuf: Pointer
+  pRecBuf: TDBIRecBuf
   ): DBIResult;
 var
   Index: Integer;
@@ -4233,18 +4245,18 @@ var
 }
       if bCaseInsensitive then begin
         if (Size = 0) then begin
-          Result := StrIComp(pKeyValue, pBuffer) = 0;
+          Result := {$ifdef DelphiXE4}AnsiStrings.{$endif}StrIComp(pKeyValue, pBuffer) = 0;
         end
         else begin
-          Result := StrLIComp(pKeyValue, pBuffer, StrLen(pKeyValue)) = 0;
+          Result := {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLIComp(pKeyValue, pBuffer, {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLen(pKeyValue)) = 0;
         end;
       end
       else begin
         if (Size = 0) then begin
-          Result := StrComp(pKeyValue, pBuffer) = 0;
+          Result := {$ifdef DelphiXE4}AnsiStrings.{$endif}StrComp(pKeyValue, pBuffer) = 0;
         end
         else begin
-          Result := StrLComp(pKeyValue, pBuffer, StrLen(pKeyValue)) = 0;
+          Result := {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLComp(pKeyValue, pBuffer, {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLen(pKeyValue)) = 0;
         end;
       end;  { if }
     end
@@ -4345,7 +4357,7 @@ end;  { GetRecordForKey }
   Jvr - 10/05/2001 14:53:18 - Added support for null field values.<P>
 }
 function TDBICursor.GetField(
-  pRecBuf: Pointer;
+  pRecBuf: TDBIRecBuf;
   iFieldNo: LongWord;
   pFldBuf: Pointer;
   out bBlank: LongBool
@@ -4360,7 +4372,7 @@ begin
 
   // Setup Data buffers
   PFieldData := pFldBuf;
-  PRecordData := pRecBuf;
+  PRecordData := TDBIRecordBuffer(pRecBuf);
   //## Should we do a sanity check on PRecordData e.g. is it nil?
   Inc(PRecordData, FFieldProps[iFieldNo-1].iFldOffsInRec);
   Size := FFieldProps[iFieldNo-1].iFldLen;
@@ -4385,7 +4397,7 @@ begin
       end;
 
       fldZSTRING: begin
-        Size := StrLen(PAnsiChar(PRecordData));
+        Size := {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLen(PAnsiChar(PRecordData));
       end;
     end;
 
@@ -4409,7 +4421,7 @@ end;  { GetField }
   Jvr - 28/10/2002 15:20:13 - Now using class fields CursorProps & FieldProps<P>
 }
 function TDBICursor.PutField(
-  pRecBuf: Pointer;
+  pRecBuf: TDBIRecBuf;
   iFieldNo: LongWord;
   pFldBuf: Pointer
   ): DBIResult;
@@ -4423,7 +4435,7 @@ begin
 
   // Setup Data buffers
   PFieldData := pFldBuf;
-  PRecordData := pRecBuf;
+  PRecordData := TDBIRecordBuffer(pRecBuf);
   //## Should we do a sanity check on PRecordData e.g. is it nil?
   Inc(PRecordData, FFieldProps[iFieldNo-1].iFldOffsInRec);
   Size := FFieldProps[iFieldNo-1].iFldLen;
@@ -4447,7 +4459,7 @@ begin
       end;
 
       fldZSTRING: begin
-        Size := StrLen(PAnsiChar(PFieldData));
+        Size := {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLen(PAnsiChar(PFieldData));
       end;
     end;
 
@@ -4490,7 +4502,7 @@ end;  { VerifyField }
   Jvr - 09/02/2001 14:01:16.<P>
 }
 function TDBICursor.GetBlob(
-  pRecBuf: Pointer;
+  pRecBuf: TDBIRecBuf;
   iFieldNo: LongWord;
   iOffSet: LongWord;
   pBuf: Pointer;
@@ -4515,7 +4527,7 @@ end;  { GetBlob }
   Jvr - 09/02/2001 13:59:08.<P>
 }
 function TDBICursor.GetBlobLen(
-  pRecBuf: Pointer;
+  pRecBuf: TDBIRecBuf;
   iFieldNo: LongWord;
   out iLength: LongWord
   ): DBIResult;
@@ -4543,7 +4555,7 @@ end;  { GetBlobLen }
   position will be Zero<P>
 }
 function TDBICursor.PutBlob(
-  pRecBuf: Pointer;
+  pRecBuf: TDBIRecBuf;
   iFieldNo: LongWord;
   iOffSet: LongWord;
   pBuf: Pointer;
@@ -4587,7 +4599,7 @@ end;  { PutBlob }
   Jvr - 24/09/2002 12:19:34 - We now call DataConnection.InitialiseBuffer
                               to prepare the recordbuffer.<P>
 }
-function TDBICursor.InitRecord(pRecBuf: Pointer): DBIResult;
+function TDBICursor.InitRecord(pRecBuf: TDBIRecBuf): DBIResult;
 begin
   Result := DBIERR_NONE;
   try
@@ -4643,7 +4655,7 @@ end;  { DeleteRecord }
                               exception, we do NOT unlock the resource.<BR>
   Jvr - 28/10/2002 16:05:01 - Now using class fields CursorProps & FieldProps<P>
 }
-function TDBICursor.ModifyRecord(pRecBuf: Pointer): DBIResult;
+function TDBICursor.ModifyRecord(pRecBuf: TDBIRecBuf): DBIResult;
 var
   RecNo: Integer;
   RecordPosition: Integer;
@@ -4675,7 +4687,7 @@ end;  { ModifyRecord }
 
   Jvr - 03/06/2005 14:13:08 - Initial code.<br>
 }
-function TDBICursor.SyncRecord(pRecBuf: Pointer): DBIResult;
+function TDBICursor.SyncRecord(pRecBuf: TDBIRecBuf): DBIResult;
 var
   RecNo: Integer;
   RecordPosition: Integer;
@@ -4698,7 +4710,7 @@ end;  { SyncRecord }
 {**
   Jvr - 21/03/2000 14:03:52.<P>
 }
-function TDBICursor.InsertRecord(pRecBuf: Pointer): DBIResult;
+function TDBICursor.InsertRecord(pRecBuf: TDBIRecBuf): DBIResult;
 var
   RecordPosition: Integer;
   RecNo: Integer;
@@ -4818,7 +4830,7 @@ var
 
   function GetKeyValues(
     iFields: LongWord;
-    pRecBuf: Pointer
+    pRecBuf: TDBIRecBuf
     ): DBIResult;
   var
     KeyValues: TZStringList;
@@ -5247,7 +5259,7 @@ var
   NewIndex: TDBIndex;
   LocalCursor: TDBICursor;
   RecordBuffer: TDBICharacterBuffer;
-  pRecBuf: Pointer;
+  pRecBuf: TDBIRecBuf;
   pFieldDesc: pDSFLDDesc;
   IndexField: Integer;
   IndexType: Integer;
@@ -5256,7 +5268,7 @@ var
 begin
   Result := DBIERR_NONE;
   IndexDesc := ActiveIndex.PIndexDesc^;
-  StrCopy(IndexDesc.szName, szDEFAULT_FILTER);
+  {$ifdef DelphiXE4}AnsiStrings.{$endif}StrCopy(IndexDesc.szName, szDEFAULT_FILTER);
 
   if FIndices.IndexOf(szDEFAULT_FILTER) >= 0 then begin
     Result := DBIERR_NAMENOTUNIQUE;
@@ -5301,7 +5313,7 @@ begin
         nil
         );
 
-      pRecBuf := @RecordBuffer[0];
+      pRecBuf := TDBIRecBuf(@RecordBuffer[0]);
 
       // If Index Field(s) have been specified, then use the supplied IndexDesc
       if (IndexField > 0) then begin

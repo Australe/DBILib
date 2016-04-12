@@ -396,6 +396,12 @@ type
     FConnectionBroker: TConnectionBroker;
 {$endif}
     FRanged: Boolean;
+
+  private
+    function GetActiveBuffer: TDBIRecBuf; {$ifdef Delphi2009} inline; {$endif}
+    function GetCalcBuffer: TDBIRecBuf; {$ifdef Delphi2009} inline; {$endif}
+    function GetTempBuffer: TDBIRecBuf; {$ifdef Delphi2009} inline; {$endif}
+
   protected
     procedure AddExprFilter(const Expr: string; Options: TFilterOptions);
     procedure AddFuncFilter;
@@ -552,9 +558,9 @@ type
     procedure CheckSetKeyMode;
     procedure ClearCalcFields(Buffer: TDBIRecordBuffer); override;
     procedure CloseCursor; override;
-    procedure {%H-}DataConvert(Field: TField; Source, Dest: TDBIValueBuffer; ToNative: Boolean); overload; override;
+    procedure {%H-}DataConvert(Field: TField; Source: TDBIValueBuffer; {$ifdef DelphiXE4} var {$endif} Dest: TDBIValueBuffer; ToNative: Boolean); overload; override;
 {$ifdef DelphiXE3}
-    procedure DataConvert(Field: TField; Source, Dest: Pointer; ToNative: Boolean); overload; override; //##JVR deprecated 'Use overloaded method instead';
+    procedure DataConvert(Field: TField; Source: Pointer; Dest: Pointer; ToNative: Boolean); overload; override; //##JVR deprecated 'Use overloaded method instead';
 {$endif DelphiXE3}
     procedure DataEvent(Event: TDataEvent; Info: TDBIDataEventInfo); override;  {##NEW Info: NativeInt }
     procedure DeactivateFilters;
@@ -811,8 +817,8 @@ type
     function FindKey(const KeyValues: array of const): Boolean; virtual;
     procedure FindNearest(const KeyValues: array of const);
     function GetCurrentRecord(Buffer: TDBIRecordBuffer): Boolean; override;
-    function GetFieldData(Field: TField; Buffer: TDBIValueBuffer): Boolean; overload; override;
-    function GetFieldData(FieldNo: Integer; Buffer: TDBIValueBuffer): Boolean; overload; override;
+    function GetFieldData(Field: TField; {$ifdef DelphiXE4} var {$endif} Buffer: TDBIValueBuffer): Boolean; overload; override;
+    function GetFieldData(FieldNo: Integer; {$ifdef DelphiXE4} var {$endif} Buffer: TDBIValueBuffer): Boolean; overload; override;
 {$ifdef DelphiXE3}
     function GetFieldData(Field: TField; Buffer: Pointer): Boolean; overload; override; //##JVR deprecated 'Use overloaded method instead';
     function GetFieldData(FieldNo: Integer; Buffer: Pointer): Boolean; overload; override; //##JVR deprecated 'Use overloaded method instead';
@@ -1011,6 +1017,9 @@ implementation
 
 
 uses
+{$ifdef DelphiXE4}
+  AnsiStrings,
+{$endif}
 {$ifdef DELPHI6}
   RtlConsts, Variants, FmtBcd, MaskUtils,
 {$else}
@@ -1019,7 +1028,7 @@ uses
 {$ifndef fpc}
   Consts, DBConsts, DBCommon, Mask,
 {$endif}
-  SysConst, TypInfo, DBIUtils, DBIXmlUtils, Dialogs, DBIStrings;
+  SysConst, Types, TypInfo, DBIUtils, DBIXmlUtils, Dialogs, DBIStrings;
 
 
 { Exceptions }
@@ -1159,6 +1168,26 @@ end;
 type
   // Declare as friend class
   TDBIDataConnectionFriend = class(DBIInterfaces.TDBIDataConnection);
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 17/09/2016 13:58:35 - XE4 Conversion.<P>
+}
+function TDBIDataset.GetActiveBuffer: TDBIRecBuf;
+begin
+  Result := TDBIRecBuf(ActiveBuffer);
+end;
+
+function TDBIDataset.GetCalcBuffer: TDBIRecBuf;
+begin
+  Result := TDBIRecBuf(CalcBuffer);
+end;
+
+function TDBIDataset.GetTempBuffer: TDBIRecBuf;
+begin
+  Result := TDBIRecBuf(TempBuffer);
+end;
 
 
 // _____________________________________________________________________________
@@ -2269,7 +2298,7 @@ begin
 {$endif}
 
   if not Active then Exit;
-  DSCursor.GetCurrentRecord(ActiveBuffer);
+  DSCursor.GetCurrentRecord(GetActiveBuffer);
 
   if Options = [foDetails] then
     DataEvent(deDataSetChange, 0);
@@ -2836,7 +2865,7 @@ procedure TDBIDataset.EncodeFieldDesc(out FieldDesc: DSFLDDesc;
   Calculated: Boolean; Attributes: TFieldAttributes);
 begin
   FillChar(FieldDesc{%H-}, SizeOf(FieldDesc), #0);
-  StrLCopy(FieldDesc.szName, TDBINameBuffer(TDBIString(Name)), SizeOf(FieldDesc.szName)-1);
+  {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(FieldDesc.szName, TDBINameBuffer(TDBIString(Name)), SizeOf(FieldDesc.szName)-1);
 
   FieldDesc.iFldType := FieldTypeMap[DataType];
 
@@ -3572,11 +3601,11 @@ begin
   else
   begin
     if State = dsCalcFields then
-      BufPtr := CalcBuffer
+      BufPtr := GetCalcBuffer
     else
-      BufPtr := ActiveBuffer;
+      BufPtr := GetActiveBuffer;
 
-    Result := PRecInfo(TDBIRecordBuffer(BufPtr) + FRecInfoOfs)^.RecordNumber;
+    Result := PRecInfo(BufPtr + FRecInfoOfs)^.RecordNumber;
   end;
 end;
 
@@ -3634,7 +3663,7 @@ function TDBIDataset.GetActiveRecBuf(out RecBuf: TDBIRecordBuffer): Boolean;
   function GetOriginalBuffer: TDBIRecordBuffer;
   begin
     UpdateCursorPos;
-    Result := TempBuffer;
+    Result := GetTempBuffer;
     raise EDBINotImplementedException.Create(Self, 'GetOriginalBuffer::3605');
 {$ifdef _UNUSED}
     if FDSCursor.GetProp(curpropGETORG_RECBUF, PDBIPropValue(@Result)) <> DBERR_NONE then
@@ -3648,12 +3677,12 @@ begin
     dsBrowse: if IsEmpty then
                 RecBuf := nil
               else
-                RecBuf := ActiveBuffer;
+                RecBuf := GetActiveBuffer;
 
-    dsEdit, dsInsert: RecBuf := ActiveBuffer;
+    dsEdit, dsInsert: RecBuf := GetActiveBuffer;
     dsSetKey: RecBuf := TDBIRecordBuffer(FKeyBuffer) + SizeOf(TKeyBuffer);
     dsCalcFields,
-    dsInternalCalc: RecBuf := CalcBuffer;
+    dsInternalCalc: RecBuf := GetCalcBuffer;
     dsFilter: RecBuf := FFilterBuffer;
     dsNewValue: RecBuf := @FNewValueBuffer[0];
     
@@ -3731,9 +3760,9 @@ begin
   else
   begin
     if State = dsCalcFields then
-      BufPtr := CalcBuffer
+      BufPtr := GetCalcBuffer
     else
-      BufPtr := ActiveBuffer;
+      BufPtr := GetActiveBuffer;
 
     Attr := PRecInfo(TDBIRecordBuffer(BufPtr) + FRecInfoOfs)^.Attribute;
     if (Attr and dsRecModified) <> 0 then
@@ -3911,7 +3940,7 @@ end;
   <P>
   Jvr - 22/03/2001 00:44:10 - Added Code to deal with Calculated fields<P>
 }
-function TDBIDataset.GetFieldData(Field: TField; Buffer: TDBIValueBuffer): Boolean;
+function TDBIDataset.GetFieldData(Field: TField; {$ifdef DelphiXE4} var {$endif} Buffer: TDBIValueBuffer): Boolean;
 var
   IsBlank: LongBool;
   RecBuf: TDBIRecordBuffer;
@@ -3943,7 +3972,7 @@ end;
   OKASIS.
   Jvr - 09/05/2005 20:40:03 - Initial code.<br>
 }
-function TDBIDataset.GetFieldData(FieldNo: Integer; Buffer: TDBIValueBuffer): Boolean;
+function TDBIDataset.GetFieldData(FieldNo: Integer; {$ifdef DelphiXE4} var {$endif} Buffer: TDBIValueBuffer): Boolean;
 var
   RecBuf: TDBIRecordBuffer;
   IsBlank: LongBool;
@@ -4081,11 +4110,15 @@ begin
 {$endif}
   end
   else
+  { TODO 1 -oJvr -cTDBIDataSet.SetFieldData() :
+    11/04/2016 15:03:51
+    Important: Testcase required for this code.
+  }
   begin
     if State = dsInternalCalc then Exit;
     Inc(RecBuf, FRecordSize + Field.Offset);
 {$ifndef DelphiXE3}
-    Boolean(RecBuf[0]) := LongBool(Buffer);
+    Boolean(RecBuf[0]) := PLongBool(Buffer)^;
     if Boolean(RecBuf[0]) then Move(Buffer^, RecBuf[1], Field.DataSize);
 {$else}
     Boolean(RecBuf[0]) := LongBool(Buffer[0]);
@@ -4147,8 +4180,8 @@ begin
 end;
 {$endif}
 
-procedure TDBIDataset.DataConvert(Field: TField; Source, Dest: TDBIValueBuffer;
-  ToNative: Boolean);
+procedure TDBIDataset.DataConvert(
+  Field: TField; Source: TDBIValueBuffer; {$ifdef DelphiXE4} var {$endif} Dest: TDBIValueBuffer; ToNative: Boolean);
 var
   ByteLen, StrLen: Integer;
 
@@ -4192,7 +4225,8 @@ end;
 
 
 {$ifdef DelphiXE3}
-procedure TDBIDataset.DataConvert(Field: TField; Source, Dest: Pointer; ToNative: Boolean);
+procedure TDBIDataset.DataConvert(
+  Field: TField; Source: Pointer; Dest: Pointer; ToNative: Boolean);
 var
   ByteLen, StrLen: Integer;
 begin
@@ -4258,9 +4292,9 @@ begin
   CheckIsInitialised('InternalPost::4225');
 
   if State = dsEdit then
-    Check(FDSCursor.ModifyRecord(ActiveBuffer))
+    Check(FDSCursor.ModifyRecord(GetActiveBuffer))
   else
-    Check(FDSCursor.InsertRecord(ActiveBuffer));
+    Check(FDSCursor.InsertRecord(GetActiveBuffer));
 
     { TODO 5 -oJvr -cTDBIDataSet.InternalPost() :
       InsertRecord still needs some work, it appends only (inserts only at eof)
@@ -4371,7 +4405,7 @@ begin
   PRecordInfo^.Attribute := PRecordInfo^.Attribute or dsRecLockSet;
 
   // Get the record
-  Check(FDSCursor.GetCurrentRecord(ActiveBuffer));
+  Check(FDSCursor.GetCurrentRecord(GetActiveBuffer));
 
   // Clear RecordLock flag - do this otherwise buffered records cause problems
 //##JVR  RecInfo.Attribute := RecInfo.Attribute and dsRecLockClear;
@@ -4530,7 +4564,7 @@ end;
 procedure TDBIDataset.SetBookmarkData(Buffer: TDBIRecordBuffer; Data: TDBIBookmark);
 begin
 {$ifdef DelphiXE3}
-  Move(Data[0], ActiveBuffer[FBookmarkOfs], BookmarkSize);
+  Move(Data[0], GetActiveBuffer[FBookmarkOfs], BookmarkSize);
 {$else}
   Move(Data^, ActiveBuffer[FBookmarkOfs], BookmarkSize);
 {$endif}
@@ -4907,7 +4941,7 @@ begin
   with IndexDesc do
   begin
 //##UNICODE    StrCopy(szName, PChar(Name));
-    StrLCopy(szName, TDBIAttribute(AnsiString(Name)), SizeOf(szName) - 1);                                       
+    {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(szName, TDBIAttribute(AnsiString(Name)), SizeOf(szName) - 1);
     bUnique := ixUnique in Options;
     Descending := (ixDescending in Options) and (DescFields = '');
     CaseInsensitive := (ixCaseInsensitive in Options) and (CaseInsFields = '');
@@ -5501,7 +5535,7 @@ begin
     begin
       if FetchOnDemand then CheckDetailRecords;
       First;
-      Move(FParentDataSet.ActiveBuffer[FParentDataSet.FBookmarkOfs], FLastParentBM[0], FParentDataSet.BookmarkSize);
+      Move(FParentDataSet.GetActiveBuffer[FParentDataSet.FBookmarkOfs], FLastParentBM[0], FParentDataSet.BookmarkSize);
     end
     else
     begin
@@ -6143,7 +6177,7 @@ begin
   CheckBrowseMode;
   CursorPosChanged;
   CheckProviderEOF;
-  Buffer := TempBuffer;
+  Buffer := GetTempBuffer;
   Fields := TDBIFieldList.Create;
   try
     GetFieldList(Fields, KeyFields);
@@ -7692,10 +7726,10 @@ begin
   else begin
     if (State = dsCalcFields) then begin
       raise EDBIException.Create(Self, 'GetRecordNumber::7605', 'Not Tested for (State = dsCalcFields)', []);
-//##JVR      BufPtr := CalcBuffer;
+//##JVR      BufPtr := GetCalcBuffer;
     end
     else begin
-      BufPtr := ActiveBuffer;
+      BufPtr := GetActiveBuffer;
     end;
 
     Result := PRecInfo(TDBIRecordBuffer(BufPtr) + FRecInfoOfs)^.RecordIdent;
@@ -8357,7 +8391,11 @@ begin
   if not GetData(Data) then
     Result := 0
   else
+  {$ifdef DelphiXE8}
+    Result := TBitConverter.InTo<Extended>(Data);
+  {$else}
     Result := TBitConverter.ToExtended(Data);
+  {$endif}
 end;
 {$endif}
 

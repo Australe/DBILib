@@ -193,7 +193,7 @@ begin
     FreePhysicalBuffer(PhysicalBuffer);
   end;
 
-  NotifyDataEventCallBacks(Result, dbiRecordInserted, @Buffer);
+  NotifyDataEventCallBacks(Result, dbiRecordInserted, TDBIRecBuf(@Buffer));
   WriteMetaData(mdHeaderOnly);
 end;  { Append }
 
@@ -610,7 +610,7 @@ begin
     FreePhysicalBuffer(PhysicalBuffer);
   end;
 
-  NotifyDataEventCallBacks(Position+1, dbiRecordModified, @Buffer);
+  NotifyDataEventCallBacks(Position+1, dbiRecordModified, TDBIRecBuf(@Buffer));
 
   { TODO -ojvr -cTDBIBaseDataConnection.Update() :
     I'm not sure that we should update the header when doing an update.

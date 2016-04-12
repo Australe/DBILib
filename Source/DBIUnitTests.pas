@@ -1408,7 +1408,7 @@ var
 begin
   StringData := TStringData.GetRecords;
   Assert(ADataset.FieldByName('ID').AsInteger = StringData[Index].ID);
-  Assert(ADataset.FieldByName('Environment').AsString = StringData[Index].Environment);
+  Assert(ADataset.FieldByName('Environment').AsString = String(StringData[Index].Environment));
   Equalz(ADataset.FieldByName('Fullname').AsString , StringData[Index].Fullname);
   Assert(ADataset.FieldByName('Value').AsString = StringData[Index].Value);
 end;
@@ -2246,7 +2246,7 @@ begin
       Gad.Gender := GadData[Index].Gender;
       Gad.YieldRate := GadData[Index].YieldRate;
       Gad.Value := GadData[Index].Value;
-      Gad.Comment := TGadData.GetComment;
+      Gad.Comment := WideString(TGadData.GetComment);
       Gad.Status := GadData[Index].Status;
       Gad.Date := Trunc(Today);
       Gad.Time := TDBIString(Copy(FormatDateTime('hh:nn:ss.zzz', ToDay), 1, 8));

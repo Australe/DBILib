@@ -231,9 +231,9 @@ type
     function IndexOfIndex(DBIndex: TDBIndex): Integer;
 
     // Methods to Delete/Insert/Modify entries to all indices
-    procedure DeleteIndicesItem(const RecNo: Integer; pRecBuf: Pointer);
-    function InsertIndicesItem(const RecNo: Integer; pRecBuf: Pointer): Integer;
-    function ModifyIndicesItem(const RecNo: Integer; pRecBuf: Pointer): Integer;
+    procedure DeleteIndicesItem(const RecNo: Integer; pRecBuf: TDBIRecBuf);
+    function InsertIndicesItem(const RecNo: Integer; pRecBuf: TDBIRecBuf): Integer;
+    function ModifyIndicesItem(const RecNo: Integer; pRecBuf: TDBIRecBuf): Integer;
 
     procedure AddUpdatedField(pFieldDesc: pDSFLDDesc);
 
@@ -866,7 +866,15 @@ type
 implementation
 
 uses
-  {$ifndef fpc} Consts, {$endif} Windows, Dialogs, DBIInterfaces;
+{$ifdef DelphiXE4}
+  AnsiStrings,
+{$endif}
+{$ifndef fpc}
+  Consts,
+{$endif}
+  Windows,
+  Dialogs,
+  DBIInterfaces;
 
 
 // =============================================================================
@@ -1073,7 +1081,7 @@ end;  { GetName }
 }
 procedure TDBIndex.SetName(const Value: TDBIString);
 begin
-  StrLCopy(FIndexDesc^.szName, PDBIChar(Value), SizeOf(FIndexDesc^.szName));
+  {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(FIndexDesc^.szName, PDBIChar(Value), SizeOf(FIndexDesc^.szName));
 end;  { SetName }
 
 
@@ -1327,7 +1335,7 @@ end;  { IndexOfIndex }
 }
 procedure TDBIIndexList.DeleteIndicesItem(
   const RecNo: Integer;
-  pRecBuf: Pointer
+  pRecBuf: TDBIRecBuf
   );
 var
   Index: Integer;
@@ -1358,7 +1366,7 @@ end;  { DeleteIndicesItem }
 }
 function TDBIIndexList.InsertIndicesItem(
   const RecNo: Integer;
-  pRecBuf: Pointer
+  pRecBuf: TDBIRecBuf
   ): Integer;
 var
   ItemNo: Integer;
@@ -1421,7 +1429,7 @@ end;  { InsertIndicesItem }
 }
 function TDBIIndexList.ModifyIndicesItem(
   const RecNo: Integer;
-  pRecBuf: Pointer
+  pRecBuf: TDBIRecBuf
   ): Integer;
 var
   ItemNo: Integer;
@@ -1541,7 +1549,7 @@ var
 
 begin
   for Index := 0 to FIndexList.Count - 1 do begin
-    if (StrLIComp(FIndexDescs[Index].szName, PDBIChar(Name), SizeOf(FIndexDescs[Index].szName)) = 0) then begin
+    if ({$ifdef DelphiXE4}AnsiStrings.{$endif}StrLIComp(FIndexDescs[Index].szName, PDBIChar(Name), SizeOf(FIndexDescs[Index].szName)) = 0) then begin
       Result := FIndexList[Index];
       Exit;
     end;
@@ -1561,7 +1569,7 @@ var
 
 begin
   for Index := 0 to FIndexList.Count - 1 do begin
-    if (StrLIComp(FIndexDescs[Index].szName, PDBIChar(Name), SizeOf(FIndexDescs[Index].szName)) = 0) then begin
+    if ({$ifdef DelphiXE4}AnsiStrings.{$endif}StrLIComp(FIndexDescs[Index].szName, PDBIChar(Name), SizeOf(FIndexDescs[Index].szName)) = 0) then begin
       FIndexList[Index] := Value;
       Exit;
     end;
@@ -2414,7 +2422,7 @@ begin
   pLocateValue := PDBIChar(TDBIString(IntToStr(PInteger(PLocateValue)^)));
 
   // Don't forget to include the null terminator #0
-  Move(pLocateValue^, pKeyValues^[0], StrLen(pLocateValue)+1);
+  Move(pLocateValue^, pKeyValues^[0], {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLen(pLocateValue)+1);
 
   Result := inherited Locate(pKeyValues, pLocateDesc, Index);
 end;  { Locate }
@@ -2572,7 +2580,7 @@ begin
   pLocateValue := PDBIChar(DBIFloatToStr(DoubleValue));
 
   // Don't forget the null terminator #0
-  Move(pLocateValue^, pKeyValues^[0], StrLen(pLocateValue)+1);
+  Move(pLocateValue^, pKeyValues^[0], {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLen(pLocateValue)+1);
 
   Result := inherited Locate(pKeyValues, pLocateDesc, Index);
 end;  { Locate }
@@ -2593,8 +2601,8 @@ var
   CompareDouble: Extended;
 
 begin
-  TextToFloat(PDBIChar(KeyValue), KeyDouble, fvExtended);
-  TextToFloat(PDBIChar(CompareValue), CompareDouble, fvExtended);
+  {$ifdef DelphiXE4}AnsiStrings.{$endif}TextToFloat(PDBIChar(KeyValue), KeyDouble, fvExtended);
+  {$ifdef DelphiXE4}AnsiStrings.{$endif}TextToFloat(PDBIChar(CompareValue), CompareDouble, fvExtended);
 
   if (CompareDouble > KeyDouble) then begin
     Result := -1;

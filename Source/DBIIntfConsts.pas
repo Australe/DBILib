@@ -151,6 +151,11 @@ type
 
   TDBIMethodName = ShortString;
 
+{$ifdef DELPHI2009}
+  TDBIRecBuf = PByte;
+{$else}
+  TDBIRecBuf = PAnsiChar;
+{$endif}
 
 { Native Types }
 

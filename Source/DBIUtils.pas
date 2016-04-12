@@ -290,6 +290,9 @@ var                           { Taken from Delphi System.pas }
 implementation
 
 uses
+{$ifdef DelphiXE4}
+  AnsiStrings,
+{$endif}
   WinSock, TypInfo, Dialogs, Contnrs, Registry, DBIXbaseConsts;
 
 
@@ -356,7 +359,7 @@ end;
 
 class function TDBIHostInfo.GetCacheUserFolder: String;
 begin
-  Result := ExtractFilePath(ParamStr(0)) + 'cache\' + TDBIHostInfo.GetUserName + '\';
+  Result := ExtractFilePath(ParamStr(0)) + 'cache\' + String(TDBIHostInfo.GetUserName) + '\';
 
   DBIForceDirectories(Result);
 end;
@@ -421,7 +424,7 @@ begin
     RaiseLastWin32Error;
 {$endif}
   end;
-  SetLength(HostName, StrLen(PAnsiChar(HostName)));
+  SetLength(HostName, {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLen(PAnsiChar(HostName)));
 
   Result := String(HostName);
 end;

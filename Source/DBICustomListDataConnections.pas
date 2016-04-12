@@ -249,6 +249,9 @@ type
 implementation
 
 uses
+{$ifdef DelphiXE4}
+  AnsiStrings,
+{$endif}
 {$ifdef DELPHI6}
   FmtBcd,
   RtlConsts,
@@ -463,7 +466,7 @@ begin
     Assert(Result > 0);
 
     // Pass in the record number (not the record position)
-    NotifyDataEventCallBacks(Result, dbiRecordInserted, @Buffer);
+    NotifyDataEventCallBacks(Result, dbiRecordInserted, TDBIRecBuf(@Buffer));
 
   finally
     // Cleanup validation object if it exists
@@ -494,7 +497,7 @@ begin
   DeleteItem(Position);
 
   // Pass in the the record number (not the record position)
-  NotifyDataEventCallBacks(Position+1, dbiRecordDeleted, nil);
+  NotifyDataEventCallBacks(Position+1, dbiRecordDeleted, TDBIRecBuf(nil));
 end;  { Delete }
 
 
@@ -1717,7 +1720,7 @@ begin
 *)
 
     // Pass in the record number (not the record position)
-    NotifyDataEventCallBacks(Position+1, dbiRecordModified, @Buffer);
+    NotifyDataEventCallBacks(Position+1, dbiRecordModified, TDBIRecBuf(@Buffer));
 
   finally
     // Cleanup validation object
@@ -1920,7 +1923,7 @@ begin
       Indices.AddUpdatedField(@(FieldProps[FieldNo]));
     end;
 
-    NotifyDataEventCallBacks(ItemIndex+1, Event, pRecBuf);
+    NotifyDataEventCallBacks(ItemIndex+1, Event, TDBIRecBuf(pRecBuf));
   finally
     FreeMem(pRecBuf);
   end;
@@ -2459,7 +2462,7 @@ var
     // Assign the field name
     Result^.iFieldID := AFieldNo + 1;
     FieldName := TDBIFieldName(PropInfo.Name);
-    StrLCopy(Result^.szName, PDBIChar(TDBIString(FieldName)), SizeOf(Result^.szName));
+    {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(Result^.szName, PDBIChar(TDBIString(FieldName)), SizeOf(Result^.szName));
 
     // Set Field Attributes
     Attributes := [];

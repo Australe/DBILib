@@ -250,6 +250,13 @@ type
     class function CompareStr(const S1, S2: AnsiString): Integer;
     class function CompareText(const S1, S2: AnsiString): Integer;
 
+    class function FormatBuf(
+      var Buffer;
+      BufLen: Cardinal;
+      const Format: AnsiString;
+      const Args: array of const
+      ): Cardinal;
+
     class function Pos(const Substr, S: AnsiString): Integer;
     class function LowerCase(const S: AnsiString): AnsiString;
     class function UpperCase(const S: AnsiString): AnsiString;
@@ -280,7 +287,10 @@ const
 implementation
 
 uses
-{$ifdef DELPHI6}
+{$ifdef Delphi2009}
+  AnsiStrings,
+{$endif}
+{$ifdef Delphi6}
   RtlConsts,
 {$endif}
 {$ifndef fpc}
@@ -319,13 +329,44 @@ begin
 end;
 
 
+class function TDBIAnsi.FormatBuf(
+  var Buffer;
+  BufLen: Cardinal;
+  const Format: AnsiString;
+  const Args: array of const
+  ): Cardinal;
+var
+  FmtLen: Cardinal;
+  PFormat: PAnsiChar;
+begin
+  PFormat := PAnsiChar(Format);
+  FmtLen := Length(Format);
+  Result :=
+{$ifdef Delphi2009}
+  AnsiFormatBuf(
+{$else}
+  SysUtils.FormatBuf(
+{$endif}
+    Buffer,
+    BufLen,
+    PFormat^,
+    FmtLen,
+    Args
+{$ifdef Delphi7}
+  , SysUtils.FormatSettings
+{$endif}
+  );
+end;
+
+
 class function TDBIAnsi.Pos(const Substr, S: AnsiString): Integer;
 {$ifndef fpc}
 var
   P: PAnsiChar;
 begin
   Result := 0;
-  P := AnsiStrPos(PAnsiChar(S), PAnsiChar(SubStr));
+
+  P := {$ifdef DelphiXE4}AnsiStrings.{$endif}AnsiStrPos(PAnsiChar(S), PAnsiChar(SubStr));
   if P <> nil then
     Result := Integer(P) - Integer(PAnsiChar(S)) + 1;
 end;
@@ -351,12 +392,13 @@ var
   AddCount: Integer;
 begin
   AddCount := 0;
-  P := AnsiStrScan(PAnsiChar(S), Quote);
+
+  P := {$ifdef DelphiXE4}AnsiStrings.{$endif}AnsiStrScan(PAnsiChar(S), Quote);
   while P <> nil do
   begin
     Inc(P);
     Inc(AddCount);
-    P := AnsiStrScan(P, Quote);
+    P := {$ifdef DelphiXE4}AnsiStrings.{$endif}AnsiStrScan(P, Quote);
   end;
   if AddCount = 0 then
   begin
@@ -368,7 +410,7 @@ begin
   Dest^ := Quote;
   Inc(Dest);
   Src := PAnsiChar(S);
-  P := AnsiStrScan(Src, Quote);
+  P := {$ifdef DelphiXE4}AnsiStrings.{$endif}AnsiStrScan(Src, Quote);
   repeat
     Inc(P);
     Move(Src^, Dest^, (P - Src) * SizeOf(Char));
@@ -376,9 +418,9 @@ begin
     Dest^ := Quote;
     Inc(Dest);
     Src := P;
-    P := AnsiStrScan(Src, Quote);
+    P := {$ifdef DelphiXE4}AnsiStrings.{$endif}AnsiStrScan(Src, Quote);
   until P = nil;
-  P := StrEnd(Src);
+  P := {$ifdef DelphiXE4}AnsiStrings.{$endif}StrEnd(Src);
   Move(Src^, Dest^, (P - Src) * SizeOf(Char));
   Inc(Dest, P - Src);
   Dest^ := Quote;
@@ -816,7 +858,7 @@ function DBIFloatToStr(Value: Extended): TDBIString;
 var
   Buffer: array[0..63] of TDBIChar;
 begin
-  SetString(Result, Buffer, FloatToText(Buffer, Value, {$ifndef fpc} fvExtended, {$endif} ffGeneral, 15, 0));
+  SetString(Result, Buffer, {$ifdef DelphiXE4}AnsiStrings.{$endif}FloatToText(Buffer, Value, {$ifndef fpc} fvExtended, {$endif} ffGeneral, 15, 0));
 end;
 
 
@@ -1065,7 +1107,7 @@ end;
 
 function TDBIStrings.GetText: PDBIChar;
 begin
-  Result := StrNew(PDBIChar(GetTextStr));
+  Result := {$ifdef DelphiXE4}AnsiStrings.{$endif}StrNew(PDBIChar(GetTextStr));
 end;
 
 function TDBIStrings.GetTextStr: TDBIString;
@@ -1291,9 +1333,9 @@ begin
         // Use StrPos to find line breaks. If running on a FarEast
         // locale use AnsiStrPos, which handles MBCS characters
         if not SysLocale.FarEast then
-          StrPosProc := @StrPos
+          StrPosProc := @{$ifdef DelphiXE4}AnsiStrings.{$endif}StrPos
         else
-          StrPosProc := @AnsiStrPos;
+          StrPosProc := @{$ifdef DelphiXE4}AnsiStrings.{$endif}AnsiStrPos;
         LineBreakLen := Length(LineBreak);
         while P^ <> #0 do
         begin
@@ -1358,7 +1400,7 @@ begin
     while P^ <> #0 do
     begin
       if P^ = QuoteChar then
-        S := AnsiExtractQuotedStr(P, QuoteChar)
+        S := {$ifdef DelphiXE4}AnsiStrings.{$endif}AnsiExtractQuotedStr(P, QuoteChar)
       else
       begin
         P1 := P;

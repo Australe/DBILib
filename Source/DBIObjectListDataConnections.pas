@@ -260,7 +260,7 @@ begin
   NotifyDataEventCallBacks(
     LongWord(VALUE),
     dbiBasePropChanged,
-    Pointer(basepropDATASETCHANGED)
+    TDBIRecBuf(basepropDATASETCHANGED)
     );
 end;  { SetObjectList }
 

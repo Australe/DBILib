@@ -45,6 +45,9 @@ interface
 {$endif}
 
 uses
+{$ifdef Delphi2009}
+  AnsiStrings,
+{$endif}
   Classes, SysUtils, Windows, DB, DBIStrings, DBIConst, DBIXbaseConsts,
 {$ifndef fpc}
   DBCommon,
@@ -1122,7 +1125,7 @@ procedure TDBIXbaseDataConnection.GetMetaData;
 
   begin
     // First set the field Name
-    StrLCopy(
+    {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(
       PFieldDesc^.szName,
       PhysicalFieldProps.FieldName,
       SizeOf(PhysicalFieldProps.FieldName)-1
@@ -1130,7 +1133,7 @@ procedure TDBIXbaseDataConnection.GetMetaData;
 
     // If we have extended fields then append the rest of the name
     if (xfExtendedFields in Flags) then begin
-      StrLCat(
+      {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCat(
         PFieldDesc^.szName,
         PhysicalFieldProps.FieldData,
         (SizeOf(PhysicalFieldProps.FieldName)-1) + SizeOf(PhysicalFieldProps.FieldData)
@@ -1989,7 +1992,7 @@ begin
 
     fldBYTES: begin
       //##NULLFLAGS -  Is (xsShowNullFlags in FOptions) important here or not?
-      if StrIComp(PFieldProps^.szName, FieldName_NullFlags) = 0 then begin
+      if {$ifdef DelphiXE4}AnsiStrings.{$endif}StrIComp(PFieldProps^.szName, FieldName_NullFlags) = 0 then begin
         PhysicalFieldProps.FieldSize[0] := PFieldProps^.iUnits1;
         PhysicalFieldProps.FieldType := DT_NULLFLAGS;
         PhysicalFieldProps.FieldFlags := [ffHiddenField];
@@ -2024,6 +2027,8 @@ var
   FieldNo: Integer;
   PhysicalFieldOffset: LongWord;
   FieldData: TDBIFieldData;
+  FieldName: TDBIString;
+  FieldSize: Word;
 
 begin
   // Call inherited to set up logical field properties
@@ -2066,45 +2071,31 @@ begin
       // Initialize the FFields[FieldNo] record
       FillChar(FFields[FieldNo], SizeOf(TDBIXbaseField), #0);
 
+      FieldName := TDBIString(FieldProps[FieldNo].szName);
+      FieldSize := SizeOf(FFields[FieldNo].FieldName)-1;
+
       // If use Strict Foxpro/Dbase Conventions then
       // make sure the fieldnames are upper-case
       if (xsStrictFieldNames in FOptions) then begin
-        StrLCopy(
-          FFields[FieldNo].FieldName,               // Target
-          AnsiStrUpper(FieldProps[FieldNo].szName), // Source
-          SizeOf(FFields[FieldNo].FieldName)-1      // MaxLen
+        FieldName := {$ifdef Delphi2009}AnsiStrings.{$endif}UpperCase(FieldName);
+      end;
+
+      FieldData := PDBIChar(FieldName);
+
+      {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(
+        FFields[FieldNo].FieldName,             // Target
+        FieldData,                              // Source
+        FieldSize                               // MaxLen
+        );
+
+      if (xfExtendedFields in Flags) and (Length(FieldName) > FieldSize) then begin
+        Inc(FieldData, FieldSize);
+
+        {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(
+          FFields[FieldNo].FieldData,           // Target
+          FieldData,                            // Source
+          SizeOf(FFields[FieldNo].FieldData)    // MaxLen
           );
-
-        if (xfExtendedFields in Flags) then begin
-          FieldData := FieldProps[FieldNo].szName;
-          Inc(FieldData, SizeOf(FFields[FieldNo].FieldName)-1);
-
-          StrLCopy(
-            FFields[FieldNo].FieldData,               // Target
-            AnsiStrUpper(FieldData),                  // Source
-            SizeOf(FFields[FieldNo].FieldData)        // MaxLen
-            );
-        end;
-      end
-
-      // Otherwise it is ok to use mixed-case
-      else begin
-        StrLCopy(
-          FFields[FieldNo].FieldName,               // Target
-          FieldProps[FieldNo].szName,               // Source
-          SizeOf(FFields[FieldNo].FieldName)-1      // MaxLen
-          );
-
-        if (xfExtendedFields in Flags) then begin
-          FieldData := FieldProps[FieldNo].szName;
-          Inc(FieldData, SizeOf(FFields[FieldNo].FieldName)-1);
-
-          StrLCopy(
-            FFields[FieldNo].FieldData,               // Target
-            FieldData,                                // Source
-            SizeOf(FFields[FieldNo].FieldData)        // MaxLen
-            );
-        end;
       end;
 
       GetPhysicalProperties(@FieldProps[FieldNo], FFields[FieldNo]);
@@ -2790,7 +2781,6 @@ procedure TDBIXbaseDataConnection.PutFieldFloat(
   FieldNo: Word
   );
 var
-  PMask: PAnsiChar;
   FloatValue: Double;
 
 begin
@@ -2806,8 +2796,7 @@ begin
       FloatValue := 0.00;
     end;
 
-    PMask := PAnsiChar('%*.*f');
-    FormatBuf(RecordBuffer, FFields[FieldNo].FieldSize[0], PMask^, StrLen(PMask),
+    TDBIAnsi.FormatBuf(RecordBuffer, FFields[FieldNo].FieldSize[0], '%*.*f',
       [
         FFields[FieldNo].FieldSize[0],
         FFields[FieldNo].FieldSize[1],
@@ -2973,7 +2962,6 @@ procedure TDBIXbaseDataConnection.PutFieldBCD(
   FieldNo: Word
   );
 var
-  PMask: PAnsiChar;
   CurrencyValue: Currency;
 
 begin
@@ -2987,8 +2975,7 @@ begin
     BcdToCurr(PBcd(FieldBuffer)^, CurrencyValue);
 {$endif}
 
-    PMask := PAnsiChar('%*.*f');
-    FormatBuf(RecordBuffer, FieldProps[FieldNo].iUnits1, PMask^, StrLen(PMask),
+    TDBIAnsi.FormatBuf(RecordBuffer, FieldProps[FieldNo].iUnits1, '%*.*f',
       [
         FieldProps[FieldNo].iUnits1,
         FieldProps[FieldNo].iUnits2,
@@ -3078,8 +3065,10 @@ procedure TDBIXbaseDataConnection.PutFieldInteger(
   const FieldBuffer: TDBIFieldBuffer;
   FieldNo: Word
   );
+const
+  Mask = '%*d';
+
 var
-  PMask: PAnsiChar;
   Size: Word;
 
 begin
@@ -3089,43 +3078,34 @@ begin
     FillChar(RecordBuffer, FFields[FieldNo].FieldSize[0], Ord(' '));
   end
   else begin
-    PMask := PAnsiChar('%*d');
-
     // FieldType = DT_NUMERIC, Decimals = 0
     case FieldProps[FieldNo].iFldType of
       fldINT8: begin
-        FormatBuf(RecordBuffer, Size, PMask^, StrLen(PMask),
-          [Size, PShortInt(FieldBuffer)^]);
+        TDBIAnsi.FormatBuf(RecordBuffer, Size, Mask, [Size, PShortInt(FieldBuffer)^]);
       end;  { ShortInt }
 
       fldUINT8: begin
-        FormatBuf(RecordBuffer, Size, PMask^, StrLen(PMask),
-          [Size, PByte(FieldBuffer)^]);
+        TDBIAnsi.FormatBuf(RecordBuffer, Size, Mask, [Size, PByte(FieldBuffer)^]);
       end;  { Byte }
 
       fldINT16: begin
-        FormatBuf(RecordBuffer, Size, PMask^, StrLen(PMask),
-          [Size, PSmallInt(FieldBuffer)^]);
+        TDBIAnsi.FormatBuf(RecordBuffer, Size, Mask, [Size, PSmallInt(FieldBuffer)^]);
       end;  { SmallInt }
 
       fldUINT16: begin
-        FormatBuf(RecordBuffer, Size, PMask^, StrLen(PMask),
-          [Size, PWord(FieldBuffer)^]);
+        TDBIAnsi.FormatBuf(RecordBuffer, Size, Mask, [Size, PWord(FieldBuffer)^]);
       end;  { Word }
 
       fldINT32: begin
-        FormatBuf(RecordBuffer, Size, PMask^, StrLen(PMask),
-          [Size, PLongInt(FieldBuffer)^]);
+        TDBIAnsi.FormatBuf(RecordBuffer, Size, Mask, [Size, PLongInt(FieldBuffer)^]);
       end;  { LongInt }
 
       fldUINT32: begin
-        FormatBuf(RecordBuffer, Size, PMask^, StrLen(PMask),
-          [Size, PLongWord(FieldBuffer)^]);
+        TDBIAnsi.FormatBuf(RecordBuffer, Size, Mask, [Size, PLongWord(FieldBuffer)^]);
       end;  { LongWord }
 
       fldINT64, fldUINT64: begin
-        FormatBuf(RecordBuffer, Size, PMask^, StrLen(PMask),
-          [Size, PInt64(FieldBuffer)^]);
+        TDBIAnsi.FormatBuf(RecordBuffer, Size, Mask, [Size, PInt64(FieldBuffer)^]);
       end;  { Int64 }
     end;
   end;  { if }
@@ -3447,9 +3427,6 @@ end;  { GetFieldMemo }
 }
 procedure TDBIXbaseDataConnection.PutFieldMemo(var RecordBuffer;
   const FieldBuffer: TDBIFieldBuffer; FieldNo: Word);
-const
-  FormatLength = 3;
-
 begin
   // if the physical length of the data = 4 then the value is binary
   if (FieldProps[FieldNo].iFldLen = SizeOfMemo) then begin
@@ -3465,7 +3442,7 @@ begin
       FillChar(RecordBuffer, FieldProps[FieldNo].iFldLen, Ord(' '));
     end
     else begin
-      FormatBuf(RecordBuffer, FieldProps[FieldNo].iFldLen, '%*d', FormatLength,
+      TDBIAnsi.FormatBuf(RecordBuffer, FieldProps[FieldNo].iFldLen, '%*d',
         [FieldProps[FieldNo].iFldLen, Integer(FieldBuffer^)]);
     end;
   end
