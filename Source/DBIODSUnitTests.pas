@@ -304,7 +304,9 @@ begin
         Usage := GetProcessMemoryUsage;
         if (Index > 1) then begin
           Delta := Usage - Delta;
-          Assert(Delta = 0, Format('Increased memory usage of *%d bytes', [Delta]));
+          if (Delta <> 0) then begin
+            Assert(Delta <= 0, Format('Increased memory usage of *%d bytes, on iteration %d', [Delta, Index]));
+          end;
         end;
         Delta := Usage;
 

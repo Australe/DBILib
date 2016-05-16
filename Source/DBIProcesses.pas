@@ -36,12 +36,12 @@ type
   TDBIProcessOutputInfo = class(TPersistent)
   private
     FID: Integer;
-    FLine: AnsiString;
+    FLine: String;
     FCycles: LongWord;
 
   public
     property ID: Integer read FID write FID;
-    property Line: AnsiString read FLine write FLine;
+    property Line: String read FLine write FLine;
     property Cycles: LongWord read FCycles write FCycles;
 
   end;
@@ -112,8 +112,8 @@ type
     procedure ProcessEnd; virtual;
     function ProcessExecute: Boolean; virtual;
     function ProcessIdle: Boolean; virtual;
-    function ProcessOutput(hRead: THandle; var TextBuffer: AnsiString; const Eof: Boolean): Boolean;
-    procedure ProcessOutputLine(const Value: AnsiString); virtual;
+    function ProcessOutput(hRead: THandle; var TextBuffer: String; const Eof: Boolean): Boolean;
+    procedure ProcessOutputLine(const Value: String); virtual;
     function ProcessStartupInfo: Boolean;
 
     procedure RaiseLastOSError;
@@ -191,7 +191,7 @@ type
     function GetOutputClassType: TDBIProcessOutputInfoClass; virtual;
     function GetData: TDBIProcessOutputInfo; virtual;
 
-    procedure ProcessOutputLine(const Value: AnsiString); override;
+    procedure ProcessOutputLine(const Value: String); override;
     function ProcessOutputItem(Item: TDBIProcessOutputInfo): Boolean; virtual;
 
     property Data: TDBIProcessOutputInfo read GetData;
@@ -270,7 +270,7 @@ begin
 end;
 
 
-procedure TDBIProcess.ProcessOutputLine(const Value: AnsiString);
+procedure TDBIProcess.ProcessOutputLine(const Value: String);
 var
   Item: TDBIProcessOutputInfo;
 
@@ -316,8 +316,20 @@ type
 
 
 function TDBICustomProcess.CheckTargetName: String;
+var
+  Extension: String;
+  Offset: Integer;
+
 begin
-  Result :=   StringReplace(TargetName, '"', '', [rfReplaceAll]);
+  Result := StringReplace(TargetName, '"', '', [rfReplaceAll]);
+
+  // Strip unwanted parameters
+  Extension := ExtractFileExt(Result);
+  Offset := Pos(' ', Extension);
+  if (Offset > 1) then begin
+    SetLength(Extension, Offset-1);
+    Result := ChangeFileExt(Result, Extension);
+  end;
 
   if (piVerifyTargetName in Options) and (Result <> '') and not FileExists(Result) then begin
     raise Exception.CreateFmt('TargetName "%s" Not Found', [Result]);
@@ -549,7 +561,7 @@ const
   ExitCode_STILL_ACTIVE = 259;
 
 var
-  OutputBuffer: AnsiString;
+  OutputBuffer: String;
   OrgEnvPath: String;
 
   function Processing: Boolean;
@@ -667,11 +679,11 @@ begin
 end;
 
 
-function TDBICustomProcess.ProcessOutput(hRead: THandle; var TextBuffer: AnsiString; const Eof: Boolean): Boolean;
+function TDBICustomProcess.ProcessOutput(hRead: THandle; var TextBuffer: String; const Eof: Boolean): Boolean;
 var
   OutputBuffer: AnsiString;
-  LineBuffer: AnsiString;
-  PTextBuffer, PStart: PAnsiChar;
+  LineBuffer: String;
+  PTextBuffer, PStart: PChar;
   BytesInPipe: Cardinal;
   Size: Cardinal;
 
@@ -686,7 +698,7 @@ begin
     SetLength(OutputBuffer, BytesInPipe);
     ReadFile(hRead, OutputBuffer[1], BytesInPipe, Size, nil);
     SetLength(OutputBuffer, Size);
-    TextBuffer := TextBuffer + OutputBuffer;
+    TextBuffer := TextBuffer + String(OutputBuffer);
   end;
 
   Result := Length(TextBuffer) > 0;
@@ -695,13 +707,13 @@ begin
   end;
 
   // Split lines on Line-Break boundries
-  PTextBuffer := PAnsiChar(TextBuffer);
+  PTextBuffer := PChar(TextBuffer);
   PStart := PTextBuffer;
 
   if (PTextBuffer <> nil) then begin
     while (PTextBuffer^ <> #0) do begin
       PStart := PTextBuffer;
-      while not (PTextBuffer^ in [#0, #10, #13]) do begin
+      while not CharInSet(PTextBuffer^, [#0, #10, #13]) do begin
         Inc(PTextBuffer);
       end;
 
@@ -712,7 +724,7 @@ begin
         if PTextBuffer^ = #13 then Inc(PTextBuffer);
         if PTextBuffer^ = #10 then Inc(PTextBuffer);
 
-        Emit(Self, String(LineBuffer), ioStdout);
+        Emit(Self, LineBuffer, ioStdout);
         ProcessOutputLine(LineBuffer);
       end;
     end;
@@ -723,7 +735,7 @@ begin
 end;
 
 
-procedure TDBICustomProcess.ProcessOutputLine(const Value: AnsiString);
+procedure TDBICustomProcess.ProcessOutputLine(const Value: String);
 begin
   Output.Add(String(Value));
 end;

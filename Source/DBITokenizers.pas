@@ -226,6 +226,7 @@ type
     procedure PutChar(const Value: TDBIChar); override;
 
     property Eof;
+    property Stream;
     property Text;
     property Token;
 
@@ -299,20 +300,23 @@ type
 
 
 type
-  TDBIReflectionMacroProcessor = class(TDBICustomMacroProcessor)
+  TDBIReflectionProcessor = class(TDBICustomMacroProcessor)
   private
     FProperties: TDBIProperties;
-    function GetProperties: TStrings;
 
   protected
     function GetParam(
       Sender: TObject; const ParamName: String; var ParamValue: Variant
       ): Boolean; override;
 
-    property Properties: TStrings read GetProperties;
+    function GetParams: TDBIProperties;
 
   public
     destructor Destroy; override;
+
+    class function Format(const Fmt: String; Instance: TPersistent): String;
+
+    property Params: TDBIProperties read GetParams;
 
   end;
 
@@ -333,19 +337,22 @@ uses
 
 function Macro(const Format: String; const Args: array of const): String;
 var
-  Processor: TDBIReflectionMacroProcessor;
+  Processor: TDBIReflectionProcessor;
   Index: Integer;
 
 begin
   Result := '';
 
   if (Format <> '') then begin
-    Processor := Local(TDBIReflectionMacroProcessor.Create).Obj as TDBIReflectionMacroProcessor;
+    Processor := Local(TDBIReflectionProcessor.Create).Obj as TDBIReflectionProcessor;
     Processor.Input.Text := Format;
 
     for Index := Low(Args) to High(Args) do begin
       if (Args[Index].VType = vtObject) and (Args[Index].VObject is TPersistent) then begin
-        TDBIProperties.GetProperties(TPersistent(Args[Index].VObject), Processor.Properties);
+        Processor.Params.GetProperties(
+          TPersistent(Args[Index].VObject),
+          [poPropertyAssigned, poPropertyReadRequired, poPropertyStoredRequired]
+          );
       end;
     end;
 
@@ -356,9 +363,9 @@ end;
 
 
 
-{ TDBIReflectionMacroProcessor }
+{ TDBIReflectionProcessor }
 
-destructor TDBIReflectionMacroProcessor.Destroy;
+destructor TDBIReflectionProcessor.Destroy;
 begin
   FProperties.Free;
   FProperties := nil;
@@ -367,15 +374,15 @@ begin
 end;
 
 
-function TDBIReflectionMacroProcessor.GetParam(
+function TDBIReflectionProcessor.GetParam(
   Sender: TObject;
   const ParamName: String;
   var ParamValue: Variant
   ): Boolean;
 begin
-  Result := Properties.IndexOfName(ParamName) > -1;
+  Result := Params.IndexOfName(ParamName) > -1;
   if Result then begin
-    ParamValue := Properties.Values[ParamName];
+    ParamValue := Params.Values[ParamName];
   end
   else begin
     Paramvalue := '';
@@ -385,7 +392,7 @@ begin
 end;
 
 
-function TDBIReflectionMacroProcessor.GetProperties: TStrings;
+function TDBIReflectionProcessor.GetParams: TDBIProperties;
 begin
   if not Assigned(FProperties) then begin
     FProperties := TDBIProperties.Create;
@@ -394,6 +401,26 @@ begin
   end;
   Result := FProperties;
 end;
+
+
+class function TDBIReflectionProcessor.Format(const Fmt: String; Instance: TPersistent): String;
+var
+  Processor: TDBIReflectionProcessor;
+
+begin
+  if (Fmt = '') or (Fmt = '$') or not Assigned(StrScan(PChar(Fmt), '$')) then begin
+    Result := Fmt;
+  end
+  else begin
+    Processor := Local(Self.Create).Obj as Self;
+    Processor.Input.Text := Fmt;
+    Processor.Params.GetProperties(Instance, [poPropertyReadRequired]);
+    Processor.Process;
+    Result := Processor.Output.Text;
+  end;
+end;
+
+
 
 
 

@@ -31,7 +31,7 @@ unit DBIComponents;
 interface
 
 uses
-  Classes, SysUtils;
+  Classes, SysUtils, DBIStreamAdapters;
 
 type
   TDBICompoundComponent = class(TComponent)
@@ -125,7 +125,7 @@ type
     procedure EndUpdate; virtual;
     function GetRootComponent: TComponent; override;
 
-    function LoadFromFile(AFileName: TFileName = ''): TComponent; virtual;
+    function LoadFromFile(AFileName: TFileName = ''): TComponent; overload; virtual;
     function LoadFromResource(RootAncestor: TClass = nil): TComponent; virtual;
     function LoadFromStream(AStream: TStream): TComponent; virtual;
 
@@ -158,6 +158,8 @@ type
     destructor Destroy; override;
 
     function LoadFromFile(AFileName: TFileName = ''): TComponent; override;
+    function LoadFromFile(AComponent: TComponent; AFileName: TFileName = ''): TComponent; overload;
+
     function SaveToFile(AFileName: TFileName = ''): Boolean; override;
 
   end;
@@ -165,23 +167,133 @@ type
   TDBIIniFilePersistenceAdapter = class(TDBICustomIniFilePersistenceAdapter)
   end;
 
+
+type
+  TDBIComponentStreamAdapter = class(TDBICustomStreamAdapter)
+  public
+    procedure WriteFmt(const Data: String; Args: array of const);
+
+    procedure WriteProperty(
+      const PropName: String;
+      const PropValue: String;
+      const ClassTypeName: String
+      );
+
+    function WriteComponent(
+      Properties: TStrings;
+      const ClassTypeName: String;
+      const ComponentName: String = ''
+      ): Integer;
+
+    property Stream;
+  end;
+
+
 implementation
 
 uses
 {$ifdef Delphi6}
   RtlConsts, Types,
 {$endif}
+{$ifndef DELPHI7}
+  DBIStrings,
+{$endif}
 {$ifndef fpc}
   Consts,
 {$endif}
   IniFiles, TypInfo, DBITypInfo, DBIUtils;
 
+const
+  ParentAttribute = '.parent';
+  SQuote = #39;
+
+
+{ TDBIComponentStreamAdapter }
+
+procedure TDBIComponentStreamAdapter.WriteFmt(const Data: String; Args: array of const);
+var
+  Output: String;
+
+begin
+  Output := Format(Data + SLineBreak, Args);
+  Stream.Write(PAnsiChar(AnsiString(Output))^, Length(Output));
+end;
+
+
+procedure TDBIComponentStreamAdapter.WriteProperty(
+  const PropName: String;
+  const PropValue: String;
+  const ClassTypeName: String
+  );
+var
+  PropInfo: PPropInfo;
+  Output: String;
+
+begin
+  Output := '';
+  PropInfo := GetPropInfo(GetClass(ClassTypeName), PropName);
+  if (PropInfo <> nil) and (PropValue <> '') then begin
+    case PropInfo^.PropType^.Kind of
+      tkChar, tkWChar, tkString, tkLString, tkWString{$ifdef DelphiXE2}, tkUString{$endif}:
+        Output := Format('    %s = %s%s%s%s', [PropName, SQuote, PropValue, SQuote, SLineBreak]);
+    else
+      Output := Format('    %s = %s%s', [PropName, PropValue, SLineBreak]);
+    end;
+  end;
+
+  Stream.Write(PAnsiChar(AnsiString(Output))^, Length(Output));
+end;
+
+
+function TDBIComponentStreamAdapter.WriteComponent(
+  Properties: TStrings;
+  const ClassTypeName: String;
+  const ComponentName: String = ''
+  ): Integer;
+const
+  PropertyError = 'Git configuration data for "%s" not found!';
+
+var
+  Index: Integer;
+  PropName: String;
+  PropValue: String;
+
+begin
+  Result := 0;
+
+  if not Assigned(Properties) then begin
+    raise EStreamAdapter.CreateFmt(PropertyError, [ClassTypeName]);
+  end;
+
+  if (Properties.Count > 0) then begin
+    // Check if this component is the Parent
+    Result := StrToIntDef(Properties.Values[ParentAttribute], 0);
+
+    if (ComponentName <> '') then begin
+      WriteFmt('  object %s: %s', [ComponentName, ClassTypeName]);
+    end
+    else begin
+      WriteFmt('  object %s', [ClassTypeName]);
+    end;
+
+    for Index := 0 to Properties.Count-1 do begin
+      PropName := Properties.Names[Index];
+      PropValue := Properties.Values[PropName];
+      WriteProperty(PropName, PropValue, ClassTypeName);
+    end;
+
+    if (Result > -1) then begin
+      WriteFmt('  end', []);
+    end;
+  end;
+end;
+
+
+
+
 
 { TDBICustomIniFilePersistenceAdapter }
 
-const
-  ParentAttribute = '.parent';
-  
 destructor TDBICustomIniFilePersistenceAdapter.Destroy;
 begin
   FStrings.Free;
@@ -209,6 +321,9 @@ end;
   Jvr - 01/09/2008 07:43:00 - Initial code.<br />
 }
 function TDBICustomIniFilePersistenceAdapter.ToString: String;
+const
+  Options = [poPropertyAssigned, poPropertyReadRequired, poPropertyWriteRequired, poPropertyStoredRequired];
+
 var
   Index: Integer;
 
@@ -219,7 +334,7 @@ var
       if (ItemIndex = -1) then begin
         Strings.Add(ParentAttribute + '=-1');
       end;
-      TDBIProperties.GetProperties(Item, Strings);
+      TDBIProperties.GetProperties(Item, Strings, Options);
     end;
   end;
 
@@ -240,73 +355,13 @@ end;
   Jvr - 01/09/2008 07:43:32 - Initial code.<br />
 }
 function TDBICustomIniFilePersistenceAdapter.LoadFromFile(AFileName: TFileName): TComponent;
-const
-  LineBreak = #13#10;
-  Quote = #39;
-
 var
   IniFile: TDBIIniFile;
   SectionIndex: Integer;
   SectionNames: TStrings;
-  Stream: TMemoryStream;
-
-  procedure WriteFmt(const Data: String; Args: array of const);
-  var
-    Output: String;
-  begin
-    Output := Format(Data + LineBreak, Args);
-    Stream.Write(PAnsiChar(AnsiString(Output))^, Length(Output));
-  end;
-  
-  procedure WriteProperty(const PropName, PropValue, PropClassName: String);
-  var
-    PropInfo: PPropInfo;
-    Output: String;
-  begin
-    Output := '';
-    PropInfo := GetPropInfo(GetClass(PropClassName), PropName);
-    if (PropInfo <> nil) and (PropValue <> '') then begin
-      case PropInfo^.PropType^.Kind of
-        tkChar, tkWChar, tkString, tkLString, tkWString{$ifdef DelphiXE2}, tkUString{$endif}:
-          Output := Format('    %s = %s%s%s%s', [PropName, Quote, PropValue, Quote, LineBreak]);
-      else
-        Output := Format('    %s = %s%s', [PropName, PropValue, LineBreak]);
-      end;
-    end;
-
-    Stream.Write(PAnsiChar(AnsiString(Output))^, Length(Output));
-  end;
-
-  function WriteComponent(const AComponentName: String): Integer;
-  var
-    Section: TStrings;
-    InstanceClassName: String;
-    KeyIndex: Integer;
-    KeyName, KeyValue: String;
-
-  begin
-    Result := 0;
-    
-    Section := IniFile.GetSection(AComponentName);
-    if (Section.Count > 0) then begin
-      // Check if this component is the Parent
-      Result := StrToIntDef(Section.Values[ParentAttribute], 0);
-
-      KeyName := SectionNames.Names[0];
-      InstanceClassName := SectionNames.Values[KeyName];
-      WriteFmt('  object %s: %s', [KeyName, InstanceClassName]);
-
-      for KeyIndex := 0 to Section.Count-1 do begin
-        KeyName := Section.Names[KeyIndex];
-        KeyValue := Section.Values[KeyName];
-        WriteProperty(KeyName, KeyValue, InstanceClassName);
-      end;
-
-      if (Result > -1) then begin
-        WriteFmt('  end', []);
-      end;
-    end;
-  end;
+  Adapter: TDBIComponentStreamAdapter;
+  ComponentName: String;
+  ClassTypeName: String;
 
 begin
   Result := nil;
@@ -318,24 +373,81 @@ begin
   if FileExists(AFileName) then begin
     IniFile := Local(TDBIIniFile.Create(AFileName)).Obj as TDBIIniFile;
     SectionNames := Local(TStringList.Create).Obj as TStrings;
-    Stream := Local(TMemoryStream.Create).Obj as TMemoryStream;
+    Adapter := Local(TDBIComponentStreamAdapter.Create).Obj as TDBIComponentStreamAdapter;
 
+    SectionIndex := 0;
     IniFile.ReadSections(SectionNames);
     if SectionNames.Count > 0 then begin
-      WriteComponent(SectionNames[0]);
+      ComponentName := SectionNames.Names[SectionIndex];
+      ClassTypeName := SectionNames.Values[ComponentName];
+      Adapter.WriteComponent(
+        IniFile.GetSection(SectionNames[SectionIndex]),
+        ClassTypeName,
+        ComponentName
+        );
+
       for SectionIndex := 1 to SectionNames.Count-1 do begin
-        WriteComponent(SectionNames[SectionIndex]);
+        ComponentName := SectionNames.Names[SectionIndex];
+        ClassTypeName := SectionNames.Values[ComponentName];
+        Adapter.WriteComponent(
+          IniFile.GetSection(SectionNames[SectionIndex]),
+          ClassTypeName,
+          ComponentName
+          );
       end;
-      WriteFmt('end', []);
+      Adapter.WriteFmt('end', []);
     end;
 
 {$ifdef UseDebugInfo}
-    Stream.Position := 0;
-    Stream.SaveToFile(ChangeFileExt(AFileName, '.dfm.txt'));
+    Adapter.SaveToFile(ChangeFileExt(AFileName, '.dfm.debug'));
 {$endif}
 
-    Stream.Position := 0;
-    Result := LoadFromStream(Stream);
+    Result := LoadFromStream(Adapter.Stream);
+  end;
+end;
+
+
+function TDBICustomIniFilePersistenceAdapter.LoadFromFile(AComponent: TComponent; AFileName: TFileName = ''): TComponent;
+var
+  IniFile: TDBIIniFile;
+  StreamAdapter: TDBIComponentStreamAdapter;
+  Properties: TStrings;
+
+begin
+  Result := nil;
+
+  if (AFileName = '') then begin
+    AFilename := GetFileName;
+  end;
+
+  if not Assigned(AComponent) then begin
+    raise Exception.Create('Component cannot be unassigned.');
+  end;
+
+  if (AComponent.Name = '') then begin
+    AComponent.Name := Copy(AComponent.ClassName, Length('TDBI_'), 128);
+  end;
+
+  if not Assigned(Classes.GetClass(AComponent.ClassName)) then begin
+    Classes.RegisterClass(TPersistentClass(AComponent.ClassType));
+  end;
+
+  if FileExists(AFileName) then begin
+    IniFile := Local(TDBIIniFile.Create(AFileName)).Obj as TDBIIniFile;
+    Properties := IniFile.GetSection(AComponent.Name);
+    if Assigned(Properties) and (Properties.Count > 0) then begin
+      StreamAdapter := Local(TDBIComponentStreamAdapter.Create).Obj as TDBIComponentStreamAdapter;
+      StreamAdapter.WriteComponent(Properties, AComponent.ClassName, AComponent.Name);
+{$ifdef UseDebugInfo}
+      StreamAdapter.SaveToFile(ChangeFileExt(AFileName, '.dfm.debug'));
+{$endif}
+
+      RootComponent := AComponent;
+      Result := LoadFromStream(StreamAdapter.Stream);
+    end
+    else begin
+      Result := AComponent;
+    end;
   end;
 end;
 
@@ -345,6 +457,9 @@ end;
   Jvr - 13/09/2011 19:16:00 - Initial code.<br />
 }
 function TDBICustomIniFilePersistenceAdapter.SaveToFile(AFileName: TFileName = ''): Boolean;
+const
+  Options = [poPropertyAssigned, poPropertyReadRequired, poPropertyWriteRequired, poPropertyStoredRequired];
+
 var
   Index: Integer;
   IniFile: TDBIIniFile;
@@ -352,13 +467,13 @@ var
   procedure WriteComponent(Item: TComponent; ItemIndex: Integer = 0);
   begin
     Assert(Item.Name <> '');
-    
+
     if (Item.Name <> '') then begin
       Strings.Clear;
       if (ItemIndex = -1) then begin
         Strings.Add(ParentAttribute + '=-1');
       end;
-      TDBIProperties.GetProperties(Item, Strings);
+      TDBIProperties.GetProperties(Item, Strings, Options);
       IniFile.WriteSectionValues(Item.Name + '=' + Item.ClassName, Strings);
     end;
   end;
@@ -536,13 +651,20 @@ function TDBICustomPersistenceAdapter.LoadFromStream(AStream: TStream): TCompone
 var
   MemoryStream: TMemoryStream;
   Reader: TReader;
+  Offset: Integer;
 
 begin
   MemoryStream := Local(TMemoryStream.Create).Obj as TMemoryStream;
-  ObjectTextToBinary(AStream, MemoryStream);
-  MemoryStream.Position := 0;
-  Reader := Local(TReader.Create(MemoryStream, 4096)).Obj as TReader;
+  Offset := AStream.Position;
+  try
+    AStream.Position := 0;
+    ObjectTextToBinary(AStream, MemoryStream);
+    MemoryStream.Position := 0;
+  finally
+    AStream.Position := Offset;
+  end;
 
+  Reader := Local(TReader.Create(MemoryStream, 4096)).Obj as TReader;
   BeginUpdate;
   try
     Result := Reader.ReadRootComponent(RootComponent);

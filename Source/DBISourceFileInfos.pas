@@ -44,11 +44,9 @@ type
     FGitFileSearch: TDBIGitFileSearch;
     FGitFileShow: TDBIGitShowInfo;
     FSha1: String;
-    FVclFiles: TDBIFileList;
+    FVclFiles: TDBIVclFiles;
 
   protected
-    function FileFind: Boolean;
-
     class function ExtractValidFileName(FileName: String): String; static;
     class function FileOpenBDS(FileName: string; LineNo: Integer): Boolean;
     class function FileOpenCompare(
@@ -61,16 +59,16 @@ type
     function GetGitFileName(var FileName: String): Boolean;
     function GetGitFileSearch: TDBIGitFileSearch;
     function GetGitFileShow: TDBIGitShowInfo;
-    function GetShaFileName(var FileName: String): Boolean;
+    function GetShaFileName(out FileName: String): Boolean;
 
-    function GetVclFileName(var FileName: String): Boolean;
-    function GetVclFiles: TDBIFileList;
+    function GetVclFileName(out FileName: String): Boolean;
+    function GetVclFiles: TDBIVclFiles;
     function GetFileShortName: String;
 
 
     property GitSearch: TDBIGitFileSearch read GetGitFileSearch;
     property GitSha: TDBIGitShowInfo read GetGitFileShow;
-    property VclFiles: TDBIFileList read GetVclFiles;
+    property VclFiles: TDBIVclFiles read GetVclFiles;
 
   public
     destructor Destroy; override;
@@ -82,7 +80,6 @@ type
     function FileOpenDefault(const FileName: String): Boolean;
     function FileOpenJS(const FileName: String): Boolean;
     function FileOpenPAS(const FileName: String): Boolean;
-    function FileOpenRailo: Boolean;
     function FileOpenRegistered: Boolean;
     function FileOpenShell(const Action: TDBIShellOpenFileAction): Boolean;
 
@@ -107,7 +104,6 @@ type
   private
     FCopyUnixFileName: TAction;
     FCopyWindowsFileName: TAction;
-    FFileFind: TAction;
     FFileOpen: TAction;
     FFileOpenWith: TAction;
     FFileOpenWithDefault: TAction;
@@ -117,7 +113,6 @@ type
   protected
     function GetActionCopyUnixFileName: TAction;
     function GetActionCopyWindowsFileName: TAction;
-    function GetActionFileFind: TAction;
     function GetActionFileOpen: TAction;
     function GetActionFileOpenWith: TAction;
     function GetActionFileOpenWithDefault: TAction;
@@ -127,7 +122,6 @@ type
   protected
     procedure CopyWindowsFileNameExecute(Sender: TObject);
     procedure CopyUnixFileNameExecute(Sender: TObject);
-    procedure FileFindExecute(Sender: TObject);
     procedure FileOpenExecute(Sender: TObject);
     procedure FileOpenWithDefaultExecute(Sender: TObject);
     procedure FileOpenWithExecute(Sender: TObject);
@@ -136,7 +130,6 @@ type
   public
     property ActionCopyUnixFileName: TAction read GetActionCopyUnixFileName;
     property ActionCopyWindowsFileName: TAction read GetActionCopyWindowsFileName;
-    property ActionFileFind: TAction read GetActionFileFind;
     property ActionFileOpen: TAction read GetActionFileOpen;
     property ActionFileOpenWith: TAction read GetActionFileOpenWith;
     property ActionFileOpenWithDefault: TAction read GetActionFileOpenWithDefault;
@@ -206,7 +199,7 @@ type
 implementation
 
 uses
-  Controls, ShellAPI, ClipBrd, DBIHttpGet, DBIProcesses;
+  UITypes, Controls, ClipBrd, DBIHttpStreamAdapters, DBIProcesses;
 
 
 
@@ -417,17 +410,6 @@ begin
   Result := FCopyWindowsFileName;
 end;
 
-function TDBIActionsSourceFile.GetActionFileFind: TAction;
-begin
-  if not Assigned(FFileFind) then begin
-    FFileFind := TAction.Create(Self);
-    FFileFind.Category := 'Tools';
-    FFileFind.Caption := 'Find';
-    FFileFind.OnExecute := FileFindExecute;
-  end;
-  Result := FFileFind;
-end;
-
 function TDBIActionsSourceFile.GetActionFileOpen: TAction;
 begin
   if not Assigned(FFileOpen) then begin
@@ -482,13 +464,6 @@ begin
   end;
   Result := FGitLog;
 end;
-
-
-procedure TDBIActionsSourceFile.FileFindExecute(Sender: TObject);
-begin
-  FileFind;
-end;
-
 
 procedure TDBIActionsSourceFile.FileOpenExecute(Sender: TObject);
 begin
@@ -592,15 +567,6 @@ begin
 end;
 
 
-function TDBICustomSourceFileInfo.FileFind: Boolean;
-begin
-  Result := True;
-
-//##JVR  ClipBoard.AsText := FileShortName;
-  ShellExecute(Application.Handle, 'find', PChar(PathNames[ptXE3]), PChar(FileShortName), nil, SW_SHOWNORMAL);
-end;
-
-
 class function TDBICustomSourceFileInfo.FileOpenBDS(FileName: string; LineNo: Integer): Boolean;
 var
   WmX: Word;
@@ -627,29 +593,19 @@ end;
 
 function TDBICustomSourceFileInfo.FileOpenCFM(const FileName: String): Boolean;
 begin
-  Result := IsValidFileExtension(['.cfm']) and FileOpenCompare(FileName);
+  Result := IsValidFileExtension(['.cfm']) and TDBIFileOpenEdit.Execute(FileName);
 end;
 
 
 class function TDBICustomSourceFileInfo.FileOpenCompare(const FileName1, FileName2: String): Boolean;
-var
-  Compare: TDBIBeyondCompare;
-
 begin
-  Result := FileName1 <> '';
-  if Result then begin
-    Compare := Local(TDBIBeyondCompare.Create(nil)).Obj as TDBIBeyondCompare;
-    Compare.Options := [piDetachedProcess, piVerifyTargetName];
-    Compare.FileName1 := FileName1;
-    Compare.FileName2 := FileName2;
-    Compare.Execute;
-  end;
+  Result := TDBIFileOpenCompare.Execute(FileName1, FileName2);
 end;
 
 
 function TDBICustomSourceFileInfo.FileOpenDefault(const FileName: String): Boolean;
 begin
-  Result := FileOpenCompare(FileName);
+  Result := TDBIFileOpenEdit.Execute(FileName);
 end;
 
 
@@ -663,7 +619,16 @@ begin
     Http := Local(TDBIHttpStreamAdapter.Create).Obj as TDBIHttpStreamAdapter;
     Http.Url := 'http:' + FileData;
 
-    Result := Http.Load;
+    try
+      Result := Http.Load;
+    except
+      on E: Exception do begin
+        Result := False;
+
+        MessageDlg(E.Message, mtWarning, [mbOK], 0);
+      end;
+    end;
+
     if Result then begin
       Http.SaveToFile(TDBIHostInfo.GetCacheUserFolder + Http.DocumentName);
 
@@ -679,88 +644,36 @@ begin
 end;
 
 
-function TDBICustomSourceFileInfo.FileOpenRailo: Boolean;
-var
-  FileName: String;
-
-  function GetRailoURL: String;
-  const
-    RailoRuntime = 'https://github.com/getrailo/railo/blob/master/railo-java/railo-core/src/';
-    RailoLoader = 'https://github.com/getrailo/railo/blob/master/railo-java/railo-loader/src/';
-
-  var
-    Offset: Integer;
-    RailoSource: String;
-
-  begin
-    Result := '';
-    if (Pos('railo.runtime', FileData) = 1) then begin
-      RailoSource := RailoRuntime;
-    end
-    else if (Pos('railo.loader', FileData) = 1) then begin
-      RailoSource := RailoLoader;
-    end
-    else begin
-      RailoSource := RailoRuntime;
-    end;
-
-    Offset := Pos('(', FileData);
-    if Offset > 1 then begin
-      Result := Copy(FileData, 1, Offset - 1);
-      Result := ChangeFileExt(Result, '');
-      Result := StringReplace(Result, '.', '/', [rfReplaceAll]);
-      Result := ChangeFileExt(Result, FileExtension);
-      Result := RailoSource + Result + '#L' + IntToStr(LineNo);
-    end;
-  end;
-
-begin
-  Result := (FileExtension = '.java') and (Pos('railo.', FileData) = 1);
-  if Result then begin
-    FileName := GetRailoURL;
-    Result := ShellExecute(Application.Handle, 'open', PChar(FileName), '', '', SW_SHOWNORMAL) > 32;
-  end;
-end;
-
-
 function TDBICustomSourceFileInfo.FileOpenRegistered: Boolean;
+const
+  FileNotAvailable = 'Source file not available!';
+
 var
   FileName: String;
 
 begin
-  Result := FileOpenRailo;
-  if not Result then begin
     Result := GetVclFileName(FileName) or GetShaFileName(FileName);
     if Result then begin
       Result := FileOpenPAS(FileName) or FileOpenJS(FileName) or FileOpenCFM(FileName) or FileOpenDefault(FileName);
+    end
+    else begin
+      MessageDlg(FileNotAvailable, mtWarning, [mbOK], 0);
     end;
-  end;
 end;
 
 
 function TDBICustomSourceFileInfo.FileOpenShell(const Action: TDBIShellOpenFileAction): Boolean;
 var
   FileName: String;
-  Parameters: String;
 
 begin
   Result := GetVclFileName(FileName) or GetShaFileName(FileName);
   if Result then begin
     case Action of
-      soFileOpenFolder: begin
-        Parameters := '/select,"' + FileName + '"';
-        FileName := PathNames[ptCmdExplorer];
-      end;
-
-      soFileOpenWith: begin
-        Parameters := 'shell32.dll, OpenAs_RunDLL ' + FileName;
-        FileName := PathNames[ptCmdRunDll];
-      end;
-
-      soFileOpenWithDefault: Parameters := '';
+      soFileOpenFolder: TDBIFileOpenFolder.Execute(FileName);
+      soFileOpenWith: TDBIFileOpenWith.Execute(FileName);
+      soFileOpenWithDefault: TDBIFileOpenWithDefault.Execute(FileName);
     end;
-
-    Result := ShellExecute(Application.Handle, 'open', PChar(FileName), PChar(Parameters), '', SW_SHOWNORMAL) > 32;
   end;
 end;
 
@@ -790,7 +703,6 @@ function TDBICustomSourceFileInfo.GetGitFileSearch: TDBIGitFileSearch;
 begin
   if not Assigned(FGitFileSearch) then begin
     FGitFileSearch := TDBIGitFileSearch.Create(nil);
-    FGitFileSearch.Options := FGitFileSearch.Options + [piVerifyTargetName];
   end;
   Result := FGitFileSearch;
 end;
@@ -805,7 +717,7 @@ begin
 end;
 
 
-function TDBICustomSourceFileInfo.GetShaFileName(var FileName: String): Boolean;
+function TDBICustomSourceFileInfo.GetShaFileName(out FileName: String): Boolean;
 begin
   Result := Sha1 = '';
 
@@ -837,26 +749,23 @@ begin
 end;
 
 
-function TDBICustomSourceFileInfo.GetVclFileName(var FileName: String): Boolean;
+function TDBICustomSourceFileInfo.GetVclFileName(out FileName: String): Boolean;
 var
   Index: Integer;
 
 begin
-  Index := VclFiles.IndexOfName(ChangeFileExt(FileShortName, ''));
+  Index := VclFiles.IndexOfName(FFileName);
   Result := Index >= 0;
   if Result then begin
-    FileName := VclFiles.FileName[Index];
+    FileName := VclFiles[Index];
   end;
 end;
 
 
-function TDBICustomSourceFileInfo.GetVclFiles: TDBIFileList;
+function TDBICustomSourceFileInfo.GetVclFiles: TDBIVclFiles;
 begin
   if not Assigned(FVclFiles) then begin
-    FVclFiles := TDBIFileList.Create;
-    FVclFiles.Duplicates := dupIgnore;
-    FVclFiles.Sorted := True;
-    FVclFiles.GetFiles(PathNames[ptXe3], '*.pas');
+    FVclFiles := TDBIVclFiles.Create(nil);
   end;
   Result := FVclFiles;
 end;

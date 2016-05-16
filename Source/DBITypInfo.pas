@@ -31,7 +31,7 @@ unit DBITypInfo;
 interface
 
 uses
-  Classes, Contnrs, TypInfo, DB, DBIObjectListDatasets;
+  Classes, Sysutils, Contnrs, TypInfo, DB, DBIObjectListDatasets;
 
 type
   TDBIParamsAdapter = class(TPersistent)
@@ -174,8 +174,17 @@ type
 
 
 type
-  TDBIPropertyOption = (poPropertyAssigned, poPropertyDecapitalise);
+  TDBIPropertyOption = (
+    poPropertyAssigned,
+    poPropertyDecapitalise,
+    poPropertyReadRequired,
+    poPropertyWriteRequired,
+    poPropertyStoredRequired,
+    poPropertyUnsupportedError
+    );
   TDBIPropertyOptions = set of TDBIPropertyOption;
+
+  EPropertyUnsupportedError = class(Exception);
 
   TDBIProperties = class(TStringList)
   protected
@@ -185,13 +194,13 @@ type
     class procedure GetProperties(
       AInstance: TObject;
       Strings: TStrings;
-      Options: TDBIPropertyOptions = [poPropertyAssigned]
+      Options: TDBIPropertyOptions
       ); overload; virtual;
 
     procedure GetProperties(
       AInstance: TObject;
-      Options: TDBIPropertyOptions = [poPropertyAssigned])
-      ; overload; virtual;
+      Options: TDBIPropertyOptions
+      ); overload; virtual;
   end;
 
 
@@ -222,7 +231,6 @@ uses
   Consts,
   DBConsts,
 {$endif}
-  SysUtils,
   DBIConst,
   DBIUtils,
   DBIIntfConsts,
@@ -575,7 +583,7 @@ end;
 
 procedure TDBIProperties.GetProperties(
   AInstance: TObject;
-  Options: TDBIPropertyOptions = [poPropertyAssigned]
+  Options: TDBIPropertyOptions
   );
 begin
   GetProperties(AInstance, Self, Options);
@@ -589,17 +597,24 @@ end;
 class procedure TDBIProperties.GetProperties(
   AInstance: TObject;
   Strings: TStrings;
-  Options: TDBIPropertyOptions = [poPropertyAssigned]
+  Options: TDBIPropertyOptions
   );
+
   function ReadProperty(PropInfo: PPropInfo): String;
+  var
+    PropRequired: Boolean;
+
   begin
     Result := '';
-    if (
+
+    PropRequired :=
       Assigned(PropInfo) and
-      Assigned(PropInfo.GetProc) and
-      Assigned(PropInfo.StoredProc) and
-      (PropInfo^.Name <> 'Name')) then
-    begin
+      (PropInfo^.Name <> 'Name') and
+      (Assigned(PropInfo.GetProc) or not (poPropertyReadRequired in Options)) and
+      (Assigned(PropInfo.SetProc) or not (poPropertyWriteRequired in Options)) and
+      (Assigned(PropInfo.StoredProc) or not (poPropertyStoredRequired in Options));
+
+    if PropRequired then begin
       case PropInfo^.PropType^.Kind of
         tkString, tkWstring, tkLString{$ifdef DELPHIxe2}, tkUString{$endif}: Result := GetStrProp(AInstance, PropInfo);
         tkFloat: Result := FloatToStr(GetFloatProp(AInstance, PropInfo));
@@ -609,10 +624,12 @@ class procedure TDBIProperties.GetProperties(
         tkChar, tkWChar: Result := Chr(GetOrdProp(AInstance, PropInfo));
         tkSet: Result := GetSetProp(AInstance, PropInfo, False);
       else
-        raise Exception.CreateFmt(
-          'Property "%s" of type "%s" not supported',
-          [PropInfo^.Name, GetEnumName(TypeInfo(TTypeKind), Ord(PropInfo^.PropType^.Kind))]
-          );
+        if (poPropertyUnsupportedError in Options) then begin
+          raise EPropertyUnsupportedError.CreateFmt(
+            'Property "%s" of type "%s" not supported',
+            [PropInfo^.Name, GetEnumName(TypeInfo(TTypeKind), Ord(PropInfo^.PropType^.Kind))]
+            );
+        end;
       end;
       if (Result <> '') or not (poPropertyAssigned in Options) then begin
         if (poPropertyDecapitalise in Options) then begin

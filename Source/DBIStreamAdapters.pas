@@ -131,6 +131,10 @@ type
   end;
 
 
+type
+  EStreamAdapter = class(Exception);
+
+
 implementation
 
 const

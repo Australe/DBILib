@@ -203,6 +203,14 @@ type
   end;
 
 
+type
+  TDBIDialogMessage = class(TDBIDialogAsk)
+  public
+    class function BuildDialog(AOwner: TComponent = nil): TDBICustomDialog; override;
+
+  end;
+
+
 implementation
 
 {. $R *.DFM}
@@ -212,6 +220,30 @@ uses
 
 const
   clHotLight = $00CC6600;
+
+
+{ TDBIDialogMessage }
+
+class function TDBIDialogMessage.BuildDialog(AOwner: TComponent = nil): TDBICustomDialog;
+begin
+  Result := Self.CreateNew(AOwner);
+  Result.Color := clWindow;
+  Result.Width := 1000;
+  Result.Height := 200;
+  Result.Constraints.MinHeight := Result.Height - 24;
+  Result.Constraints.MinWidth := 400;
+  Result.Position := poScreenCenter;
+
+  Result.Client.BorderWidth := 10;
+  Result.Image;
+  Result.Shape;
+  Result.ButtonOK.Left := 100;
+  Result.ListBox;
+end;
+
+
+
+
 
 { TDBIDialogProgress }
 
@@ -730,7 +762,7 @@ end;
 
 function TDBIMemo.SelectWordAtCaret: string;
 const
-  InValidChars = [' ', ',', ':', ';'];
+  InValidChars = [' ', '"', #39, '*', ',', ':', ';', '?', '|'];
 
 var
   Line: string;

@@ -11,6 +11,48 @@ uses
   Actions, StdActns, ActnList, Menus, Buttons, CefLib, CefVcl, DBIToolTips;
 
 type
+  TDBIChromium = class(TPersistent)
+  private class var
+    FOldLibHandler: TCefLoadLibHandler;
+
+  private
+    class function GetBrowserSubprocessPath: String; static;
+    class function GetLanguage: String; static;
+    class function GetProductVersion: String; static;
+    class function GetSingleProcess: Boolean; static;
+    class procedure Initialisation; static;
+    class function IsDebuggerAttached: Boolean; static;
+  public
+    class function LoadLibHandler(
+      const Cache: UString;
+      const UserDataPath: UString;
+      const UserAgent: UString;
+      const ProductVersion: UString;
+      const Locale: UString;
+      const LogFile: UString;
+      const BrowserSubprocessPath: UString;
+      LogSeverity: TCefLogSeverity;
+      JavaScriptFlags: UString;
+      ResourcesDirPath: UString;
+      LocalesDirPath: UString;
+      SingleProcess: Boolean;
+      NoSandbox: Boolean;
+      CommandLineArgsDisabled: Boolean;
+      PackLoadingDisabled: Boolean;
+      RemoteDebuggingPort: Integer;
+      UncaughtExceptionStackSize: Integer;
+      ContextSafetyImplementation: Integer;
+      PersistSessionCookies: Boolean;
+      IgnoreCertificateErrors: Boolean;
+      BackgroundColor: TCefColor;
+      const AcceptLanguageList: UString;
+      WindowsSandboxInfo: Pointer;
+      WindowlessRenderingEnabled: Boolean
+    ): Boolean; static;
+  end;
+
+
+type
   TDBICustomChromate = class(TChromium)
   private
     FActions: TActionList;
@@ -221,10 +263,13 @@ type
       );
 
     procedure ChromiumBeforePopup(
-      Sender: TObject; const Browser: ICefBrowser;
+      Sender: TObject;
+      const Browser: ICefBrowser;
       const Frame: ICefFrame;
       const TargetUrl: UString;
       const TargetFrameName: UString;
+      TargetDisposition: TCefWindowOpenDisposition;
+      UserGesture: Boolean;
       var PopupFeatures: TCefPopupFeatures;
       var WindowInfo: TCefWindowInfo;
       var Client: ICefClient;
@@ -238,7 +283,8 @@ type
       const Browser: ICefBrowser;
       const Frame: ICefFrame;
       const Request: ICefRequest;
-      out Result: Boolean
+      const Callback: ICefRequestCallback;
+      out Result: TCefReturnValue
       ); virtual;
 
     procedure ChromiumContextMenuCommand(
@@ -452,7 +498,7 @@ type
 implementation
 
 uses
-  Consts, TypInfo, Graphics, Forms, Dialogs, ToolWin, UITypes, Variants, DBIUtils;
+  Consts, TypInfo, Graphics, Forms, Dialogs, Registry,ToolWin, UITypes, Variants, DBIUtils;
 
 
 
@@ -922,10 +968,13 @@ end;
 
 
 procedure TDBIChromateBrowser.ChromiumBeforePopup(
-  Sender: TObject; const Browser: ICefBrowser;
+  Sender: TObject;
+  const Browser: ICefBrowser;
   const Frame: ICefFrame;
   const TargetUrl: UString;
   const TargetFrameName: UString;
+  TargetDisposition: TCefWindowOpenDisposition;
+  UserGesture: Boolean;
   var PopupFeatures: TCefPopupFeatures;
   var WindowInfo: TCefWindowInfo;
   var Client: ICefClient;
@@ -945,7 +994,8 @@ procedure TDBIChromateBrowser.ChromiumBeforeResourceLoad(
   const Browser: ICefBrowser;
   const Frame: ICefFrame;
   const Request: ICefRequest;
-  out Result: Boolean
+  const Callback: ICefRequestCallback;
+  out Result: TCefReturnValue
   );
 var
   Url: TUrlParts;
@@ -1368,7 +1418,7 @@ end;
 
 function TDBIChromateBrowser.GetCookieManager: ICefCookieManager;
 begin
-  Result := TCefCookieManagerRef.Global;
+  Result := TCefCookieManagerRef.Global(nil);
 end;
 
 function TDBIChromateBrowser.GetMenuOwner: TComponent;
@@ -1708,7 +1758,7 @@ var
 
 begin
   Success := CookieManager.SetCookie(
-    CookieUrl, Index, Value, CookieDomain, CookiePath, False, True, True, Now, Now, Now+1
+    CookieUrl, Index, Value, CookieDomain, CookiePath, False, True, True, Now, Now, Now+1, nil
     );
 
   Assert(Success);
@@ -1809,13 +1859,16 @@ end;
 class function TDBIChromate.Register: Boolean;
 begin
   CefCache := 'cache';
-  CefOnRegisterCustomSchemes := RegisterSchemes;
   CefSingleProcess := False;
+  CefOnRegisterCustomSchemes := RegisterSchemes;
+  CefBrowserSubprocessPath := ChangeFileExt(ParamStr(0), '.Chromium.exe');
+
+  // Logging
+  CefNoSandbox := True;
+  CefLogSeverity := LOGSEVERITY_VERBOSE;
+  CefLogFile := ChangeFileExt(ExtractFileName(ParamStr(0)), '.log.etw');
 
   Result := CefLoadLibDefault;
-  if not Result then begin
-    Exit;
-  end;
 end;
 
 
@@ -2232,5 +2285,160 @@ begin
 end;
 
 
+
+
+
+{ TDBIChromium }
+
+class function TDBIChromium.GetBrowserSubprocessPath: String;
+begin
+  Result := ExtractFilePath(ParamStr(0)) + 'cefclient.exe';
+end;
+
+
+class function TDBIChromium.GetLanguage: String;
+const
+  C_Key: array[0..1] of String = ('Control Panel\International\', 'LocaleName');
+begin
+  Result := (Local(TRegIniFile.Create(C_Key[0])).Obj as TRegIniFile).ReadString('', C_Key[1], '');
+end;
+
+
+class function TDBIChromium.GetProductVersion: String;
+const
+  FileLongVersion = '3.1453.1255.0';
+begin
+  Result := Format('CEF/%s', [FileLongVersion]);
+end;
+
+
+{##JVR
+class function TDBIChromium.GetProductVersion: String;
+var
+  Info: TDBIVersionInfo;
+begin
+  Info := Local(TDBIVersionInfo.Create).Obj as TDBIVersionInfo;
+  Info.FileName := ExtractFilePath(ParamStr(0)) + 'libcef.dll';
+
+  Result := Format('CEF/%s', [Info.FileLongVersion.AsString]);
+end;
+//}
+
+
+class function TDBIChromium.GetSingleProcess: Boolean;
+begin
+  Result := (Pos('--single-process', Windows.GetCommandLine) > 0)
+    or not FileExists(GetBrowserSubprocessPath);
+end;
+
+
+class procedure TDBIChromium.Initialisation;
+begin
+  FOldLibHandler := CefLoadLib;
+  CefLoadLib := LoadLibHandler;
+
+  CefSingleProcess := GetSingleProcess;
+  CefProductVersion := GetProductVersion;
+  CefBrowserSubprocessPath := GetBrowserSubprocessPath;
+
+  CefOnBeforeCommandLineProcessing := procedure(const ProcessType: Ustring; const CommandLine: ICefCommandLine) begin
+    CommandLine.AppendSwitchWithValue('lang', GetLanguage);
+
+    if IsDebuggerAttached then begin
+      // --enable-logging --no-sandbox --disk-cache-dir=cache
+      CommandLine.AppendSwitch('enable-logging');
+      CommandLine.AppendSwitch('no-sandbox');
+
+      // --log-severity=[verbose | info | warning | error | error-report | disable]
+      CommandLine.AppendSwitchWithValue('log-severity', 'verbose');
+      CommandLine.AppendSwitchWithValue('disk-cache-dir', 'cache');
+    end;
+  end;
+end;
+
+
+class function TDBIChromium.IsDebuggerAttached: Boolean;
+var
+  IsDebuggerPresent: function: Boolean; stdcall;
+  KernelHandle: THandle;
+begin
+  KernelHandle := GetModuleHandle(Kernel32);
+  @IsDebuggerPresent := GetProcAddress(KernelHandle, 'IsDebuggerPresent');
+  Result := (@IsDebuggerPresent <> nil) and IsDebuggerPresent;
+end;
+
+
+class function TDBIChromium.LoadLibHandler(
+  const Cache: UString;
+  const UserDataPath: UString;
+  const UserAgent: UString;
+  const ProductVersion: UString;
+  const Locale: UString;
+  const LogFile: UString;
+  const BrowserSubprocessPath: UString;
+  LogSeverity: TCefLogSeverity;
+  JavaScriptFlags: UString;
+  ResourcesDirPath: UString;
+  LocalesDirPath: UString;
+  SingleProcess: Boolean;
+  NoSandbox: Boolean;
+  CommandLineArgsDisabled: Boolean;
+  PackLoadingDisabled: Boolean;
+  RemoteDebuggingPort: Integer;
+  UncaughtExceptionStackSize: Integer;
+  ContextSafetyImplementation: Integer;
+  PersistSessionCookies: Boolean;
+  IgnoreCertificateErrors: Boolean;
+  BackgroundColor: TCefColor;
+  const AcceptLanguageList: UString;
+  WindowsSandboxInfo: Pointer;
+  WindowlessRenderingEnabled: Boolean
+  ): Boolean;
+var
+  FPUCW: Word;
+
+begin
+  CefLoadLib := FOldLibHandler;
+
+  FPUCW := Get8087CW;
+  try
+    Result := FOldLibHandler(
+      CefCache,
+      CefUserDataPath,
+      CefUserAgent,
+      CefProductVersion,
+      CefLocale,
+      CefLogFile,
+      CefBrowserSubprocessPath,
+      CefLogSeverity,
+      CefJavaScriptFlags,
+      CefResourcesDirPath,
+      CefLocalesDirPath,
+      CefSingleProcess,
+      CefNoSandbox,
+      CefCommandLineArgsDisabled,
+      CefPackLoadingDisabled,
+      CefRemoteDebuggingPort,
+      CefUncaughtExceptionStackSize,
+      CefContextSafetyImplementation,
+      CefPersistSessionCookies,
+      CefIgnoreCertificateErrors,
+      CefBackgroundColor,
+      CefAcceptLanguageList,
+      CefWindowsSandboxInfo,
+      CefWindowlessRenderingEnabled
+      );
+  finally
+    Set8087CW(FPUCW);
+  end;
+end;
+
+
+
+initialization
+  TDBIChromium.Initialisation;
+
+finalization
+  CefOnBeforeCommandLineProcessing := nil;
 
 end.

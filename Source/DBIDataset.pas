@@ -1021,14 +1021,14 @@ uses
   AnsiStrings,
 {$endif}
 {$ifdef DELPHI6}
-  RtlConsts, Variants, FmtBcd, MaskUtils,
+  Types, RtlConsts, Variants, FmtBcd, MaskUtils,
 {$else}
   Forms,
 {$endif DELPHI6}
 {$ifndef fpc}
   Consts, DBConsts, DBCommon, Mask,
 {$endif}
-  SysConst, Types, TypInfo, DBIUtils, DBIXmlUtils, Dialogs, DBIStrings;
+  SysConst, TypInfo, DBIUtils, DBIXmlUtils, Dialogs, DBIStrings;
 
 
 { Exceptions }

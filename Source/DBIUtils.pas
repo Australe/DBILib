@@ -34,7 +34,7 @@ uses
 {$ifndef fpc}
   Forms,
 {$endif}  
-  Windows, Messages, Classes, SysUtils, DB, DBIConst, DBIIntfConsts, IniFiles;
+  Windows, Messages, Classes, SysUtils, Menus, IniFiles, DB, DBIConst, DBIIntfConsts;
 
 type
   TDBIIniFile = class(TMemIniFile)
@@ -66,9 +66,6 @@ const
   DBIDebugKinds = [];
 
 type
-
-  { TDBIDebugInfo }
-
   TDBIDebugInfo = class(TPersistent)
   public
     class procedure Display(const Msg: String; Args: array of const);
@@ -76,6 +73,7 @@ type
     class function GetAttributes(const Value: TFieldAttributes): String;
     class function GetDataType(const Value: TFieldType): String;
 
+    class function IsDeveloper: Boolean;
     class procedure LogMsg(const Kind: TDBIDebugKind; const Msg: String; Args: array of const);
   end;
 
@@ -146,6 +144,21 @@ type
   end;  { TDBINullFlags }
 
 
+type
+  TDBIFieldMenuCopyToClipboard = class(TMenuItem)
+  private
+    FField: TField;
+
+  protected
+    procedure CopyToClipboardExecute(Sender: TObject);
+    class function NewItem(MenuItem: TMenuItem; Field: TField): TDBIFieldMenuCopyToClipboard;
+
+  public
+    class procedure BuildMenu(MenuItem: TMenuItem; ADataset: TDataset; const Enabled: Boolean);
+
+  end;
+
+
 {$ifndef fpc}
 type
   TDBICommandCallBack = procedure (const Parameters: String) of object;
@@ -207,12 +220,55 @@ type
 
 
 type
+  TDBICachedFiles = class(TComponent)
+  private
+    FFileList: TDBIFileList;
+    FPath: String;
+
+  protected
+    function GetFiles: TDBIFileList;
+
+    property FileList: TDBIFileList read GetFiles;
+
+  public
+    destructor Destroy; override;
+
+    function GetFileNameByIndex(const Index: Integer): String;
+    function IndexOfName(const AFileName: String): Integer;
+
+    property Files[const Index: Integer]: String read GetFileNameByIndex; default;
+    property Path: String read FPath write FPath;
+
+  end;
+
+{$ifndef fpc}
+  {$ifdef Delphi7}
+type
+  TDBIWindowsPath = class(TPersistent)
+  public
+    class function CheckPathName(const PathName: String): String;
+    class function GetLongName(const PathName: String): String;
+    class function GetShortName(const PathName: String): String;
+  end;
+  {$endif}
+{$endif}
+
+type
   TDBIHostInfo = class(TPersistent)
   public
     class function GetCacheUserFolder: String;
     class function GetComputerName: String;
     class function GetLocalHostName: String;
+    class function GetLocalIPAddress: String;
+    class function GetServerName(Retries: Integer = 1): WideString;
+    class function GetSystemFolderName: String;
     class function GetUserName: WideString;
+{$ifdef Delphi2010}
+    class function GetUserNameExString(ANameFormat: COMPUTER_NAME_FORMAT): WideString;
+{$endif}
+    class function GetWindowsFolderName: String;
+    class function IsAdministrator: Boolean;
+    class function IsWinsockInitialized: Boolean;
 
   public
     property CacheUserFolder: String read GetCacheUserFolder;
@@ -293,7 +349,7 @@ uses
 {$ifdef DelphiXE4}
   AnsiStrings,
 {$endif}
-  WinSock, TypInfo, Dialogs, Contnrs, Registry, DBIXbaseConsts;
+  Clipbrd, WinSock, TypInfo, Dialogs, Contnrs, Registry, DBIXbaseConsts;
 
 
 { ILocalInstance }
@@ -343,6 +399,7 @@ end;
 
 
 { TDBIMouseInfo }
+
 {$ifndef fpc}
 class function TDBIMouseInfo.GetShiftState: TShiftState;
 var
@@ -356,6 +413,9 @@ end;
 
 
 
+
+
+{ TDBIHostInfo }
 
 class function TDBIHostInfo.GetCacheUserFolder: String;
 begin
@@ -385,6 +445,150 @@ end;
 
 // _____________________________________________________________________________
 {**
+  Jvr - 23/01/2003 15:22:26.<P>
+}
+class function TDBIHostInfo.GetLocalHostName: String;
+{$ifdef fpc}
+begin
+  Result := 'localpc';
+end;
+{$else}
+var
+  HostName: AnsiString;
+  WSAData: TWSAData;
+
+begin
+  if not IsWinsockInitialized then begin
+    WSAStartup(MAKEWORD(1, 1), WSAData);
+    if not IsWinsockInitialized then begin
+      Exit;
+    end;
+  end;
+
+  SetLength(HostName, 255);
+  if WinSock.GetHostName(PAnsiChar(HostName), Length(HostName)) <> 0 then begin
+{$ifdef DELPHI6}
+    RaiseLastOSError;
+{$else}
+    RaiseLastWin32Error;
+{$endif}
+  end;
+  SetLength(HostName, {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLen(PAnsiChar(HostName)));
+
+  Result := String(HostName);
+  WSACleanup;
+end;
+{$endif}
+
+
+class function TDBIHostInfo.GetLocalIPAddress: String;
+type
+  PInAddrList = ^TInAddrList;
+  TInAddrList = array[0..10] of PInAddr;
+
+const
+  Separator = ',';
+
+var
+  WSAData: TWSAData;
+  PHostEntry: PHostEnt;
+  HostName: array[0..255] of AnsiChar;
+  Index: Integer;
+  PAddressList: PInAddrList;
+
+begin
+  Result := '';
+  Index := 0;
+
+  if not IsWinsockInitialized then begin
+    WSAStartup(MAKEWORD(1, 1), WSAData);
+    if not IsWinsockInitialized then begin
+      Exit;
+    end;
+  end;
+
+  if GetHostName(@HostName, SizeOf(HostName)) = SOCKET_ERROR then begin
+    Exit;
+  end;
+
+  PHostEntry := Winsock.GetHostByName(@HostName);
+  if not Assigned(PHostEntry) then begin
+    raise Exception.CreateFmt('Host "%s" not found."', [HostName]);
+  end;
+
+  PAddressList := PInAddrList(PHostEntry^.H_addr_list);
+  while Assigned(PAddressList^[Index]) do begin
+    Result := Result + String(Inet_ntoa(PAddressList^[Index]^));
+
+    Inc(Index);
+
+    if Assigned(PAddressList^[Index]) then begin
+      Result := Result + Separator;
+    end;
+  end;
+  WSACleanup;
+end;
+
+
+// API Buffer Functions
+type
+  NET_API_STATUS = DWORD;
+
+function NetApiBufferFree(
+  Buffer: Pointer
+  ): NET_API_STATUS; stdcall; external 'netapi32.dll' name 'NetApiBufferFree';
+
+// Domain Controller Functions
+function NetGetAnyDCName(
+  ServerName: PWideChar;
+  DomainName: PWideChar;
+  var BufPtr: Pointer
+  ): NET_API_STATUS; stdcall; external 'netapi32.dll' name 'NetGetAnyDCName';
+
+
+class function TDBIHostInfo.GetServerName(Retries: Integer = 1): WideString;
+var
+  ReturnCode: DWORD;
+  PServerName: Pointer;
+
+begin
+  Result := '';
+  PServerName := nil;
+
+  while (Retries > 0) do begin
+    try
+      ReturnCode := NetGetAnyDCName(nil, nil, PServerName);
+
+      if (ReturnCode = ERROR_SUCCESS) then begin
+        Result := WideString(PWideChar(PServerName));
+        Break;
+      end;
+
+      Dec(Retries);
+      Sleep(10);
+    finally
+      if Assigned(PServerName) then begin
+        NetApiBufferFree(PServerName);
+      end;
+    end;
+  end;
+end;
+
+
+class function TDBIHostInfo.GetSystemFolderName: String;
+var
+  Size: DWORD;
+
+begin
+  Size := MAX_PATH;
+  SetLength(Result, Size);
+  Size := GetSystemDirectory(PChar(Result), Size);
+  SetLength(Result, Size);
+end;
+
+
+// _____________________________________________________________________________
+{**
   Jvr - 04/09/2002 13:52:42.<P>
 }
 class function TDBIHostInfo.GetUserName: WideString;
@@ -401,34 +605,156 @@ begin
   Result := WideString(Buffer);
 end;
 
+{$ifdef Delphi2010}
+class function TDBIHostInfo.GetUserNameExString(ANameFormat: _COMPUTER_NAME_FORMAT): WideString;
+var
+  Size: DWORD;
+
+begin
+  Result := '';
+  Size := 1024;
+
+  SetLength(Result, Size);
+  if GetComputerNameExW(ANameFormat, PWideChar(Result), Size) then begin
+    SetLength(Result, Size);
+  end;
+end;
+{$endif}
+
+class function TDBIHostInfo.GetWindowsFolderName: String;
+var
+  Size: Integer;
+
+begin
+  Size := MAX_PATH;
+  SetLength(Result, Size);
+  Size := GetWindowsDirectory(PChar(Result), Size);
+  SetLength(Result, Size);
+end;
+
+
 
 // _____________________________________________________________________________
 {**
-  Jvr - 23/01/2003 15:22:26.<P>
+  Jvr - 14/04/2016 12:48:21.<P>
+
+  This routine returns TRUE if the callers process is a member of the
+  Administrators local group. Caller is NOT expected to be impersonating anyone
+  and is expected to be able to open its own process and process token.
 }
-class function TDBIHostInfo.GetLocalHostName: String;
-{$ifdef fpc}
-begin
-  Result := 'localpc';
-end;
-{$else}
+
+function CheckTokenMembership(
+  TokenHandle: THandle;
+  SidToCheck: PSID;
+  out Member: BOOL
+  ): BOOL; stdcall; external advapi32 name 'CheckTokenMembership';
+
+class function TDBIHostInfo.IsAdministrator: Boolean;
+const
+  SECURITY_NT_AUTHORITY: TSidIdentifierAuthority = (Value: (0, 0, 0, 0, 0, 5));
+  SECURITY_BUILTIN_DOMAIN_RID = ($00000020);
+  DOMAIN_ALIAS_RID_ADMINS = ($00000220);
+
 var
-  HostName: AnsiString;
+  Member: BOOL;
+  AdministratorsGroup: PSID;
 
 begin
-  SetLength(HostName, 255);
-  if WinSock.GetHostName(PAnsiChar(HostName), Length(HostName)) <> 0 then begin
-{$ifdef DELPHI6}
-    RaiseLastOSError;
-{$else}
-    RaiseLastWin32Error;
-{$endif}
-  end;
-  SetLength(HostName, {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLen(PAnsiChar(HostName)));
+  Result := AllocateAndInitializeSid(
+    SECURITY_NT_AUTHORITY,
+    2,                            // 2 sub-authorities
+    SECURITY_BUILTIN_DOMAIN_RID,  // sub-authority 0
+    DOMAIN_ALIAS_RID_ADMINS,      // sub-authority 1
+    0, 0, 0, 0, 0, 0,             // sub-authorities 2-7 not passed
+    AdministratorsGroup
+    );
+  Win32Check(Result);
 
-  Result := String(HostName);
+  Result := CheckTokenMembership(0, AdministratorsGroup, Member);
+  Win32Check(Result);
+
+  Result := Member;
+  FreeSid(AdministratorsGroup);
 end;
+
+
+class function TDBIHostInfo.IsWinsockInitialized: Boolean;
+var
+  Channel: TSocket;
+
+begin
+  Channel := Socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  Result := (Channel <> INVALID_SOCKET) or (WSAGetLastError <> WSANOTINITIALISED);
+end;
+
+
+
+
+
+{ TDBIWindowsPath }
+{$ifndef fpc}
+  {$ifdef Delphi7}
+class function TDBIWindowsPath.GetShortName(const PathName: String): String;
+begin
+  SetLength(Result, MAX_PATH + 1);
+  GetShortPathName(PChar(PathName), PChar(Result), MAX_PATH);
+  Result := PChar(Result);
+end;
+
+
+class function TDBIWindowsPath.CheckPathName(const PathName: String): String;
+begin
+  Result := GetLongName(GetShortName(PathName));
+  if (Result = '') then begin
+    raise EFOpenError.CreateFmt('Path "%s" not found', [PathName]);
+  end;
+end;
+
+
+class function TDBIWindowsPath.GetLongName(const PathName: String): String;
+begin
+  SetLength(Result, MAX_PATH + 1);
+  GetLongPathName(PChar(PathName), PChar(Result), MAX_PATH);
+  Result := PChar(Result);
+end;
+  {$endif}
 {$endif}
+
+
+
+
+{ TDBICachedFiles }
+
+destructor TDBICachedFiles.Destroy;
+begin
+  FreeAndNil(FFileList);
+
+  inherited Destroy;
+end;
+
+
+function TDBICachedFiles.GetFileNameByIndex(const Index: Integer): String;
+begin
+  Result := FFileList.ValueFromIndex[Index];
+end;
+
+
+function TDBICachedFiles.GetFiles: TDBIFileList;
+begin
+  if not Assigned(FFileList) then begin
+    FFileList := TDBIFileList.Create;
+    FFileList.Duplicates := dupIgnore;
+    FFileList.Sorted := True;
+    FFileList.GetFiles(Path, '*.pas');
+  end;
+  Result := FFileList;
+end;
+
+
+function TDBICachedFiles.IndexOfName(const AFilename: String): Integer;
+begin
+  Result := FileList.IndexOfName(ChangeFileExt(ExtractFileName(AFileName), ''));
+end;
 
 
 
@@ -732,6 +1058,51 @@ begin
   end;
 end;
 {$endif}
+
+
+
+
+
+{ TDBIFieldMenuCopyToClipboard }
+
+class function TDBIFieldMenuCopyToClipboard.NewItem(MenuItem: TMenuItem; Field: TField): TDBIFieldMenuCopyToClipboard;
+begin
+  Result := Self.Create(MenuItem);
+  Result.FField := Field;
+  Result.OnClick := Result.CopyToClipboardExecute;
+  Result.Caption := Field.FieldName;
+
+  MenuItem.Add(Result);
+end;
+
+
+procedure TDBIFieldMenuCopyToClipboard.CopyToClipboardExecute(Sender: TObject);
+begin
+  if (Sender is Self.ClassType) then begin
+    Clipboard.AsText := TDBIFieldMenuCopyToClipboard(Sender).FField.AsString;
+  end;
+end;
+
+
+class procedure TDBIFieldMenuCopyToClipboard.BuildMenu(MenuItem: TMenuItem; ADataset: TDataset; const Enabled: Boolean);
+var
+  Index: Integer;
+
+begin
+  if Assigned(MenuItem) and Assigned(ADataset) then begin
+{$ifndef fpc}
+    MenuItem.AutoHotKeys := maManual;
+{$endif}
+    MenuItem.Enabled := Enabled;
+    MenuItem.Clear;
+
+    if MenuItem.Enabled then begin
+      for Index := 0 to ADataset.Fields.Count-1 do begin
+        NewItem(MenuItem, ADataset.Fields[Index]);
+      end;
+    end;
+  end;
+end;
 
 
 
@@ -1404,6 +1775,12 @@ end;
 class function TDBIDebugInfo.GetDataType(const Value: TFieldType): String;
 begin
   Result := TypInfo.GetEnumName(TypeInfo(TFieldType), Ord(Value));
+end;
+
+
+class function TDBIDebugInfo.IsDeveloper: Boolean;
+begin
+  Result := CompareText('jvr', String(TDBIHostInfo.GetUserName)) = 0;
 end;
 
 

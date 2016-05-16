@@ -30,8 +30,8 @@ unit DBIGitInfos;
 interface
 
 uses
-  Windows, Messages, SysUtils, Classes, Forms, Dialogs, DBIProcesses,
-  DB, DBIDataset, DBIObjectListDatasets, DBIDataPacketWriters;
+  Windows, SysUtils, Classes, Forms, Dialogs, Contnrs, DBIComponents, DBIProcesses,
+  DBIUtils, DB, DBClient, DBIConst, DBIDataset, DBIObjectListDatasets, DBIDataPacketWriters;
 
 type
   EGitCustomError = class(Exception);
@@ -39,42 +39,22 @@ type
 
 type
   TDBIGitFileStatus = (gfsCommitted, gfsStaged, gfsUnstaged, gfsUntracked);
-  TDBIPathType = (
-    ptCmdCompare,
-    ptCmdExplorer,
-    ptCmdNotePad,
-    ptCmdRunDll,
-    ptCmdWIN32,
-    ptCmdWOW64,
-    ptGitConfig,
-    ptGit,
-    ptGrep,
-    ptXE3,
-    ptD2006,
-    ptSource,
-    pt3rdParty
-    );
 
-const
-  PathNames: array[TDBIPathType] of String = (
-    { ptCmdCompare  }  'C:\Program Files\Beyond Compare 3\bcomp.exe',
-    { ptCmdExplorer }  'C:\Windows\explorer.exe',
-    { ptCmdNotePad  }  'C:\Windows\System32\notepad.exe',
-    { ptCmdRunDll   }  'rundll32.exe',
-    { ptCmdWIN32    }  'C:\Windows\System32\cmd.exe /c',
-    { ptCmdWOW64    }  'C:\Windows\SysWOW64\cmd.exe /c',
-    { ptGitConfig   }  '\.git\config',
-    { ptGit         }  'C:\Program Files\git\bin\git.exe',
-    { ptGrep        }  'C:\Program Files\Git\bin\grep.exe',
-    { ptXE3         }  'C:\Program Files\Embarcadero\RAD Studio\10.0\Source\',
-    { pt2006        }  'C:\Program Files\Borland\BDS\4.0\Source\',
-    { ptSource      }  'O:\Prj\omSource\',
-    { pt3rdParty    }  'O:\Prj\3rdParty\'
-    );
+type
+  TDBIGitPersistent = class(TPersistent)
+  protected
+    class procedure BuildFieldDefs(ADataset: TDataset); virtual; abstract;
+    class procedure ConfigureFields(ADataset: TDataset); virtual; abstract;
+    class procedure FilterDataset(ADataset: TDataset); virtual;
+
+  public
+    class procedure LoadDataset(ADataset: TDataset; Strings: TStrings); virtual;
+
+  end;
 
 
 type
-  TDBIGitLog = class(TPersistent)
+  TDBIGitLog = class(TDBIGitPersistent)
   private
     FHash: String;
     FAuthorName: String;
@@ -84,6 +64,10 @@ type
     FCommitterEmail: String;
     FCommitterDate: String;
     FSubject: String;
+
+  protected
+    class procedure BuildFieldDefs(ADataset: TDataset); override;
+    class procedure ConfigureFields(ADataset: TDataset); override;
 
   published
     property Hash: String read FHash write FHash;
@@ -95,28 +79,54 @@ type
     property CommitterDate: String read FCommitterDate write FCommitterDate;
     property Subject: String read FSubject write FSubject;
 
-  public
-    class procedure BuildFieldDefs(ADataset: TDataset);
-
   end;
 
 
 type
-  TDBIGitStatus = class(TPersistent)
+  // NOTES:
+  //   The status Column consists of (2) two bytes
+  //   Committed = (Status = '  ')
+  //   Staged = ('A', 'D', 'M', 'R')   in Status[1] - gfsStatus
+  //   Unstaged = ('A', 'D', 'M', 'R') in Status[2] - gfsUnstaged
+  //   Untracked = (Status = '??')
+
+  TDBIGitStatus = class(TDBIGitPersistent)
   private
     FStatus: AnsiString;
     FFileName: AnsiString;
     FSourceName: AnsiString;
+
+  protected
+    class procedure BuildFieldDefs(ADataset: TDataset); override;
+    class procedure ConfigureFields(ADataset: TDataset); override;
+    class procedure FilterDataset(ADataset: TDataset); override;
+    class function Excluded(Item: TDBIGitStatus): Boolean; virtual;
 
   published
     property Status: AnsiString read FStatus write FStatus;
     property FileName: AnsiString read FFileName write FFileName;
     property SourceName: AnsiString read FSourceName write FSourceName;
 
-  public
-    class procedure BuildFieldDefs(ADataset: TDataset);
-    class procedure UpdateFields(ADataset: TDataset);
+  end;
 
+  TDBIGitCommittedStatus = class(TDBIGitStatus)
+  protected
+    class function Excluded(Item: TDBIGitStatus): Boolean; override;
+  end;
+
+  TDBIGitStagedStatus = class(TDBIGitStatus)
+  protected
+    class function Excluded(Item: TDBIGitStatus): Boolean; override;
+  end;
+
+  TDBIGitUnstagedStatus = class(TDBIGitStatus)
+  protected
+    class function Excluded(Item: TDBIGitStatus): Boolean; override;
+  end;
+
+  TDBIGitUntrackedStatus = class(TDBIGitStatus)
+  protected
+    class function Excluded(Item: TDBIGitStatus): Boolean; override;
   end;
 
 
@@ -134,16 +144,54 @@ type
     destructor Destroy; override;
 
     property Data: TStrings read GetData;
+    property Stream;
+  end;
+
+
+type
+  TDBIVclFiles = class(TDBICachedFiles)
+  public
+    constructor Create(AOwner: TComponent); override;
+
+  published
+    property Path;
 
   end;
 
 
 type
-  TDBIGitCustomCommandProcessor = class(TDBICustomProcess)
+  TDBIShellExecute = class(TComponent)
+  private
+    FFileName: String;
+    FParameters: String;
+    FTargetName: String;
+
+  public
+    constructor Create(AOwner: TComponent); override;
+
+    function Execute: Boolean; overload; virtual;
+
+    class function Execute(const AFileName: String): Boolean; overload; virtual;
+
+  published
+    property FileName: String read FFileName write FFileName stored False;
+    property Parameters: String read FParameters write FParameters;
+    property TargetName: String read FTargetName write FTargetName;
+
+  end;
+
+  TDBIFileOpenFolder = class(TDBIShellExecute);
+  TDBIFileOpenWith = class(TDBIShellExecute);
+  TDBIFileOpenWithDefault = class(TDBIShellExecute);
+
+
+type
+  TDBICustomCommandProcessor = class(TDBICustomProcess)
   private
     FFileName: TFileName;
-    FStream: TStream;
     FOnEmit: TDBIProcessEmit;
+    FPaths: TStringList;
+    FShell: String;
 
   protected
     procedure Emit(
@@ -152,20 +200,26 @@ type
       const EmitKind: TDBIProcessEmitKind
       ); override;
 
+    function GetCommandLine: String; override;
     function GetFileName: TFileName; virtual;
+    function GetPath: String; virtual;
+    function GetPaths: TStrings;
     function GetRepositoryName: String; overload;
-    function GetStream: TStream;
-    function GetTargetName: String; override;
+
     procedure SetFileName(const Value: TFileName); virtual;
+    procedure SetPath(const Value: String);
+
+    function ProcessExecute: Boolean; override;
 
     property FileName: TFileName read GetFileName write SetFileName;
-    property Stream: TStream read GetStream;
+    property Paths: TStrings read GetPaths;
     property RepositoryName: String read GetRepositoryName;
 
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    function Execute: Boolean; override;
+
+    function Execute: Boolean; overload; override;
 
     class function ExtractRelativeUnixName(
       const FileName: String;
@@ -174,209 +228,152 @@ type
 
     class function GetRepositoryName(const AFileName: TFileName): String; overload;
 
-    property OnEmit: TDBIProcessEmit read FOnEmit write FOnEmit;
-  end;
-
-
-  TDBIGitCommandProcessor = class(TDBIGitCustomCommandProcessor)
-  protected
-    function GetCommandLine: String; override;
-
-  public
+    property CommandLine;
     property Output;
-    property Parameters;
     property SourceName;
 
+    property OnEmit: TDBIProcessEmit read FOnEmit write FOnEmit;
+
+  published
+    property Path: String read GetPath write SetPath;
+    property Shell: String read FShell write FShell;
+
+    property Options;
+    property Parameters;
+    property TargetName;
+    property Tag stored False;
   end;
 
 
-type
-  TDBIBeyondCompare = class(TDBICustomProcess)
+  TDBIFileOpenCompare = class(TDBICustomCommandProcessor)
   private
     FFileName1: TFileName;
     FFileName2: TFileName;
 
   protected
-    function GetParameters: String; override;
     function GetSourceName: String; override;
-    function GetTargetName: String; override;
 
   public
-    property FileName1: TFileName read FFileName1 write FFileName1;
-    property FileName2: TFileName read FFileName2 write FFileName2;
-    property Options;
-    property Visible;
+    class function Execute(const AFileName1, AFileName2: String): Boolean; overload;
+
+  published
+    property FileName1: TFileName read FFileName1 write FFileName1 stored False;
+    property FileName2: TFileName read FFileName2 write FFileName2 stored False;
 
   end;
 
 
-type
-  TDBIGitBranchInfo = class(TDBIGitCustomCommandProcessor)
-  protected
-    function GetItemIndex: Integer;
-    function GetParameters: String; override;
-
+  TDBIFileOpenEdit = class(TDBICustomCommandProcessor)
   public
-    property ItemIndex: Integer read GetItemIndex;
-    property Output;
-    property SourceName;
-    property Stream;
+    class function Execute(const AFileName: String): Boolean; overload;
+
+  published
+    property FileName stored False;
 
   end;
 
 
-type
-  TDBIGitLogInfo = class(TDBIGitCustomCommandProcessor)
+  TDBIGitCustomCommand = class(TDBICustomCommandProcessor)
   protected
-    function GetParameters: String; override;
+    function GetSourceName: String; override;
 
-    procedure ProcessOutputLine(const Value: AnsiString); override;
-
+    procedure SetOptions(const Value: TDBIProcessInfooptions); override;
     procedure SetFileName(const Value: TFileName); override;
-
-  public
-    function Execute: Boolean; override;
-
-    property FileName;
-    property SourceName;
-    property Stream;
-
-  end;
-
-
-type
-  TDBIGitShowInfo = class(TDBIGitCustomCommandProcessor)
-  private
-    FSha1: String;
-
-  protected
-    function GetParameters: String; override;
-
-  public
-    property FileName;
-    property Sha1: String read FSha1 write FSha1;
-    property SourceName;
-    property Output;
-
-  end;
-
-
-type
-  TDBIGitStatusInfo = class(TDBIGitCustomCommandProcessor)
-  protected
-    function GetParameters: String; override;
-
-    procedure ProcessOutputLine(const Value: AnsiString); override;
-
-  public
-    function Execute: Boolean; override;
-
-    property FileName;
-    property SourceName;
-    property Stream;
-
-  end;
-
-
-type
-  TDBIGitCommitInfo = class(TDBIGitCustomCommandProcessor)
-  protected
-    function GetParameters: String; override;
-
-  public
-    property SourceName;
-    property Output;
-
-  end;
-
-
-type
-  TDBIGitFileCommitInfo = class(TDBIGitCustomCommandProcessor)
-  protected
-    function GetParameters: String; override;
-
-    procedure ProcessOutputLine(const Value: AnsiString); override;
-
-  public
-    function Execute: Boolean; override;
-
-    property FileName;
-    property SourceName;
-    property Stream;
-
-  end;
-
-
-type
-  TDBIGitFileCheckout = class(TDBIGitCustomCommandProcessor)
-  protected
-    function GetParameters: String; override;
-
-  public
-    property FileName;
-    property Options;
-    property Output;
-    property SourceName;
-
-  end;
-
-
-type
-  TDBIGitFileCommit = class(TDBIGitCustomCommandProcessor)
-  private
-    FComment: String;
-
-  protected
-    function GetParameters: String; override;
-
-  public
-    property Comment: String read FComment write FComment;
-    property SourceName;
-    property Output;
-
-  end;
-
-
-type
-  TDBIGitFileCompare = class(TDBIGitCustomCommandProcessor)
-  private
-    FLeftHash: String;
-    FRightHash: String;
-
-  protected
-    function GetParameters: String; override;
 
   public
     constructor Create(AOwner: TComponent); override;
 
-    property FileName;
-    property Options;
-    property Output;
-    property LeftHash: String read FLeftHash write FLeftHash;
-    property RightHash: String read FRightHash write FRightHash;
-    property SourceName;
-
   end;
 
 
-type
-  TDBIGitCustomFileSearch = class(TDBIGitCustomCommandProcessor)
+  TDBIGitCommandProcessor = class(TDBIGitCustomCommand)
   protected
     function GetCommandLine: String; override;
-    function GetParameters: String; override;
-
-  public
-    function Execute: Boolean; override;
-
-    property FileName;
-    property Output;
-    property SourceName;
-
   end;
 
 
-type
-  TDBIGitFileSearch = class(TDBIGitCustomFileSearch)
+  TDBIGitBranchCheckout = class(TDBIGitCustomCommand)
+  private
+    FBranch: String;
+  published
+    property Branch: String read FBranch write FBranch stored False;
+  end;
+
+
+  TDBIGitBranchInfo = class(TDBIGitCustomCommand)
+  protected
+    function GetItemIndex: Integer;
+  public
+    property ItemIndex: Integer read GetItemIndex;
+  end;
+
+
+  TDBIGitCommitInfo = class(TDBIGitCustomCommand);
+  TDBIGitStash = class(TDBIGitCustomCommand);
+  TDBIGitUncommit = class(TDBIGitCustomCommand);
+
+
+  TDBIGitFileCommit = class(TDBIGitCustomCommand)
+  private
+    FComment: String;
+  published
+    property Comment: String read FComment write FComment stored False;
+  end;
+
+
+  TDBIGitCustomFileCommand = class(TDBIGitCustomCommand)
+  published
+    property FileName stored False;
+  end;
+
+
+  TDBIGitLogInfo = class(TDBIGitCustomFileCommand)
+  protected
+    procedure ProcessOutputLine(const Value: String); override;
+  end;
+
+
+  TDBIGitShowInfo = class(TDBIGitCustomFileCommand)
+  private
+    FSha1: String;
+  published
+    property Sha1: String read FSha1 write FSha1 stored False;
+  end;
+
+
+  TDBIGitCustomFileStatus = class(TDBIGitCustomFileCommand)
+  private
+    FFileName1: String;
+    FFileName2: String;
+    FLineFormat: String;
+    FStatus: String;
+    FStatusSize: Integer;
+  protected
+    procedure ProcessOutputLine(const Value: String); override;
+  published
+    property FileName1: String read FFileName1 write FFileName2 stored False;
+    property FileName2: String read FFileName2 write FFileName2 stored False;
+    property LineFormat: String read FLineFormat write FLineFormat;
+    property Status: String read FStatus write FStatus stored False;
+    property StatusSize: Integer read FStatusSize write FStatusSize stored False;
+  end;
+
+
+  TDBIGitStatusInfo = class(TDBIGitCustomFileStatus);
+  TDBIGitFileCommitInfo = class(TDBIGitCustomFileStatus);
+
+
+  TDBIGitFileCompare = class(TDBIGitCustomFileCommand)
+  private
+    FLeftHash: String;
+    FRightHash: String;
+  published
+    property LeftHash: String read FLeftHash write FLeftHash stored False;
+    property RightHash: String read FRightHash write FRightHash stored False;
+  end;
+
+
+  TDBIGitFileSearch = class(TDBIGitCustomFileCommand)
   private
     FCaption: String;
 
@@ -388,120 +385,31 @@ type
     procedure MessageFileNotFound;
 
     property Caption: String read FCaption write FCaption;
-    property Options;
 
   end;
 
 
-type
-  TDBIGitFileStage = class(TDBIGitCustomCommandProcessor)
+  TDBIGitFileStage = class(TDBIGitCustomFileCommand)
   private
     FFileStatus: AnsiChar;
 
   protected
     function GetParameters: String; override;
 
-  public
-    property FileName;
-    property FileStatus: AnsiChar read FFileStatus write FFileStatus;
-    property SourceName;
-    property Output;
+  published
+    property FileStatus: AnsiChar read FFileStatus write FFileStatus stored False;
 
   end;
 
 
-type
-  TDBIGitFileUnstage = class(TDBIGitCustomCommandProcessor)
-  protected
-    function GetParameters: String; override;
-
-  public
-    property FileName;
-    property SourceName;
-    property Output;
-
-  end;
-
-
-type
-  TDBIGitUncommit = class(TDBIGitCustomCommandProcessor)
-  protected
-    function GetParameters: String; override;
-
-  public
-    property SourceName;
-    property Output;
-
-  end;
+  TDBIGitFileCheckout = class(TDBIGitCustomFileCommand);
+  TDBIGitFileUnstage = class(TDBIGitCustomFileCommand);
 
 
 implementation
 
 uses
-  SysConst, UITypes, DBIUtils, DBIStrings, DBIDialogs;
-
-
-function Is64Bit: Boolean;
-begin
-  Result := SizeOf(Pointer) = 8
-end;
-
-
-function IsLaterThanWindowsXP: Boolean;
-var
-  osVerInfo: TOSVersionInfo;
-begin
-  osVerInfo.dwOSVersionInfoSize := SizeOf(TOSVersionInfo) ;
-  Result :=  Windows.GetVersionEx(osVerInfo) and (osVerInfo.dwMajorVersion > 5);
-end;
-
-type
-  // Type of IsWow64Process API fn
-  TIsWow64Process = function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
-
-// Returns true if the current process is executing as a 32 bit process under
-// WOW64 on 64 bit Windows. s gives status message}
-function IsWow64: Boolean;
-var
-  IsWow64Result: BOOL;              // Result from IsWow64Process
-  IsWow64Process: TIsWow64Process;  // IsWow64Process fn reference
-
-begin
-  Result := False;
-
-  // Try to load required function from kernel32
-  IsWow64Process := Windows.GetProcAddress(Windows.GetModuleHandle('kernel32'), 'IsWow64Process');
-  if Assigned(IsWow64Process) then begin
-    if IsWow64Process(Windows.GetCurrentProcess, IsWow64Result) then begin
-      Result := IsWow64Result;
-    end;
-  end;
-end;
-
-
-
-
-
-{ TDBIGitUnCommit }
-
-function TDBIGitUncommit.GetParameters: String;
-begin
-  Result := 'reset --soft HEAD^';
-end;
-
-
-
-
-
-{ TDBIGitFileUnstage }
-
-function TDBIGitFileUnstage.GetParameters: String;
-begin
-  Result := 'reset ' + FileName;
-end;
-
-
-
+  SysConst, Types, ShellAPI, UITypes, DBIStrings, DBITypInfo, DBIDialogs, DBITokenizers;
 
 
 { TDBIGitFileStage }
@@ -522,16 +430,14 @@ end;
 
 { TDBIGitFileSearch }
 
-type
-  SearchTypes = ptSource..pt3rdParty;
-
 function TDBIGitFileSearch.Execute: Boolean;
 const
   Title = 'Select applicable file name';
 
 var
-  PathType: TDBIPathType;
   TempName: TFileName;
+  FileNames: TStringList;
+  Index: Integer;
 
 begin
   TempName := '';
@@ -541,15 +447,17 @@ begin
     Caption := Title;
   end;
 
-  for PathType := Low(SearchTypes) to High(SearchTypes) do begin
-    SourceName := PathNames[PathType];
+  for Index := 0 to Paths.Count-1 do begin
+    SourceName := Paths[Index];
 
-    inherited Execute;
-
-    Result := Output.Count > 0;
+    Result := ProcessExecute and (Output.Count > 0);
     if Result then begin
-      if (Output.Count > 1) then begin
-        TempName := TDBIDialogSelect.Execute(Output, Caption);
+      FileNames := Local(TStringList.Create).Obj as TStringList;
+      FileNames.Duplicates := dupIgnore;
+      FileNames.Sorted := True;
+      FileNames.Assign(Output);
+      if (FileNames.Count > 1) then begin
+        TempName := TDBIDialogSelect.Execute(FileNames, Caption);
       end
       else begin
         TempName := Output[0];
@@ -569,7 +477,7 @@ end;
 class function TDBIGitFileSearch.FindFile(FileName: String): Boolean;
 var
   Git: TDBIGitFileSearch;
-  PathType: TDBIPathType;
+  Index: Integer;
 
 begin
   FileName := ExtractFileName(FileName);
@@ -579,8 +487,8 @@ begin
     Git := Local(Self.Create(nil)).Obj as Self;
     Git.FileName := FileName;
 
-    for PathType := Low(SearchTypes) to High(SearchTypes) do begin
-      Git.SourceName := PathNames[PathType];
+    for Index := 0 to Git.Paths.Count-1 do begin
+      Git.SourceName := Git.Paths[Index];
       Git.ProcessExecute;
 
       Result := Git.Output.Count > 0;
@@ -606,199 +514,31 @@ begin
 end;
 
 
+{ TDBIGitCustomFileStatus }
 
-
-
-{ TDBIGitCustomFileSearch }
-
-function TDBIGitCustomFileSearch.Execute: Boolean;
-const
-  Prompt = 'Command "%s" failed';
-
-begin
-  Emit(Self, '', ioTrace);
-  Emit(Self, '[ ' + SourceName + ' ] ' + GetCommandLine, ioTrace);
-
-  Result := ProcessExecute;
-  if not Result then begin
-    Emit(Self, 'File "' + FileName + '" NOT found! ', ioWarning);
-  end;
-end;
-
-
-function TDBIGitCustomFileSearch.GetCommandLine: String;
-begin
-  if IsWow64 then begin
-    Result := PathNames[ptCmdWOW64] + ' ' + '"' + inherited GetCommandLine + '"';
-  end
-  else begin
-    Result := PathNames[ptCmdWIN32] + ' ' + '"' + inherited GetCommandLine + '"';
-  end;
-end;
-
-
-function TDBIGitCustomFileSearch.GetParameters: String;
-begin
-  Result := 'ls-files | "' + PathNames[ptGrep] + '" -i ' + FileName;
-end;
-
-
-
-
-
-{ TDBIGitFileCompare }
-
-constructor TDBIGitFileCompare.Create(AOwner: TComponent);
-begin
-  inherited Create(AOwner);
-
-  Options := [piDetachedProcess, piRedirectOutput];
-end;
-
-function TDBIGitFileCompare.GetParameters: String;
-begin
-  Result := 'difftool -y ' + LeftHash + ' ' + RightHash + ' ' + FileName;
-end;
-
-
-
-
-{ TDBIGitFileCommit }
-
-function TDBIGitFileCommit.GetParameters: String;
-begin
-  Result := 'commit -m "' + Comment + '"';
-end;
-
-
-
-
-
-{ TDBIGitFileCheckout }
-
-function TDBIGitFileCheckout.GetParameters: String;
-begin
-  Result := 'checkout ' + FileName;
-end;
-
-
-
-
-
-{ TDBIGitFileCommitInfo }
-
-function TDBIGitFileCommitInfo.Execute: Boolean;
-var
-  ODS: TObjectListDataset;
-  Writer: TDBIGitLogDataPacketWriter;
-
-begin
-  Result := inherited Execute;
-
-  if Result then begin
-    ODS := Local(TObjectListDataset.Create(nil)).Obj as TObjectListDataset;
-    ODS.ClassTypeName := TDBIGitStatus.ClassName;
-
-    TDBIGitStatus.BuildFieldDefs(ODS);
-
-    Writer := Local(TDBIGitLogDataPacketWriter.Create).Obj as TDBIGitLogDataPacketWriter;
-    Writer.Data.Assign(Output);
-    Writer.Dataset := ODS;
-    Writer.SaveToStream(Stream);
-  end
-  else begin
-    raise EGitStatusError.Create('Fatal Git Error!'#13#13 + Output.Text);
-  end;
-end;
-
-
-function TDBIGitFileCommitInfo.GetParameters: String;
-begin
-  Result := '--no-pager diff --name-only HEAD^ HEAD';
-end;
-
-
-procedure TDBIGitFileCommitInfo.ProcessOutputLine(const Value: AnsiString);
-var
-  Line: AnsiString;
-
-begin
-  Line := '<ROW ' + 'Status="" FileName="' + Value + '"/>';
-
-  inherited ProcessOutputLine(Line);
-end;
-
-
-
-
-
-{ TDBIGitCommitInfo }
-
-function TDBIGitCommitInfo.GetParameters: String;
-begin
-  Result := 'log -1 --pretty=format:%s';
-end;
-
-
-
-
-
-{ TDBIGitStatusInfo }
-
-function TDBIGitStatusInfo.Execute: Boolean;
-var
-  ODS: TObjectListDataset;
-  Writer: TDBIGitLogDataPacketWriter;
-
-begin
-  Result := inherited Execute;
-
-  if Result then begin
-    ODS := Local(TObjectListDataset.Create(nil)).Obj as TObjectListDataset;
-    ODS.ClassTypeName := TDBIGitStatus.ClassName;
-
-    TDBIGitStatus.BuildFieldDefs(ODS);
-
-    Writer := Local(TDBIGitLogDataPacketWriter.Create).Obj as TDBIGitLogDataPacketWriter;
-    Writer.Data.Assign(Output);
-    Writer.Dataset := ODS;
-    Writer.SaveToStream(Stream);
-  end;
-end;
-
-
-function TDBIGitStatusInfo.GetParameters: String;
-begin
-  Result := 'status --porcelain';
-end;
-
-
-procedure TDBIGitStatusInfo.ProcessOutputLine(const Value: AnsiString);
+procedure TDBIGitCustomFileStatus.ProcessOutputLine(const Value: String);
 var
   Offset: Integer;
-  Status: AnsiString;
-  FileData: AnsiString;
-  TargetName: AnsiString;
-  SourceName: AnsiString;
-  Line: AnsiString;
+  FileData: String;
+  Line: String;
 
 begin
   Line := '';
 
   if Length(Value) > 2 then begin
-    Status := Copy(Value, 1, 2);
-    FileData := Copy(Value, 4, 126);
+    Status := Copy(Value, 1, StatusSize);        // Copy Two Characters!
+    FileData := Copy(Value, StatusSize+2, 126);  // Skip Status+Separator and Copy the rest
 
-    Offset := TDBIAnsi.Pos('->', FileData);
+    Offset := Pos('->', FileData);
     if (Offset > 0) then begin
-      SourceName := Copy(FileData, 1, Offset-2);
-      TargetName := Copy(FileData, Offset+3, 255);
+      FileName1 := Copy(FileData, 1, Offset-2);
+      FileName2 := Copy(FileData, Offset+3, 255);
     end
     else begin
-      SourceName := '';
-      TargetName := FileData;
+      FileName1 := '';
+      FileName2 := FileData;
     end;
-    Line := '<ROW ' + 'Status="' + Status + '" FileName="' + TargetName + '" SourceName="' + SourceName + '"/>';
+    Line := TDBIReflectionProcessor.Format(LineFormat, Self);
 
     inherited ProcessOutputLine(Line);
   end;
@@ -808,83 +548,9 @@ end;
 
 
 
-{ TDBIGitBranchInfo }
-
-function TDBIGitBranchInfo.GetItemIndex: Integer;
-begin
-  for Result := Output.Count-1 downto 0 do begin
-    if Pos('*', Output.Strings[Result]) > 0 then begin
-      Break;
-    end;
-  end;
-end;
-
-function TDBIGitBranchInfo.GetParameters: String;
-begin
-  Result := 'branch';
-end;
-
-
-
-
-
-{ TDBIGitShowInfo }
-
-function TDBIGitShowInfo.GetParameters: String;
-begin
-  Result := 'show ' + Sha1 + ':' + FileName;
-end;
-
-
-
-
-
 { TDBIGitLogInfo }
 
-function TDBIGitLogInfo.Execute: Boolean;
-var
-  ODS: TObjectListDataset;
-  Writer: TDBIGitLogDataPacketWriter;
-
-begin
-  Result := inherited Execute;
-
-  if Result then begin
-    ODS := Local(TObjectListDataset.Create(nil)).Obj as TObjectListDataset;
-    ODS.ClassTypeName := TDBIGitLog.ClassName;
-
-    TDBIGitLog.BuildFieldDefs(ODS);
-
-    Writer := Local(TDBIGitLogDataPacketWriter.Create).Obj as TDBIGitLogDataPacketWriter;
-    Writer.Data.Assign(Output);
-    Writer.Dataset := ODS;
-    Writer.SaveToStream(Stream);
-  end;
-end;
-
-
-function TDBIGitLogInfo.GetParameters: String;
-begin
-  Result :=
-    'log --follow --pretty=format:"' +
-    '<ROW ' +
-    'Hash=%x0B%H%x0B ' +
-
-    'AuthorName=%x0B%an%x0B ' +
-    'AuthorEmail=%x0B%ae%x0B ' +
-    'AuthorDate=%x0B%ai%x0B ' +
-
-    'CommitterName=%x0B%cn%x0B ' +
-    'CommitterEmail=%x0B%ce%x0B ' +
-    'CommitterDate=%x0B%ci%x0B ' +
-
-    'Subject=%x0B%s%x0B ' +
-    '/>' + '" ' +
-    FileName;
-end;
-
-
-procedure TDBIGitLogInfo.ProcessOutputLine(const Value: AnsiString);
+procedure TDBIGitLogInfo.ProcessOutputLine(const Value: String);
 const
   ChrSingleQuote = #39;
   ChrAmpersand = #38;
@@ -893,7 +559,7 @@ const
 
 var
   Index: Integer;
-  Line: AnsiString;
+  Line: String;
 
 begin
   Line := Value;
@@ -913,13 +579,20 @@ begin
 end;
 
 
-procedure TDBIGitLogInfo.SetFileName(const Value: TFileName);
+
+
+
+
+{ TDBIGitBranchInfo }
+
+function TDBIGitBranchInfo.GetItemIndex: Integer;
 begin
-  //##DEBUG
-
-  inherited SetFileName(Value);
+  for Result := Output.Count-1 downto 0 do begin
+    if Pos('*', Output.Strings[Result]) > 0 then begin
+      Break;
+    end;
+  end;
 end;
-
 
 
 
@@ -929,12 +602,7 @@ end;
 
 function TDBIGitCommandProcessor.GetCommandLine: String;
 begin
-  if IsWow64 then begin
-    Result := PathNames[ptCmdWOW64] + ' ' + '"' + inherited GetCommandLine + '"';
-  end
-  else begin
-    Result := PathNames[ptCmdWIN32] + ' ' + '"' + inherited GetCommandLine + '"';
-  end;
+  Result := inherited GetCommandLine;
 
   Output.Add('[' + SourceName + ']');
   Output.Add('>> ' + Result);
@@ -944,33 +612,110 @@ end;
 
 
 
-{ TDBIBeyondCompare }
+{ TDBIGitCustomCommand }
 
-function TDBIBeyondCompare.GetParameters: String;
+constructor TDBIGitCustomCommand.Create(AOwner: TComponent);
 begin
-  Result := FileName1 + ' ' + FileName2;
+  Options := [piRedirectOutput];
+
+  inherited Create(AOwner);
+
+  Visible := False;
 end;
 
-function TDBIBeyondCompare.GetSourceName: String;
+
+function TDBIGitCustomCommand.GetSourceName: String;
+begin
+  Result := inherited GetSourceName;
+  if (Result = '') then begin
+    Result := TDBIGitStatusInfo.GetRepositoryName(FileName);
+  end;
+end;
+
+
+procedure TDBIGitCustomCommand.SetFileName(const Value: TFileName);
+var
+  WindowsFileName: String;
+
+begin
+  // If Windows Path (Has Drive specifier '$:')
+  if Pos(':', Value) > 0 then begin
+    WindowsFileName := TDBIWindowsPath.CheckPathName(Value);
+
+    inherited SetFileName(ExtractRelativeUnixName(WindowsFileName, SourceName));
+  end
+  else begin
+    inherited SetFileName(Value);
+  end;
+end;
+
+
+procedure TDBIGitCustomCommand.SetOptions(const Value: TDBIProcessInfooptions);
+begin
+  inherited SetOptions([piRedirectOutput, piVerifyTargetName] + Value);
+end;
+
+
+
+
+{ TDBIFileOpenEdit }
+
+class function TDBIFileOpenEdit.Execute(const AFileName: String): Boolean;
+var
+  FileEdit: TDBIFileOpenEdit;
+
+begin
+  Result := AFileName <> '';
+  if Result then begin
+    FileEdit := Local(Self.Create(nil)).Obj as self;
+    FileEdit.SourceName := ExtractFileDir(AFileName);
+    FileEdit.FileName := AFileName;
+    FileEdit.Execute;
+  end;
+end;
+
+
+
+
+
+{ TDBIFileOpenCompare }
+
+class function TDBIFileOpenCompare.Execute(const AFileName1, AFileName2: String): Boolean;
+var
+  Compare: TDBIFileOpenCompare;
+
+begin
+  Result := AFileName1 <> '';
+  if Result then begin
+    Compare := Local(Self.Create(nil)).Obj as Self;
+    Compare.FileName1 := AFileName1;
+    Compare.FileName2 := AFileName2;
+    Compare.Execute;
+  end;
+end;
+
+
+function TDBIFileOpenCompare.GetSourceName: String;
 begin
   Result := TDBIHostInfo.GetCacheUserFolder;
 end;
 
-function TDBIBeyondCompare.GetTargetName: String;
-begin
-  if FileExists(PathNames[ptCmdCompare]) then begin
-    Result := '"' + PathNames[ptCmdCompare] + '"';
-  end
 
-  // This is a hack and should be removed in the future
-  else if FileExists(PathNames[ptCmdNotePad]) then begin
-    Result := '"' + PathNames[ptCmdNotePad] + '"';
-  end
 
-  else begin
-    raise Exception.CreateFmt(
-      'Beyond Compare Application Not Found "%s"', [ PathNames[ptCmdCompare] ]);
+
+
+{ TDBIGitPersistenceAdapter }
+
+type
+  TDBIGitPersistenceAdapter = class(TDBICustomIniFilePersistenceAdapter)
+  public
+    class procedure Load(Value: TComponent);
+
   end;
+
+class procedure TDBIGitPersistenceAdapter.Load(Value: TComponent);
+begin
+  (Local(Self.Create(nil)).Obj as Self).LoadFromFile(Value, ChangeFileExt(ParamStr(0), '.git'));
 end;
 
 
@@ -979,102 +724,23 @@ end;
 
 { TDBIGitCustomCommandProcessor }
 
-constructor TDBIGitCustomCommandProcessor.Create(AOwner: TComponent);
+constructor TDBICustomCommandProcessor.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
 
-  Options := [piRedirectOutput];
-  Visible := False;
+  TDBIGitPersistenceAdapter.Load(Self);
 end;
 
 
-destructor TDBIGitCustomCommandProcessor.Destroy;
+destructor TDBICustomCommandProcessor.Destroy;
 begin
-  FreeAndNil(FStream);
+  FreeAndNil(FPaths);
 
   inherited Destroy;
 end;
 
 
-function TDBIGitCustomCommandProcessor.Execute: Boolean;
-begin
-  Emit(Self, '', ioTrace);
-  Emit(Self, '[ ' + SourceName + ' ] ' + GetCommandLine, ioTrace);
-
-  Result := ProcessExecute;
-
-  if not Result then begin
-    raise EGitStatusError.Create('Fatal Git Error! Command Failed.');
-  end;
-end;
-
-
-function TDBIGitCustomCommandProcessor.GetRepositoryName: String;
-begin
-  Result := GetRepositoryName(FileName);
-end;
-
-
-function TDBIGitCustomCommandProcessor.GetFileName: TFileName;
-begin
-  Result := FFileName;
-end;
-
-
-class function TDBIGitCustomCommandProcessor.GetRepositoryName(const AFileName: TFileName): String;
-begin
-  if (AFileName = '') then begin
-    Result := PathNames[ptSource];
-    Exit;
-  end;
-
-  if not FileExists(AFileName) then begin
-    raise EInOutError.CreateFmt(SFileNotFound + ' "%s"', [AFileName]);
-  end;
-
-  Result := AFileName;
-  while (Result <> '') do begin
-    Result := ExtractFileDir(Result);
-    if FileExists(Result + PathNames[ptGitConfig]) then begin
-      Result := Result + '\';
-      Break;
-    end;
-  end;
-
-  if (Result = '') then begin
-    raise EInOutError.CreateFmt('No Git Repository found for "%s"', [AFileName]);
-  end;
-end;
-
-
-function TDBIGitCustomCommandProcessor.GetStream: TStream;
-begin
-  if not Assigned(FStream) then begin
-    FStream := TMemoryStream.Create;
-  end;
-  Result := FStream;
-end;
-
-
-function TDBIGitCustomCommandProcessor.GetTargetName: String;
-begin
-  Result := '"' + PathNames[ptGit] + '"';
-end;
-
-
-procedure TDBIGitCustomCommandProcessor.SetFileName(const Value: TFileName);
-begin
-  // If Windows Path (Has Drive specifier '$:')
-  if Pos(':', Value) > 0 then begin
-    FFileName := ExtractRelativeUnixName(Value, SourceName);
-  end
-  else begin
-    FFileName := Value;
-  end
-end;
-
-
-procedure TDBIGitCustomCommandProcessor.Emit(
+procedure TDBICustomCommandProcessor.Emit(
   Sender: TObject;
   const Message: String;
   const EmitKind: TDBIProcessEmitKind
@@ -1084,14 +750,179 @@ begin
 end;
 
 
-class function TDBIGitCustomCommandProcessor.ExtractRelativeUnixName(
-  const FileName: String;
+
+function TDBICustomCommandProcessor.Execute: Boolean;
+var
+  Errors: TStrings;
+
+begin
+  Result := ProcessExecute;
+
+  if not Result then begin
+    Errors := Local(TStringList.Create).Obj as TStrings;
+    Errors.Text := Format(
+      'Source: %1:s %0:sTarget: %2:s %0:s%3:s',
+      [SLineBreak, SourceName, GetCommandLine, Output.Text]
+      );
+    TDBIDialogMessage.Execute(Errors, 'ERROR! COMMAND FAILED');
+  end;
+end;
+
+
+class function TDBICustomCommandProcessor.ExtractRelativeUnixName(
+  const FileName: String;
   const SourceName: String
   ): String;
 begin
   Result := Copy(FileName, Length(SourceName)+1, 128);
 
   Result := StringReplace(Result, '\', '/', [rfReplaceAll]);
+end;
+
+
+function TDBICustomCommandProcessor.GetCommandLine: String;
+begin
+  CheckTargetName;
+
+  if (FShell <> '') then begin
+    Result := TDBIReflectionProcessor.Format(FShell, Self);
+  end
+  else begin
+    Result := TDBIReflectionProcessor.Format(TargetName + ' ' + Parameters, Self);
+  end;
+end;
+
+
+function TDBICustomCommandProcessor.GetFileName: TFileName;
+begin
+  Result := FFileName;
+end;
+
+
+function TDBICustomCommandProcessor.GetPath: String;
+begin
+  Result := Paths.CommaText;
+end;
+
+
+function TDBICustomCommandProcessor.GetPaths: TStrings;
+begin
+  if not Assigned(FPaths) then begin
+    FPaths := TStringList.Create;
+  end;
+  Result := FPaths;
+end;
+
+
+function TDBICustomCommandProcessor.GetRepositoryName: String;
+begin
+  Result := GetRepositoryName(FileName);
+end;
+
+
+class function TDBICustomCommandProcessor.GetRepositoryName(const AFileName: TFileName): String;
+const
+  GitConfig = '\.git\config';
+
+var
+  Git: TDBICustomCommandProcessor;
+
+begin
+  Result := AFileName;
+
+  if (Result = '') then begin
+    Git := Local(Self.Create(nil)).Obj as Self;
+    if (Git.Paths.Count > 0) then begin
+      Result := Git.Paths[0];
+    end;
+    Exit;
+  end;
+
+  if not FileExists(Result) then begin
+    raise EInOutError.CreateFmt(SFileNotFound + ' "%s"', [Result]);
+  end;
+
+  while (Result <> '') do begin
+    Result := ExtractFileDir(Result);
+    if FileExists(Result + GitConfig) then begin
+      Result := Result + '\';
+      Break;
+    end;
+  end;
+
+  if (Result = '') then begin
+    raise EInOutError.CreateFmt('No Git Repository found for "%s"', [Result]);
+  end;
+end;
+
+
+function TDBICustomCommandProcessor.ProcessExecute: Boolean;
+begin
+  Emit(Self, '', ioTrace);
+  Emit(Self, '( ' + Self.ClassName + ' ) [ ' + SourceName + ' ] ' + GetCommandLine, ioTrace);
+
+  Result := inherited ProcessExecute;
+end;
+
+
+procedure TDBICustomCommandProcessor.SetFileName(const Value: TFileName);
+begin
+  FFileName := Value;
+end;
+
+
+procedure TDBICustomCommandProcessor.SetPath(const Value: String);
+begin
+  Paths.CommaText := Value;
+end;
+
+
+
+
+
+{ TDBIShellExecute }
+
+constructor TDBIShellExecute.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+
+  TDBIGitPersistenceAdapter.Load(Self);
+end;
+
+function TDBIShellExecute.Execute: Boolean;
+const
+  Operation = 'open';
+
+begin
+  Parameters := TDBIReflectionProcessor.Format(Parameters, Self);
+  TargetName := TDBIReflectionProcessor.Format(TargetName, Self);
+
+  Result := ShellExecute(Application.Handle, PChar(Operation), PChar(TargetName), PChar(Parameters), '', SW_SHOWNORMAL) > 32;
+end;
+
+
+class function TDBIShellExecute.Execute(const AFileName: String): Boolean;
+var
+  Shell: TDBIShellExecute;
+
+begin
+  Shell := Local(Self.Create(nil)).Obj as Self;
+  Shell.FileName := AFileName;
+
+  Result := Shell.Execute;
+end;
+
+
+
+
+
+{ TDBIVclFiles }
+
+constructor TDBIVclFiles.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+
+  TDBIGitPersistenceAdapter.Load(Self);
 end;
 
 
@@ -1135,6 +966,10 @@ var
   FieldDef: TFieldDef;
 
 begin
+  if ADataset is TObjectListDataset then begin
+    TObjectListDataset(ADataset).ClassTypeName := Self.ClassName;
+  end;
+
   FieldDef := ADataset.FieldDefs.AddFieldDef;
   FieldDef.Name := 'Status';
   FieldDef.DataType := ftString;
@@ -1153,12 +988,71 @@ begin
 end;
 
 
-class procedure TDBIGitStatus.UpdateFields(ADataset: TDataset);
+class procedure TDBIGitStatus.ConfigureFields(ADataset: TDataset);
 begin
   ADataset.FieldByName('Status').Alignment := taRightJustify;
   ADataset.FieldByName('Status').DisplayWidth := 4;
   ADataset.FieldByName('FileName').DisplayWidth := 80;
   ADataset.FieldByName('SourceName').DisplayWidth := 80;
+end;
+
+
+class procedure TDBIGitStatus.FilterDataset(ADataset: TDataset);
+var
+  List: TObjectList;
+  Index: Integer;
+
+begin
+  if (ADataset is TObjectListDataset) then begin
+    ADataset.Close;
+
+    List := TObjectListDataset(ADataset).List;
+    for Index := List.Count-1 downto 0 do begin
+      if Excluded(List[Index] as TDBIGitStatus) then begin
+        List.Delete(Index);
+      end;
+    end;
+
+    ADataset.Open;
+  end;
+end;
+
+
+class function TDBIGitStatus.Excluded(Item: TDBIGitStatus): Boolean;
+begin
+  Result := False;
+end;
+
+
+class function TDBIGitCommittedStatus.Excluded(Item: TDBIGitStatus): Boolean;
+begin
+  Result := inherited Excluded(Item);
+end;
+
+
+class function TDBIGitStagedStatus.Excluded(Item: TDBIGitStatus): Boolean;
+begin
+  Result :=
+    (Item.Status[1] <> 'A') and  // Added
+    (Item.Status[1] <> 'D') and  // Deleted
+    (Item.Status[1] <> 'M') and  // Modified
+    (Item.Status[1] <> 'R');     // Renamed
+end;
+
+
+class function TDBIGitUnstagedStatus.Excluded(Item: TDBIGitStatus): Boolean;
+begin
+  Result :=
+    (Item.Status[2] <> 'A') and  // Added
+    (Item.Status[2] <> 'D') and  // Deleted
+    (Item.Status[2] <> 'M') and  // Modified
+    (Item.Status[2] <> 'R');     // Renamed
+end;
+
+
+class function TDBIGitUntrackedStatus.Excluded(Item: TDBIGitStatus): Boolean;
+begin
+  Result := Item.Status <> '??';
 end;
 
 
@@ -1172,6 +1066,10 @@ var
   FieldDef: TFieldDef;
 
 begin
+  if ADataset is TObjectListDataset then begin
+    TObjectListDataset(ADataset).ClassTypeName := Self.ClassName;
+  end;
+
   FieldDef := ADataset.FieldDefs.AddFieldDef;
   FieldDef.Name := 'Hash';
   FieldDef.DataType := ftString;
@@ -1215,9 +1113,86 @@ begin
 end;
 
 
+class procedure TDBIGitLog.ConfigureFields(ADataset: TDataset);
+begin
+  ADataset.FieldByName('Subject').Index := 0;
+  ADataset.FieldByName('Subject').DisplayWidth := 64;
+
+  ADataset.FieldByName('AuthorName').Index := 1;
+  ADataset.FieldByName('AuthorName').DisplayWidth := 30;
+
+  ADataset.FieldByName('AuthorEmail').Index := 2;
+  ADataset.FieldByName('AuthorEmail').DisplayWidth := 30;
+
+  ADataset.FieldByName('AuthorDate').Index := 3;
+
+  ADataset.FieldByName('CommitterName').Index := 4;
+  ADataset.FieldByName('CommitterName').DisplayWidth := 30;
+
+  ADataset.FieldByName('CommitterEmail').Index := 5;
+  ADataset.FieldByName('CommitterEmail').DisplayWidth := 30;
+
+  ADataset.FieldByName('CommitterDate').Index := 6;
+end;
+
+
+
+{ TDBIGitPersistent }
+
+class procedure TDBIGitPersistent.FilterDataset(ADataset: TDataset);
+begin
+  // NOP
+end;
+
+
+class procedure TDBIGitPersistent.LoadDataset(ADataset: TDataset; Strings: TStrings);
+var
+  Writer: TDBIGitLogDataPacketWriter;
+
+begin
+  ADataset.DisableControls;
+  try
+    ADataset.Close;
+    ADataset.FieldDefs.Clear;
+    ADataset.Fields.Clear;
+
+    BuildFieldDefs(ADataset);
+
+    Writer := Local(TDBIGitLogDataPacketWriter.Create).Obj as TDBIGitLogDataPacketWriter;
+    Writer.Data.Assign(Strings);
+    Writer.Dataset := ADataset;
+
+    ADataset.Close;
+    ADataset.FieldDefs.Clear;
+    ADataset.Fields.Clear;
+
+    if (ADataset is TObjectListDataset) then begin
+      TObjectListDataset(ADataset).List.Clear;
+      TObjectListDataset(ADataset).LoadFromStream(Writer.Stream, dfXML);
+    end
+    else if (ADataset is TClientDataset) then begin
+      TClientDataset(ADataset).LoadFromStream(Writer.Stream);
+    end
+    else begin
+      raise Exception.CreateFmt('Dataset of type "%s" not supported', [ADataset.ClassName]);
+    end;
+
+    FilterDataset(TObjectListDataset(ADataset));
+    ConfigureFields(ADataset);
+
+  finally
+    ADataset.EnableControls;
+  end;
+end;
+
+
 
 initialization
   Classes.RegisterClass(TDBIGitLog);
   Classes.RegisterClass(TDBIGitStatus);
+  Classes.RegisterClass(TDBIGitCommittedStatus);
+  Classes.RegisterClass(TDBIGitStagedStatus);
+  Classes.RegisterClass(TDBIGitUnstagedStatus);
+  Classes.RegisterClass(TDBIGitUntrackedStatus);
 
 end.
