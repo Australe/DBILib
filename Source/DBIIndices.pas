@@ -1081,7 +1081,7 @@ end;  { GetName }
 }
 procedure TDBIndex.SetName(const Value: TDBIString);
 begin
-  {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(FIndexDesc^.szName, PDBIChar(Value), SizeOf(FIndexDesc^.szName));
+  FIndexDesc.szName := Value;
 end;  { SetName }
 
 
@@ -1549,7 +1549,7 @@ var
 
 begin
   for Index := 0 to FIndexList.Count - 1 do begin
-    if ({$ifdef DelphiXE4}AnsiStrings.{$endif}StrLIComp(FIndexDescs[Index].szName, PDBIChar(Name), SizeOf(FIndexDescs[Index].szName)) = 0) then begin
+    if DBICompareText(Name, FIndexDescs[Index].szName) = 0 then begin
       Result := FIndexList[Index];
       Exit;
     end;
@@ -1569,7 +1569,7 @@ var
 
 begin
   for Index := 0 to FIndexList.Count - 1 do begin
-    if ({$ifdef DelphiXE4}AnsiStrings.{$endif}StrLIComp(FIndexDescs[Index].szName, PDBIChar(Name), SizeOf(FIndexDescs[Index].szName)) = 0) then begin
+    if DBICompareText(Name, FIndexDescs[Index].szName) = 0 then begin
       FIndexList[Index] := Value;
       Exit;
     end;

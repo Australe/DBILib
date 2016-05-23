@@ -307,12 +307,25 @@ type
     FHeader: TDBIXbaseHeader;
     FFields: TDBIXbaseFields;
 
+    procedure EncodeFieldDesc(
+      const PhysicalFieldProps: TDBIXbaseField;
+      PFieldDesc: pDSFLDDesc
+      );
+    procedure EncodePhysicalFieldDefs;
+    procedure InitializeNullFlags;
+    class function IsFieldCompatible(
+      PFieldProps: PDBIXbaseField;
+      PFieldDesc: pDSFLDDesc
+      ): Boolean;
+    class function IsValidField(PFieldDesc: pDSFLDDesc): Boolean;
+
   protected
     function AllocPhysicalBuffer: TDBIRecordBuffer; override;
     procedure FreePhysicalBuffer(var Buffer: TDBIRecordBuffer); override;
     function GetBlobFileName: TFileName; override;
 
     function GetModificationDate: TDateTime;
+    function GetPhysicalFieldNameByIndex(const Index: Integer): TDBIString;
     function GetRecordSize: Word; override;
     function GetVersion: TDBIXbaseVersion;
     procedure SetModificationDate(const Value: TDateTime);
@@ -341,6 +354,7 @@ type
       ); override;
 
     property DataOffset: Integer read GetDataOffset write SetDataOffset;
+    property PhysicalFieldNames[const Index: Integer]: TDBIString read GetPhysicalFieldNameByIndex;
     property ModificationDate: TDateTime read GetModificationDate write SetModificationDate;
 
   public
@@ -1078,256 +1092,239 @@ end;  { UnlockRecord }
   Jvr - 14/02/2003 14:58:27 - Added limited support for extended fieldnames.<P>
   Jvr - 24/06/2005 10:17:41 - Added more error checking when reading header.<br>
 }
-procedure TDBIXbaseDataConnection.GetMetaData;
+class function TDBIXbaseDataConnection.IsFieldCompatible(PFieldProps: PDBIXbaseField; PFieldDesc: pDSFLDDesc): Boolean;
+var
+  FldType: Word;
 
-  function IsFieldCompatible(PFieldProps: PDBIXbaseField; PFieldDesc: pDSFLDDesc): Boolean;
-  var
-    FldType: Word;
+begin
+  FldType := XbaseFieldBaseTypeMap[PFieldProps^.FieldType];
+  Result :=
+    ((FldType = fldZSTRING) or (FldType = fldWIDESTRING) or (FldType = fldUNICODE));
 
-  begin
-    FldType := XbaseFieldBaseTypeMap[PFieldProps^.FieldType];
-    Result :=
-      ((FldType = fldZSTRING) or (FldType = fldWIDESTRING) or (FldType = fldUNICODE));
+  FldType := PFieldDesc^.iFldType;
+  Result := Result and
+    ((FldType = fldZSTRING) or (FldType = fldWIDESTRING) or (FldType = fldUNICODE));
+end;
 
-    FldType := PFieldDesc^.iFldType;
-    Result := Result and
-      ((FldType = fldZSTRING) or (FldType = fldWIDESTRING) or (FldType = fldUNICODE));
-  end;
 
-  function IsValidField(PFieldDesc: pDSFLDDesc): Boolean;
-  begin
-    Result :=
-      (PFieldDesc^.iFldType = fldUNICODE) or
-      (PFieldDesc^.iFldType in [fldZSTRING..fldWIDESTRING, fldSINGLE..fldUINT8, fldDATETIMEOFFSET]);
+class function TDBIXbaseDataConnection.IsValidField(PFieldDesc: pDSFLDDesc): Boolean;
+begin
+  Result :=
+    (PFieldDesc^.iFldType = fldUNICODE) or
+    (PFieldDesc^.iFldType in [fldZSTRING..fldWIDESTRING, fldSINGLE..fldUINT8, fldDATETIMEOFFSET]);
 
-    if Result then begin
-      case PFieldDesc^.iFldType of
-        fldBLOB: begin
-          Assert(PFieldDesc^.iFldSubType > 0);
+  if Result then begin
+    case PFieldDesc^.iFldType of
+      fldBLOB: begin
+        Assert(PFieldDesc^.iFldSubType > 0);
 
-          Result := (PFieldDesc^.iFldSubType = fldstMEMO) and
-            ((PFieldDesc^.iFldLen = SizeOfMemo) or (PFieldDesc^.iFldLen = 10)) { DBase-3 }
-        end;
-
-        fldSINGLE, fldFLOAT, fldFLOATIEEE: Result := True;
-      else
-        Assert(PFieldDesc^.iUnits1 > 0);
+        Result := (PFieldDesc^.iFldSubType = fldstMEMO) and
+          ((PFieldDesc^.iFldLen = SizeOfMemo) or (PFieldDesc^.iFldLen = 10)) { DBase-3 }
       end;
+
+      fldSINGLE, fldFLOAT, fldFLOATIEEE: Result := True;
+    else
+      Assert(PFieldDesc^.iUnits1 > 0);
     end;
   end;
-
-  procedure EncodeField(
-    const PhysicalFieldProps: TDBIXbaseField;
-    PFieldDesc: pDSFLDDesc
-    );
-  var
-    Attributes: TFieldAttributes;
-
-  begin
-    // First set the field Name
-    {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(
-      PFieldDesc^.szName,
-      PhysicalFieldProps.FieldName,
-      SizeOf(PhysicalFieldProps.FieldName)-1
-    );
-
-    // If we have extended fields then append the rest of the name
-    if (xfExtendedFields in Flags) then begin
-      {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCat(
-        PFieldDesc^.szName,
-        PhysicalFieldProps.FieldData,
-        (SizeOf(PhysicalFieldProps.FieldName)-1) + SizeOf(PhysicalFieldProps.FieldData)
-        );
-    end;
-
-    // Set Field Attributes
-    if (ffNullableField in PhysicalFieldProps.FieldFlags) then begin
-      Attributes := [];
-    end
-    else begin
-      Attributes := [faRequired];
-    end;
-
-    // Now the complicated stuff - field types, subtypes, and other.
-    // This takes care of
-    // DT_CURRENCY, DT_DATE, DT_DATETIME, DT_DOUBLE, DT_GENERAL, DT_LOGICAL
-    if (PhysicalFieldProps.FieldType in ['A'..'Z']) then begin
-      // Check to see if we allready have a compatible type
-      // If so then DO NOT change the type
-      if not IsFieldCompatible(@PhysicalFieldProps, PFieldDesc) then begin
-        PFieldDesc^.iFldType := XbaseFieldBaseTypeMap[PhysicalFieldProps.FieldType];
-        PFieldDesc^.iFldSubType := XbaseFieldSubTypeMap[PhysicalFieldProps.FieldType];
-
-        if (PFieldDesc^.iFldType = fldBlob) then begin
-          PFieldDesc^.iFldLen := PhysicalFieldProps.FieldSize[0];   // Size
-        end
-        else begin
-          PFieldDesc^.iUnits1 := PhysicalFieldProps.FieldSize[0];   // Size
-        end;
-
-        PFieldDesc^.iUnits2 := PhysicalFieldProps.FieldSize[1];     // Decimals
-      end;
-    end
-
-    // DT_NULLFLAGS
-    else if (PhysicalFieldProps.FieldType = DT_NULLFLAGS) then begin
-      PFieldDesc^.iFldType := fldBYTES;
-      PFieldDesc^.iFldSubType := fldstNONE;
-      PFieldDesc^.iUnits1 := PhysicalFieldProps.FieldSize[0];   // Size
-      PFieldDesc^.iUnits2 := PhysicalFieldProps.FieldSize[1];   // Decimals
-    end
-
-    // Otherwise it's an invalid field type
-    else begin
-      PFieldDesc^.iFldType := fldUNKNOWN;
-      PFieldDesc^.iFldSubType := fldstNONE;
-
-      raise EDBIException.Create(Self, 'GetMetaData::EncodeField::1185',
-        'Unknown Xbase Field Type "%s"', [PhysicalFieldProps.FieldType]
-        );
-    end;
+end;
 
 
-    // Now set the type dependant stuff
-    case PhysicalFieldProps.FieldType of
-      DT_INTEGER: begin
-        if (PFieldDesc^.iUnits2 = DT_AUTOINCFLAG) then begin
-          PFieldDesc^.iFldSubType := fldstAUTOINC;
-        end;
-      end;  { DT_INTEGER }
+procedure TDBIXbaseDataConnection.EncodeFieldDesc(
+  const PhysicalFieldProps: TDBIXbaseField;
+  PFieldDesc: pDSFLDDesc
+  );
+var
+  Attributes: TFieldAttributes;
 
-      DT_MEMO: begin
-        Attributes := []; //##JVR - Blob NOT yet Initialised, can't do this ??? // BlobConnection.Attributes;
-      end;  { DT_MEMO }
-
-      DT_NUMERIC, DT_FLOAT: begin
-        // Map to BCD
-        if xsMapNumericAsBCD in Options then begin
-          if (PFieldDesc^.iUnits2 < 5) then begin
-            PFieldDesc^.iFldType := fldBCD;
-          end
-          else begin
-  {$ifdef DELPHI6}
-            PFieldDesc^.iFldType := fldFMTBCD;
-  {$else}
-            PFieldDesc^.iFldType := fldBCD;
-  {$endif}
-          end;
-        end
-
-        // Otherwise map to standard types
-        else begin
-          if (PFieldDesc^.iUnits2 = 0) then begin
-            if (PFieldDesc^.iUnits1 < 5) then begin
-              PFieldDesc^.iFldType := fldINT16;
-            end
-            else if (PFieldDesc^.iUnits1 >= 5) and (PFieldDesc^.iUnits1 < 10) then begin
-              PFieldDesc^.iFldType := fldINT32;
-            end
-            else begin
-              PFieldDesc^.iFldType := fldINT64;
-            end;  { if }
-          end
-          else begin
-            PFieldDesc^.iFldType := fldFLOAT;
-          end;  { if }
-        end;  { if }
-      end;  { DT_NUMERIC, DT_FLOAT }
-
-      DT_NULLFLAGS: begin
-        Include(Attributes, faReadOnly);
-
-        if not (xsShowNullFlags in FOptions) then begin
-          Include(Attributes, faHiddenCol);
-        end;
-      end;  { DT_NULLFLAGS }
-    end;  { case }
-
-    PFieldDesc^.iFldAttr := PByte(@Attributes)^;
-  end;  { EncodeField }
-
-
-  procedure EncodeLogicalFieldDefs;
-  var
-    FieldNo: Integer;
-
-  begin
-    for FieldNo := 0 to FieldCount - 1 do begin
-      if not IsValidField(@(FieldProps[FieldNo])) then begin
-        EncodeField(FFields[FieldNo], @(FieldProps[FieldNo]));
-      end;
-    end;  { for }
+begin
+  // Set Field Attributes
+  if (ffNullableField in PhysicalFieldProps.FieldFlags) then begin
+    Attributes := [];
+  end
+  else begin
+    Attributes := [faRequired];
   end;
 
+  // Now the complicated stuff - field types, subtypes, and other.
+  // This takes care of
+  // DT_CURRENCY, DT_DATE, DT_DATETIME, DT_DOUBLE, DT_GENERAL, DT_LOGICAL
+  if (PhysicalFieldProps.FieldType in ['A'..'Z']) then begin
+    // Check to see if we allready have a compatible type
+    // If so then DO NOT change the type
+    if not IsFieldCompatible(@PhysicalFieldProps, PFieldDesc) then begin
+      PFieldDesc^.iFldType := XbaseFieldBaseTypeMap[PhysicalFieldProps.FieldType];
+      PFieldDesc^.iFldSubType := XbaseFieldSubTypeMap[PhysicalFieldProps.FieldType];
 
-  procedure InitializeNullFlags;
-  var
-    FieldNo: Integer;
-    NullFlagsIndex: Integer;
-    IsNullable: Boolean;
-
-  begin
-    // Physical Null field flag information
-    NullFlags.IsNullable :=
-      DBICompareText(FFields[FieldCount - 1].FieldName, FieldName_NullFlags) = 0;
-
-    NullFlagsIndex := 0;
-    for FieldNo := 0 to FieldCount - 1 do begin
-      // Create Index values for the physical fields Null-Flags
-      IsNullable := ffNullableField in FFields[FieldNo].FieldFlags;
-      if NullFlags.SetNullIndex(FieldNo, IsNullable, NullFlagsIndex) then begin
-        Inc(NullFlagsIndex);
-      end;
-    end;
-  end;  { InitializeNullFlags }
-
-
-  procedure EncodePhysicalFieldDefs;
-  const
-    ValidFieldChars = ['0'..'9', 'A'..'Z', '_', 'a'..'z'];
-
-  var
-    FieldNo: Integer;
-    PhysicalFieldOffset: LongWord;
-
-  begin
-    // First Field Starts at 1 (DelFlag starts at 0)
-    PhysicalFieldOffset := 1;
-
-    for FieldNo := Low(FFields) to High(FFields) do begin
-      // If not a valid field name character then set FFields array dimension
-      // to current number of valid fields read.
-      if not (FFields[FieldNo].FieldName[0] in ValidFieldChars) then begin
-        // Set the FieldCount and allocate space for logical fieldprops
-        FieldCount := FieldNo;
-        SetLength(FFields, FieldCount);
-        Break;
-      end
-
-      // Update the field offset if not specified in the Header (e.g. Value = 0)
-      // Field Offsets need to be calculated if they are non existent
-      else if (LongWord(FFields[FieldNo].FieldOffset) = 0) then begin
-        LongWord(FFields[FieldNo].FieldOffset) := PhysicalFieldOffset;
-      end; { if }
-
-      // Calculate the Physical Field Offsets
-      if (FFields[FieldNo].FieldType = DT_CHARACTER) then begin
-        Inc(PhysicalFieldOffset, Word(FFields[FieldNo].FieldSize));
+      if (PFieldDesc^.iFldType = fldBlob) then begin
+        PFieldDesc^.iFldLen := PhysicalFieldProps.FieldSize[0];   // Size
       end
       else begin
-        Inc(PhysicalFieldOffset, FFields[FieldNo].FieldSize[0]);
+        PFieldDesc^.iUnits1 := PhysicalFieldProps.FieldSize[0];   // Size
+      end;
+
+      PFieldDesc^.iUnits2 := PhysicalFieldProps.FieldSize[1];     // Decimals
+    end;
+  end
+
+  // DT_NULLFLAGS
+  else if (PhysicalFieldProps.FieldType = DT_NULLFLAGS) then begin
+    PFieldDesc^.iFldType := fldBYTES;
+    PFieldDesc^.iFldSubType := fldstNONE;
+    PFieldDesc^.iUnits1 := PhysicalFieldProps.FieldSize[0];   // Size
+    PFieldDesc^.iUnits2 := PhysicalFieldProps.FieldSize[1];   // Decimals
+  end
+
+  // Otherwise it's an invalid field type
+  else begin
+    PFieldDesc^.iFldType := fldUNKNOWN;
+    PFieldDesc^.iFldSubType := fldstNONE;
+
+    raise EDBIException.Create(Self, 'GetMetaData::EncodeField::1185',
+      'Unknown Xbase Field Type "%s"', [PhysicalFieldProps.FieldType]
+      );
+  end;
+
+
+  // Now set the type dependant stuff
+  case PhysicalFieldProps.FieldType of
+    DT_INTEGER: begin
+      if (PFieldDesc^.iUnits2 = DT_AUTOINCFLAG) then begin
+        PFieldDesc^.iFldSubType := fldstAUTOINC;
+      end;
+    end;  { DT_INTEGER }
+
+    DT_MEMO: begin
+      Attributes := []; //##JVR - Blob NOT yet Initialised, can't do this ??? // BlobConnection.Attributes;
+    end;  { DT_MEMO }
+
+    DT_NUMERIC, DT_FLOAT: begin
+      // Map to BCD
+      if xsMapNumericAsBCD in Options then begin
+        if (PFieldDesc^.iUnits2 < 5) then begin
+          PFieldDesc^.iFldType := fldBCD;
+        end
+        else begin
+{$ifdef DELPHI6}
+          PFieldDesc^.iFldType := fldFMTBCD;
+{$else}
+          PFieldDesc^.iFldType := fldBCD;
+{$endif}
+        end;
+      end
+
+      // Otherwise map to standard types
+      else begin
+        if (PFieldDesc^.iUnits2 = 0) then begin
+          if (PFieldDesc^.iUnits1 < 5) then begin
+            PFieldDesc^.iFldType := fldINT16;
+          end
+          else if (PFieldDesc^.iUnits1 >= 5) and (PFieldDesc^.iUnits1 < 10) then begin
+            PFieldDesc^.iFldType := fldINT32;
+          end
+          else begin
+            PFieldDesc^.iFldType := fldINT64;
+          end;  { if }
+        end
+        else begin
+          PFieldDesc^.iFldType := fldFLOAT;
+        end;  { if }
       end;  { if }
-    end;  { for }
-  end;  { EncodePhysicalFieldDefs }
-  
+    end;  { DT_NUMERIC, DT_FLOAT }
+
+    DT_NULLFLAGS: begin
+      Include(Attributes, faReadOnly);
+
+      if not (xsShowNullFlags in FOptions) then begin
+        Include(Attributes, faHiddenCol);
+      end;
+    end;  { DT_NULLFLAGS }
+  end;  { case }
+
+  PFieldDesc^.iFldAttr := PByte(@Attributes)^;
+end;  { EncodeFieldDesc }
+
+
+procedure TDBIXbaseDataConnection.InitializeNullFlags;
+var
+  FieldNo: Integer;
+  NullFlagsIndex: Integer;
+  IsNullable: Boolean;
+
+begin
+  // Physical Null field flag information
+  NullFlags.IsNullable :=
+    DBICompareText(FFields[FieldCount - 1].FieldName, FieldName_NullFlags) = 0;
+
+  NullFlagsIndex := 0;
+  for FieldNo := 0 to FieldCount - 1 do begin
+    // Create Index values for the physical fields Null-Flags
+    IsNullable := ffNullableField in FFields[FieldNo].FieldFlags;
+    if NullFlags.SetNullIndex(FieldNo, IsNullable, NullFlagsIndex) then begin
+      Inc(NullFlagsIndex);
+    end;
+  end;
+end;  { InitializeNullFlags }
+
+
+procedure TDBIXbaseDataConnection.EncodePhysicalFieldDefs;
+const
+  ValidFieldChars = ['0'..'9', 'A'..'Z', '_', 'a'..'z'];
+
+var
+  FieldNo: Integer;
+  PhysicalFieldOffset: LongWord;
+
+begin
+  // First Field Starts at 1 (DelFlag starts at 0)
+  PhysicalFieldOffset := 1;
+
+  for FieldNo := Low(FFields) to High(FFields) do begin
+    // If not a valid field name character then set FFields array dimension
+    // to current number of valid fields read.
+    if not (FFields[FieldNo].FieldName[0] in ValidFieldChars) then begin
+      // Set the FieldCount and allocate space for logical fieldprops
+      FieldCount := FieldNo;
+      SetLength(FFields, FieldCount);
+      Break;
+    end
+
+    // Update the field offset if not specified in the Header (e.g. Value = 0)
+    // Field Offsets need to be calculated if they are non existent
+    else if (LongWord(FFields[FieldNo].FieldOffset) = 0) then begin
+      LongWord(FFields[FieldNo].FieldOffset) := PhysicalFieldOffset;
+    end;
+
+    // Calculate the Physical Field Offsets
+    if (FFields[FieldNo].FieldType = DT_CHARACTER) then begin
+      Inc(PhysicalFieldOffset, Word(FFields[FieldNo].FieldSize));
+    end
+    else begin
+      Inc(PhysicalFieldOffset, FFields[FieldNo].FieldSize[0]);
+    end;
+  end;
+end;  { EncodePhysicalFieldDefs }
+
+
+procedure TDBIXbaseDataConnection.GetMetaData;
+var
+  FieldNo: Integer;
 
 begin
   // Read the Metadata from the table
   ReadMetaData;
+
   EncodePhysicalFieldDefs;
   InitializeNullFlags;
 
-  EncodeLogicalFieldDefs;
+  for FieldNo := 0 to FieldCount - 1 do begin
+    if not IsValidField(@(FieldProps[FieldNo])) then begin
+      FieldProps[FieldNo].szName := PhysicalFieldNames[FieldNo];
+
+      EncodeFieldDesc(FFields[FieldNo], @(FieldProps[FieldNo]));
+    end;
+  end;
+
   SetFieldProps(FieldProps);
 end;  { GetMetaData }
 
@@ -1501,6 +1498,24 @@ begin
 end;  { GetModified }
 
 
+function TDBIXbaseDataConnection.GetPhysicalFieldNameByIndex(const Index: Integer): TDBIString;
+var
+  PResult: PAnsiChar;
+
+begin
+  SetLength(Result, 255);
+  PResult := PAnsiChar(Result);
+  {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(PResult, @(FFields[Index].FieldName), SizeOf(FFields[Index].FieldName)-1);
+
+  // If we have extended fields then append the rest of the name
+  if (xfExtendedFields in Flags) then begin
+    {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCat(PResult, @(FFields[Index].FieldData), (SizeOf(FFields[Index].FieldName)-1) + SizeOf(FFields[Index].FieldData));
+  end;
+
+  SetLength(Result, {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLen(PResult));
+end;
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 11/05/2005 17:11:49 - Initial code.<br>
@@ -1572,7 +1587,7 @@ var
   Position: Integer;
 //##JVR  Attributes: DSAttr;
   DataInfo: TDBIDataInfo;
-  PRecBuf: Pointer;
+  PRecBuf: TDBIRecordBuffer;
 
 begin
 {##JVR
@@ -1992,7 +2007,7 @@ begin
 
     fldBYTES: begin
       //##NULLFLAGS -  Is (xsShowNullFlags in FOptions) important here or not?
-      if {$ifdef DelphiXE4}AnsiStrings.{$endif}StrIComp(PFieldProps^.szName, FieldName_NullFlags) = 0 then begin
+     if DBICompareText(PFieldProps^.szName, FieldName_NullFlags) = 0 then begin
         PhysicalFieldProps.FieldSize[0] := PFieldProps^.iUnits1;
         PhysicalFieldProps.FieldType := DT_NULLFLAGS;
         PhysicalFieldProps.FieldFlags := [ffHiddenField];
@@ -2148,7 +2163,7 @@ var
   PhysicalOffset: LongWord;
   GetFieldProc: TDBIXbaseGetFieldProc;
   IsBlank: Boolean;
-  pRecBuf: Pointer;
+  pRecBuf: TDBIRecordBuffer;
   pFldBuf: TDBIFieldBuffer;
 
 begin
@@ -2263,8 +2278,8 @@ var
   LogicalOffset: Integer;
   PhysicalOffset: LongWord;
   PutFieldProc: TDBIXbasePutFieldProc;
-  pRecBuf: Pointer;
-  pFldBuf: Pointer;
+  pRecBuf: TDBIRecordBuffer;
+  pFldBuf: TDBIFieldBuffer;
   IsBlank: Boolean;
 
 begin
@@ -3525,6 +3540,7 @@ procedure TDBIXbaseDataConnection.FreePhysicalBuffer(var Buffer: TDBIRecordBuffe
 begin
   FreeMem(Buffer);
 end;  { FreePhysicalBuffer }
+
 
 
 end.

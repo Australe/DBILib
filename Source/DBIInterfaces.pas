@@ -1306,6 +1306,7 @@ type
 
     function CheckPosition(const Direction: Integer): DBIResult;
     function GetActiveIndex: TDBIndex;
+    procedure SetFieldCount(const Value: Integer);
     procedure SetPosition(const Value: Integer);
 
   protected
@@ -1727,7 +1728,7 @@ var
     );
   begin
     FillChar(FieldDesc, SizeOf(FieldDesc), #0);
-    {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(FieldDesc.szName, TDBINameBuffer(TDBIString(Name)), SizeOf(FieldDesc.szName)-1);
+    FieldDesc.szName := Name;
 
     FieldDesc.iFldType := FieldTypeMap[DataType];
     FieldDesc.iUnits1 := FieldUnits1Map[FieldDesc.iFldType];
@@ -1817,7 +1818,7 @@ begin
     Exit;
   end;
 
-  SetLength(FFieldProps, FieldDefCount);
+  SetFieldCount(FieldDefCount);
   DescNo := 0;
   EncodeFieldDescs(FieldDefs, FFieldProps, DescNo);
 
@@ -2001,7 +2002,7 @@ begin
     DataInfo.Data := nil;
   end;
 
-  if (Position < 0) or (Position >= Length(FFieldProps{FieldPropsFLDDesc})) then begin
+  if (Position < 0) or (Position >= FieldCount) then begin
     raise EDBIException.Create(Self, 'GetFieldRecord::1978', 'Record "%d" out of legal range', [Position]);
   end;
 
@@ -3657,7 +3658,7 @@ begin
   FFilterLock := False;
 
   // Initialise the FFieldProps to zero fields
-  SetLength(FFieldProps, 0);
+  SetFieldCount(0);
 end;  { Create }
 
 
@@ -3696,7 +3697,7 @@ begin
 
     // Initialise the CursorProps Record & the FieldProps array
     Check(GetCursorProps(FCursorProps));
-    SetLength(FFieldProps, FCursorProps.iFields);
+    SetFieldCount(FCursorProps.iFields);
     Check(GetFieldDescs(PDSFldDesc(FFieldProps)));
   end;
 end;  { InitCursor }
@@ -3730,7 +3731,7 @@ begin
 
   // Initialise the CursorProps Record & the FieldProps array
   Check(GetCursorProps(FCursorProps));
-  SetLength(FFieldProps, FCursorProps.iFields);
+  SetFieldCount(FCursorProps.iFields);
   Check(GetFieldDescs(PDSFldDesc(FFieldProps)));
 end;  { CloneCursor }
 
@@ -5268,7 +5269,7 @@ var
 begin
   Result := DBIERR_NONE;
   IndexDesc := ActiveIndex.PIndexDesc^;
-  {$ifdef DelphiXE4}AnsiStrings.{$endif}StrCopy(IndexDesc.szName, szDEFAULT_FILTER);
+  IndexDesc.szName := szDEFAULT_FILTER;
 
   if FIndices.IndexOf(szDEFAULT_FILTER) >= 0 then begin
     Result := DBIERR_NAMENOTUNIQUE;
@@ -5426,6 +5427,12 @@ begin
     Result := FDSBase.SetDataProp(basepropRESOURCELOCK, PDBIPropData(@LockData));
   end;
 end;  { SetLock }
+
+
+procedure TDBICursor.SetFieldCount(const Value: Integer);
+begin
+  SetLength(FFieldProps, Value);
+end;
 
 
 // _____________________________________________________________________________

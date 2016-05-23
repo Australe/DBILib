@@ -664,7 +664,7 @@ var
   PropInfo: PPropInfo;
   LogicalOffset: Integer;
   PutFieldProc: TPutObjectFieldProc;
-  pFldBuf: Pointer;
+  pFldBuf: TDBIFieldBuffer;
   IsBlank: Boolean;
 
 begin
@@ -2067,9 +2067,9 @@ var
   FieldNo: Integer;
   FieldData: Integer;
   Size: LongWord;
-  PRecBuf: Pointer;
-  PFldBuf: Pointer;
-  PData: Pointer;
+  PRecBuf: TDBIRecordBuffer;
+  PFldBuf: TDBIFieldBuffer;
+  PData: TDBIRecordBuffer;
 
 begin
   Size := 0;
@@ -2462,7 +2462,7 @@ var
     // Assign the field name
     Result^.iFieldID := AFieldNo + 1;
     FieldName := TDBIFieldName(PropInfo.Name);
-    {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(Result^.szName, PDBIChar(TDBIString(FieldName)), SizeOf(Result^.szName));
+    Result^.szName := TDBIString(FieldName);
 
     // Set Field Attributes
     Attributes := [];

@@ -2865,7 +2865,7 @@ procedure TDBIDataset.EncodeFieldDesc(out FieldDesc: DSFLDDesc;
   Calculated: Boolean; Attributes: TFieldAttributes);
 begin
   FillChar(FieldDesc{%H-}, SizeOf(FieldDesc), #0);
-  {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(FieldDesc.szName, TDBINameBuffer(TDBIString(Name)), SizeOf(FieldDesc.szName)-1);
+  FieldDesc.szName := TDBIString(Name);
 
   FieldDesc.iFldType := FieldTypeMap[DataType];
 
@@ -4940,8 +4940,8 @@ begin
   FillChar(IndexDesc{%H-}, SizeOf(IndexDesc), 0);
   with IndexDesc do
   begin
-//##UNICODE    StrCopy(szName, PChar(Name));
-    {$ifdef DelphiXE4}AnsiStrings.{$endif}StrLCopy(szName, TDBIAttribute(AnsiString(Name)), SizeOf(szName) - 1);
+    IndexDesc.szName := TDBIString(Name);
+
     bUnique := ixUnique in Options;
     Descending := (ixDescending in Options) and (DescFields = '');
     CaseInsensitive := (ixCaseInsensitive in Options) and (CaseInsFields = '');

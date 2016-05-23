@@ -146,7 +146,15 @@ type
     class procedure BuildFields(ADataset: TDataset; PFieldData: PFieldRecords; const Count: Word);
     class procedure BuildFieldDefs(ADataset: TDataset; PFieldData: PFieldRecords; const Count: Word);
 
-    class function CheckFieldProps(PFieldData: PFieldRecord; PFieldProps: DBIIntfConsts.pDSFLDDesc): Boolean;
+    class function CheckFieldProps(
+      FieldData: TFieldRecord;
+      const FldName: String;
+      const FldType: Integer;
+      const FldSubType: Integer;
+      const Units1: Integer;
+      const Units2: Integer;
+      const FldLen: Integer
+      ): Boolean;
 
     class function CreateXbaseDataset: TDBIXbaseDataset;
     class function GetRecordCount: Integer; virtual;
@@ -3454,58 +3462,84 @@ end;
 
 
 class function TDBIUnitTest.CheckFieldProps(
-  PFieldData: PFieldRecord;
-  PFieldProps: DBIIntfConsts.pDSFLDDesc
+  FieldData: TFieldRecord;
+  const FldName: String;
+  const FldType: Integer;
+  const FldSubType: Integer;
+  const Units1: Integer;
+  const Units2: Integer;
+  const FldLen: Integer
   ): Boolean;
 {$ifndef DebugInfo}
 var
   iFldType: Word;
 
+  function Check(const Condition: Boolean): Boolean;
+  const
+    ErrMsg = 'FieldName = "%s", FieldType = "%d, %d" is not equal to the predefined Field';
+  {$ifndef fpc}
+  var
+    Address: Pointer;
+  {$endif}
+
+  begin
+  {$ifndef fpc}
+    // Get return address
+    asm
+      mov eax, [ebp + 4]
+      mov Address, eax
+    end;
+  {$endif}
+    Result := Condition;
+    if not Result then begin
+      raise Exception.CreateFmt(ErrMsg, [FldName, FldType, FldSubType]) {$ifndef fpc} at Address {$endif};
+    end;
+  end;
+
 begin
-  if (PFieldProps^.iFldType = fldUniCode) then begin
+  if (FldType = fldUniCode) then begin
     iFldType := fldWideString;
   end
   else begin
-    iFldType := PFieldProps^.iFldType;
+    iFldType := FldType;
   end;
 
-  Result := CompareText(String(PFieldProps^.szName), PFieldData^.FieldName) = 0;
+  Result := Check(CompareText(String(FldName), FieldData.FieldName) = 0);
 
   // Currency types
-  if (PFieldData^.FieldType = ftCurrency) then begin
-    Result := Result and (DBIIntfConsts.DataTypeMap[iFldType] = ftFloat);
-    Result := Result and (FldSubTypeMap[ftCurrency] = PFieldProps^.iFldSubType);
+  if (FieldData.FieldType = ftCurrency) then begin
+    Result := Result and Check(DBIIntfConsts.DataTypeMap[iFldType] = ftFloat);
+    Result := Result and Check(FldSubTypeMap[ftCurrency] = FldSubType);
   end
 
   // DateTime
-  else if (PFieldData^.FieldType = ftDateTime) then begin
+  else if (FieldData.FieldType = ftDateTime) then begin
 //##JVR    Result := Result and (DBIIntfConsts.DataTypeMap[iFldType] = ftFloat);
-    Result := Result and (FldSubTypeMap[ftDateTime] = PFieldProps^.iFldSubType);
+    Result := Result and Check(FldSubTypeMap[ftDateTime] = FldSubType);
   end
 
 
   // Blob types
-  else if (PFieldProps^.iFldType = fldBLOB) then begin
-    Result := Result and (FldSubTypeMap[ftMemo] = PFieldProps^.iFldSubType);
+  else if (FldType = fldBLOB) then begin
+    Result := Result and Check(FldSubTypeMap[ftMemo] = FldSubType);
   end
 
   // Otherwise
   else begin
-    Result := Result and (DBIIntfConsts.DataTypeMap[iFldType] = PFieldData^.FieldType);
+    Result := Result and Check(DBIIntfConsts.DataTypeMap[iFldType] = FieldData.FieldType);
   end;
 
 //##FCP Should we check iFldLen as well?
-  if (PFieldData^.FieldType = ftWideString) then begin
-    Result := Result and (PFieldProps^.iUnits1 = 2 * PFieldData^.FieldSize);
+  if (FieldData.FieldType = ftWideString) then begin
+    Result := Result and Check(Units1 = 2 * FieldData.FieldSize);
   end
-  else if (PFieldData^.FieldType = ftString) then begin
-    Result := Result and (PFieldProps^.iUnits1 = PFieldData^.FieldSize);
+  else if (FieldData.FieldType = ftString) then begin
+    Result := Result and Check(Units1 = FieldData.FieldSize);
   end;
 {$else}
 begin
   Result := True;
 {$endif}
-  Assert(Result, PFieldData^.FieldName + ' is not equal to the predefined Field');
 end;
 
 
@@ -3765,7 +3799,15 @@ begin
   Assert(ADataset.DSBase.GetFieldDescs(DSIntf.PDSFldDesc(FieldProps)) = 0);
 
   for Index := 0 to Count-1 do begin
-    CheckFieldProps(@(PFieldData^[Index]), @FieldProps[Index]);
+    CheckFieldProps(
+      PFieldData^[Index],
+      String(FieldProps[Index].szName),
+      FieldProps[Index].iFldType,
+      FieldProps[Index].iFldSubType,
+      FieldProps[Index].iUnits1,
+      FieldProps[Index].iUnits2,
+      FieldProps[Index].iFldLen
+      );
   end;
 end;
 {$endif}
@@ -3787,7 +3829,15 @@ begin
   Assert(ADataset.DSBase.GetFieldDescs(DBIIntfConsts.PDSFldDesc(FieldProps)) = 0);
 
   for Index := 0 to Count-1 do begin
-    CheckFieldProps(@(PFieldData^[Index]), @FieldProps[Index]);
+    CheckFieldProps(
+      PFieldData^[Index],
+      String(FieldProps[Index].szName),
+      FieldProps[Index].iFldType,
+      FieldProps[Index].iFldSubType,
+      FieldProps[Index].iUnits1,
+      FieldProps[Index].iUnits2,
+      FieldProps[Index].iFldLen
+      );
   end;
 end;
 
@@ -3809,7 +3859,15 @@ begin
   Assert(ADataset.DSBase.GetFieldDescs(DBIIntfConsts.PDSFldDesc(FieldProps)) = 0);
 
   for Index := 0 to Count-1 do begin
-    CheckFieldProps(@(PFieldData^[Index]), @FieldProps[Index]);
+    CheckFieldProps(
+      PFieldData^[Index],
+      String(FieldProps[Index].szName),
+      FieldProps[Index].iFldType,
+      FieldProps[Index].iFldSubType,
+      FieldProps[Index].iUnits1,
+      FieldProps[Index].iUnits2,
+      FieldProps[Index].iFldLen
+      );
   end;
 end;
 

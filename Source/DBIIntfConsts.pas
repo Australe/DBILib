@@ -124,10 +124,10 @@ type
     keySEARCHGEQ                    {   >=  }
   );
 
-  MIDASNAME            = packed array [0..31] of AnsiChar; { holds a name }
-  MIDASPATH            = packed array [0..260] of AnsiChar; { holds a DOS path }
+  TDBIName            = String[127]; { holds a name }
+  TDBIPath            = String[255]; { holds a DOS path }
 
-  
+
   { Generic Types - Used to port Delphi code to XE3 }
 
   TDBIFieldName = String;
@@ -248,7 +248,7 @@ type
 
   pDSProps = ^DSProps;
   DSProps = packed record
-    szName           : MIDASPATH;    { Name, if any }
+    szName           : TDBIPath;     { Name, if any }
     iFields          : Integer;      { Number of columns }
     iRecBufSize      : Integer;      { Size of record buffer }
     iBookMarkSize    : Integer;      { Size of bookmark }
@@ -264,7 +264,7 @@ type
 
   pDSFLDDesc = ^DSFLDDesc;
   DSFLDDesc = packed record
-    szName          : MIDASNAME;    { Field name }
+    szName          : TDBIName;     { Field name }
     iFldType        : Integer;      { Field type }
     iFldSubType     : Integer;      { Field subtype (if applicable) }
     iUnits1         : Integer;      { Number of Chars, precision etc }
@@ -283,7 +283,7 @@ type
 
   pDSIDXDesc = ^DSIDXDesc;
   DSIDXDesc = packed record
-    szName    : MIDASNAME;          { IndexName }
+    szName    : TDBIName;           { IndexName }
     iFields   : Integer;            { Number of fields in order (0 -> base order) }
     iKeyFields: DSKEY;              { FieldNumbers }
     iKeyLen   : Integer;            { Total length of key (computed) }
@@ -383,7 +383,7 @@ type
 
   PDSDataPacketFldDesc = ^TDSDataPacketFldDesc;
   TDSDataPacketFldDesc = packed record
-    szFieldName: MIDASNAME;         { Column Name }
+    szFieldName: TDBIName;          { Column Name }
     iFieldType: Integer;            { Column Type }
     iAttributes: Word;              { Column attributes }
   end;
@@ -982,7 +982,7 @@ const
   in a table. (create & edit as well)
 }
 const
-  FieldNameSize = SizeOf(MIDASNAME);
+  FieldNameSize = SizeOf(TDBIName);
 
   FieldPropsFLDDesc: array[0..12] of DSFLDDesc = (
     // 01. szName          : MIDASNAME;      { Field name }
