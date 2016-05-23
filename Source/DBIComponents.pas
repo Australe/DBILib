@@ -447,6 +447,8 @@ begin
     end
     else begin
       Result := AComponent;
+
+      raise Exception.CreateFmt('Unable to load "%s" from "%s"', [Result.ClassName, AFileName]);
     end;
   end;
 end;

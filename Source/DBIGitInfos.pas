@@ -298,6 +298,7 @@ type
   published
     property Branch: String read FBranch write FBranch stored False;
   end;
+  TDBIGitBranchCheckoutNew = class(TDBIGitBranchCheckout);
 
 
   TDBIGitBranchInfo = class(TDBIGitCustomCommand)

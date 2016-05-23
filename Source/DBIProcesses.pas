@@ -390,20 +390,11 @@ end;
 
 
 function TDBICustomProcess.GetDebugInfo: String;
+const
+  DebugMsg = 'Class: "%1:s"%0:sTarget: "%2:s"%0:sSource: "%3:s"%0:sParameters: "%4:s"';
+
 begin
-  Result := '';
-
-  if (TargetName <> '') then begin
-    Result := Result + 'TargetName: ' + TargetName + sLineBreak;
-  end;
-
-  if (SourceName <> '') then begin
-    Result := Result + 'SourceName: ' + SourceName + sLineBreak;
-  end;
-
-  if (Parameters <> '') then begin
-    Result := Result + 'Parameters: ' + Parameters + sLineBreak;
-  end;
+  Result := Format(DebugMsg, [sLineBreak, ClassName, TargetName, SourceName, Parameters]);
 end;
 
 
