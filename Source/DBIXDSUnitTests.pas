@@ -110,7 +110,7 @@ uses
 }
 procedure TDBIXDSUnitTests.CreateBooks;
 const
-  TableName = 'xCreateBooks.dbf';
+  TableName = 'xCreateBooks' + dbfExtension;
 
 var
   XDS: TDBIXbaseDataset;
@@ -131,7 +131,7 @@ begin
 
     TBookData.FieldValues(XDS);
 
-    XDS.SaveToFile(DataPath('xBlankBooks.dbf'));
+    XDS.SaveToFile(DataPath('xBlankBooks' + dbfExtension));
     XDS.Close;
   finally
     XDS.Free;
@@ -142,7 +142,7 @@ end;
 {$ifndef fpc}
 procedure TDBIXDSUnitTests.CreateBooksCDS;
 const
-  TableName = 'cCreateBooks.xml';
+  TableName = 'cCreateBooks' + xmlExtension;
 
 begin
   TBookData.DeleteTables(DataPath(TableName));
@@ -160,7 +160,7 @@ end;
 {$ifndef fpc}
 procedure TDBIXDSUnitTests.CreateDataSetCDS;
 const
-  cdsXDSDbug = 'XDSDbug.cds';
+  cdsXDSDbug = 'XDSDbug' + cdsExtension;
 
 var
   CDS: TDBIClientDataset;
@@ -248,7 +248,7 @@ end;
 }
 procedure TDBIXDSUnitTests.CreateGad;
 const
-  TableName = 'xCreateGad.dbf';
+  TableName = 'xCreateGad' + dbfExtension;
 
 begin
   TGadData.DeleteTables(DataPath(TableName));
@@ -263,8 +263,8 @@ end;
 }
 procedure TDBIXDSUnitTests.CreateMemoryDataSet;
 const
-  dbfXDSMem = 'XDSMem.dbf';
-  fptXDSMem = 'XDSMem.fpt';
+  dbfXDSMem = 'XDSMem' + dbfExtension;
+  fptXDSMem = 'XDSMem' + fptExtension;
 
 var
   XDS: TXbaseDataset;
@@ -358,7 +358,7 @@ end;
 
 procedure TDBIXDSUnitTests.FloatTypes;
 const
-  TableName = 'xFloatTypes.dbf';
+  TableName = 'xFloatTypes' + dbfExtension;
 
 begin
   TFloatData.DeleteTables(DataPath(TableName));
@@ -372,7 +372,7 @@ end;
 }
 procedure TDBIXDSUnitTests.DateTimes;
 const
-  TableName = 'xDateTimes.dbf';
+  TableName = 'xDateTimes' + dbfExtension;
 
 var
   XDS: TXbaseDataset;
@@ -475,7 +475,7 @@ end;
 }
 procedure TDBIXDSUnitTests.Indices;
 const
-  TableName = 'xIndices.dbf';
+  TableName = 'xIndices' + dbfExtension;
 
 var
   XDS: TXbaseDataset;
@@ -541,7 +541,7 @@ end;
 }
 procedure TDBIXDSUnitTests.LoadAndSave;
 const
-  TableName = 'xLoadAndSave.dbf';
+  TableName = 'xLoadAndSave' + dbfExtension;
 
 var
   XDS: TXbaseDataset;
@@ -589,7 +589,7 @@ end;
 }
 procedure TDBIXDSUnitTests.LoadFromDataset;
 const
-  TableName = 'xLoadFromDataset.dbf';
+  TableName = 'xLoadFromDataset' + dbfExtension;
 
 var
   ODS: TObjectListDataset;
@@ -639,7 +639,7 @@ end;
 
 procedure TDBIXDSUnitTests.LoadFromXbaseFile;
 const
-  dbfJobQueue = 'JobQueue.dbf';
+  dbfJobQueue = 'JobQueue' + dbfExtension;
 
 var
   TestTable: TXbaseDataset;
@@ -668,7 +668,7 @@ end;
 }
 procedure TDBIXDSUnitTests.Locate;
 const
-  TableName = 'xLocate.dbf';
+  TableName = 'xLocate' + dbfExtension;
 
 var
   Gad: TXbaseDataset;
@@ -706,7 +706,7 @@ end;
 
 procedure TDBIXDSUnitTests.NullValues;
 const
-  TableName = 'xNullValues.dbf';
+  TableName = 'xNullValues' + dbfExtension;
 
 var
   XDS: TDBIXBaseDataset;
@@ -755,7 +755,7 @@ end;
 }
 procedure TDBIXDSUnitTests.Numeric;
 const
-  TableName = 'xNumeric1.dbf';
+  TableName = 'xNumeric1' + dbfExtension;
 
 var
   XDS: TDBIXbaseDataset;
@@ -816,7 +816,7 @@ end;
 }
 procedure TDBIXDSUnitTests.OrdinalTypes;
 const
-  TableName = 'xOrdinalTypes.dbf';
+  TableName = 'xOrdinalTypes' + dbfExtension;
 
 begin
   TOrdinalData.DeleteTables(DataPath(TableName));
@@ -830,7 +830,7 @@ end;
 }
 procedure TDBIXDSUnitTests.SaveAsCDS;
 const
-  TableName = 'xSaveAsCDS.dbf';
+  TableName = 'xSaveAsCDS' + dbfExtension;
 
 var
 {$ifndef fpc}
@@ -850,7 +850,7 @@ begin
 
     TBookData.ReviseFields(XDS);
 
-    XDS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfXML);
+    XDS.SaveToFile(DataPath(ChangeFileExt(TableName, cdsExtension)), dfXML);
     XDS.Close;
 
   finally
@@ -860,12 +860,12 @@ begin
 
   // Verify the data that was saved to the ".cds' is valid
   // Open Dataset
-  Assert(SysUtils.FileExists(DataPath(ChangeFileExt(TableName, '.cds'))));
+  Assert(SysUtils.FileExists(DataPath(ChangeFileExt(TableName, cdsExtension))));
 
 {$ifndef fpc}
   CDS := TDBIClientDataSet.Create(nil);
   try
-    CDS.LoadFromFile(DataPath(ChangeFileExt(TableName, '.cds')));
+    CDS.LoadFromFile(DataPath(ChangeFileExt(TableName, cdsExtension)));
 
     TBookData.ReviseFields(CDS);
 
@@ -907,7 +907,7 @@ type
 
 procedure TDBIXDSUnitTests.Streaming;
 const
-  TableName = 'xStreamBooks.xml';
+  TableName = 'xStreamBooks' + xmlExtension;
 
 var
   Adapter: TXDSStreamingComponent;
@@ -929,7 +929,7 @@ begin
       TBookData.AssertValues(XDS);
 
       // Stream the Dataset out to File
-      Adapter.SaveToFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+      Adapter.SaveToFile(DataPath(ChangeFileExt(TableName, dfmExtension)));
       XDS.Close;
     finally
       XDS.Free;
@@ -941,7 +941,7 @@ begin
   Adapter := TXDSStreamingComponent.Create(nil);
   try
     // Stream the Dataset Back in
-    Adapter.LoadFromFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+    Adapter.LoadFromFile(DataPath(ChangeFileExt(TableName, dfmExtension)));
     XDS := Adapter.RootComponent as TDBIXbaseDataset;
 
     TBookData.CheckFields(XDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXbaseMapFieldTypes]);
@@ -966,7 +966,7 @@ end;
 }
 procedure TDBIXDSUnitTests.TestCloseAndDelete;
 const
-  TableName = 'xTestCloseAndDelete.dbf';
+  TableName = 'xTestCloseAndDelete' + dbfExtension;
 
 var
   XDS: TXbaseDataset;

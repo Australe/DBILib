@@ -1017,6 +1017,7 @@ implementation
 
 
 uses
+  SysConst, TypInfo,
 {$ifdef DelphiXE4}
   AnsiStrings,
 {$endif}
@@ -1028,8 +1029,7 @@ uses
 {$ifndef fpc}
   Consts, DBConsts, DBCommon, Mask,
 {$endif}
-  SysConst, TypInfo, DBIUtils, DBIXmlUtils, Dialogs, DBIStrings;
-
+  DBIUtils, DBIStrings, DBIXmlUtils, DBIDataPacketReaders, DBIDataPacketWriters;
 
 { Exceptions }
 
@@ -3143,10 +3143,13 @@ begin
     Close;
     DataConnection.FileName := '';
 
-    TDBIXmlData.LoadFromStream(AStream, Self);
+    TDBIXmlDataPacketReader.LoadFromStream(AStream, Self);
+  end
+  else if (Format = dfJSON) then begin
+    TDBIJsonDataPacketReader.LoadFromStream(AStream, Self);
   end
   else if (Format = dfCSV) then begin
-    TDBICsVData.LoadFromStream(AStream, Self);
+    TDBICsvDataPacketReader.LoadFromStream(AStream, Self);
   end
   else begin
     Close;
@@ -3168,13 +3171,13 @@ end;  { LoadFromStream }
 procedure TDBIDataset.SaveToStream(AStream: TStream; Format: TDBIDataFormat);
 begin
   if (Format = dfXML) then begin
-    TDBIXmlData.SaveToStream(AStream, Self);
+    TDBIXmlDataPacketWriter.SaveToStream(AStream, Self);
+  end
+  else if (Format = dfJSON) then begin
+    TDBIJsonDataPacketWriter.SaveToStream(AStream, Self);
   end
   else if (Format = dfCSV) then begin
-    TDBICSVData.SaveToStream(AStream, Self);
-  end
-  else if (Format = dfPSV) then begin
-    TDBIPsvData.SaveToStream(AStream, Self);
+    TDBICsvDataPacketWriter.SaveToStream(AStream, Self);
   end
   else begin
     DataConnection.SaveToStream(AStream, Format);
@@ -3203,10 +3206,14 @@ begin
     Close;
     DataConnection.FileName := '';
 
-    TDBIXmlData.LoadFromFile(AFileName, Self);
+//    TDBIXmlData.LoadFromFile(AFileName, Self);
+    TDBIXmlDataPacketReader.LoadFromFile(AFileName, Self);
+  end
+  else if (Format = dfJSON) then begin
+    TDBIJsonDataPacketReader.LoadFromFile(AFileName, Self);
   end
   else if (Format = dfCSV) then begin
-    TDBICsvData.LoadFromFile(AFileName, Self);
+    TDBICsvDataPacketReader.LoadFromFile(AFileName, Self);
   end
   else begin
     Close;
@@ -3242,13 +3249,13 @@ begin
 
       Format := SelectFormat(AFileName, Format);
       if (Format = dfXML) then begin
-        TDBIXmlData.SaveToFile(AFileName, DBCursor);
+        TDBIXmlDataPacketWriter.SaveToFile(AFileName, DBCursor);
+      end
+      else if (Format = dfJSON) then begin
+        TDBIJsonDataPacketWriter.SaveToFile(AFileName, DBCursor);
       end
       else if (Format = dfCSV) then begin
-        TDBICsvData.SaveToFile(AFileName, DBCursor);
-      end
-      else if (Format = dfPSV) then begin
-        TDBIPsvData.SavetoFile(AFileName, DBCursor);
+        TDBICsvDataPacketWriter.SaveToFile(AFileName, DBCursor);
       end
       else begin
         DataConnection.SaveToFile(AFileName, Format);
@@ -3279,14 +3286,14 @@ begin
   end;
 
   Extension := LowerCase(ExtractFileExt(AFileName));
-  if (Extension = '.xml') then
+  if (Extension = '.json') then
+    Result := dfJSON
+  else if (Extension = '.xml') then
     Result := dfXML
   else if (Extension = '.cds') then
     Result := dfXML
   else if (Extension = '.csv') then
     Result := dfCSV
-  else if (Extension = '.psv') then
-    Result := dfPSV
   else if (Extension = '.txt') then
     Result := dfCSV
   else

@@ -788,6 +788,15 @@ procedure CompareFieldProps(CDS: TDBIClientDataset; ODS: TDBIObjectListDataset);
 {$endif}
 procedure Equalz(const Str1: String; const Str2: AnsiString);
 
+const
+  cdsExtension = '.cds.xml';
+  csvExtension = '.csv';
+  dbfExtension = '.dbf';
+  dfmExtension = '.dfm';
+  fptExtension = '.fpt';
+  jsonExtension = '.json';
+  xmlExtension = '.xml';
+
 
 implementation
 
@@ -2272,8 +2281,11 @@ begin
     VerifyFields(ODS, @FieldData, Length(FieldData));
     AssertValues(ODS);
 
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
+    ODS.SaveToFile(ChangeFileExt(AFileName, dbfExtension));
+    ODS.SaveToFile(ChangeFileExt(AFileName, xmlExtension));
+    ODS.SaveToFile(ChangeFileExt(AFileName, jsonExtension));
 
+    // Load XDS from dataset
     XDS := TDBIXbaseDataset.Create(nil);
     try
       CreateFieldDefs(XDS);
@@ -2289,16 +2301,110 @@ begin
       XDS.Free;
     end;
 
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
+    ODS.SaveToFile(ChangeFileExt(AFileName, dbfExtension));
+    ODS.SaveToFile(ChangeFileExt(AFileName, cdsExtension), dfXML);
 
     ODS.Close;
   finally
     ODS.Free;
   end;
 
-  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.dbf')), 'Failed to create Gad Table dbf');
-  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.cds')), 'Failed to create Gad Table cds');
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, dbfExtension)), 'Failed to create Gad Table dbf');
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, cdsExtension)), 'Failed to create Gad Table cds');
+
+
+  // Load XDS from dbf file
+  XDS := TDBIXbaseDataset.Create(nil);
+  try
+    CreateFieldDefs(XDS);
+    XDS.CreateDataset;
+    VerifyFields(XDS, @FieldData, Length(FieldData));
+    XDS.LoadFromFile(ChangeFileExt(AFileName, dbfExtension));
+
+    CheckFields(XDS, DBIFieldCheckAll);
+    VerifyFields(XDS, @FieldData, Length(FieldData));
+    AssertValues(XDS);
+    XDS.SaveToFile(ChangeFileExt(AFileName, dbfExtension));
+  finally
+    XDS.Free;
+  end;
+
+
+  // Load ODS from dbf file
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := Self.ClassName;
+    ODS.LoadFromFile(ChangeFileExt(AFileName, dbfExtension));
+
+    CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXbaseMapFieldTypes]);
+    AssertValues(ODS);
+  finally
+    ODS.Free;
+  end;
+
+
+  // Load XDS from xml file
+  XDS := TDBIXbaseDataset.Create(nil);
+  try
+{##JVR
+    CreateFieldDefs(XDS);
+    XDS.CreateDataset;
+    VerifyFields(XDS, @FieldData, Length(FieldData));
+//}
+    XDS.LoadFromFile(ChangeFileExt(AFileName, xmlExtension));
+
+    CheckFields(XDS, DBIFieldCheckAll);
+    VerifyFields(XDS, @FieldData, Length(FieldData));
+    AssertValues(XDS);
+    XDS.SaveToFile(ChangeFileExt(AFileName, xmlExtension));
+  finally
+    XDS.Free;
+  end;
+
+
+  // Load ODS from xml file
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := Self.ClassName;
+    ODS.LoadFromFile(ChangeFileExt(AFileName, xmlExtension));
+
+    CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
+    AssertValues(ODS);
+  finally
+    ODS.Free;
+  end;
+
+
+  // Load XDS from json file
+  XDS := TDBIXbaseDataset.Create(nil);
+  try
+{##JVR
+    CreateFieldDefs(XDS);
+    XDS.CreateDataset;
+    VerifyFields(XDS, @FieldData, Length(FieldData));
+//}
+    XDS.LoadFromFile(ChangeFileExt(AFileName, jsonExtension));
+
+    CheckFields(XDS, DBIFieldCheckAll);
+    VerifyFields(XDS, @FieldData, Length(FieldData));
+    AssertValues(XDS);
+    XDS.SaveToFile(ChangeFileExt(AFileName, jsonExtension));
+  finally
+    XDS.Free;
+  end;
+
+
+  // Load ODS from xml file
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := Self.ClassName;
+    ODS.LoadFromFile(ChangeFileExt(AFileName, jsonExtension));
+
+    CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
+    AssertValues(ODS);
+  finally
+    ODS.Free;
+  end;
 end;
 
 
@@ -2854,7 +2960,7 @@ begin
     TBookData.ReviseFields(CDS);
 
     CDS.SaveToFile(AFileName);
-    CDS.SaveToFile(ChangeFileExt(AFileName, '.xml'), dbclient.dfXML);
+    CDS.SaveToFile(ChangeFileExt(AFileName, xmlExtension), dbclient.dfXML);
     CDS.Close;
   finally
     CDS.Free;
@@ -2883,7 +2989,7 @@ begin
     TBookData.ReviseFields(ODS);
 
     ODS.SaveToFile(AFileName);
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
+    ODS.SaveToFile(ChangeFileExt(AFileName, cdsExtension), dfXML);
     ODS.Close;
   finally
     ODS.Free;
@@ -2978,7 +3084,7 @@ begin
     TBookData.UpdateValues(XDS);
     TBookData.ReviseFields(XDS);
 
-    XDS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
+    XDS.SaveToFile(ChangeFileExt(AFileName, cdsExtension), dfXML);
     XDS.Close;
   finally
     XDS.Free;
@@ -2986,14 +3092,14 @@ begin
 
   // Verify the data that was saved to the ".cds' is valid
   // Open Dataset
-  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.dbf')));
-  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.fpt')));
-  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, '.cds')));
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, dbfExtension)));
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, fptExtension)));
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, cdsExtension)));
 
 {$ifndef fpc}
   CDS := TDBIClientDataset.Create(nil);
   try
-    CDS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
+    CDS.LoadFromFile(ChangeFileExt(AFileName, cdsExtension));
 
     TBookData.ReviseFields(CDS);
 
@@ -3054,7 +3160,7 @@ var
     Strings := TStringList.Create;
     try
       Strings.Text := Data;
-      Strings.SaveToFile('C:\Temp\' + AfileName);
+      Strings.SaveToFile('C:\Temp\' + AFileName);
     finally
       Strings.Free;
     end;
@@ -3552,14 +3658,6 @@ class procedure TDBIUnitTest.CheckField(
   function GetPredefinedSize: Integer;
   begin
     Result := FieldRecord.FieldSize;
-{##JVR
-    if (AField.Dataset is TXbaseDataset) then begin
-      case FieldRecord.FieldType of
-        ftBlob: Result := sizeofBlob;
-        ftMemo: Result := sizeofMemo;
-      end;
-    end;
-//}
   end;
 
 
@@ -3767,16 +3865,16 @@ end;
 class procedure TDBIUnitTest.DeleteTables(const AFileName: String);
 begin
   // Delete the Datafile if it exists
-  SysUtils.DeleteFile(ChangeFileExt(AFileName, '.dbf'));
-  Assert(not SysUtils.FileExists(ChangeFileExt(AFileName, '.dbf')));
+  SysUtils.DeleteFile(ChangeFileExt(AFileName, dbfExtension));
+  Assert(not SysUtils.FileExists(ChangeFileExt(AFileName, dbfExtension)));
 
   // Delete the Blobfile if it exists
-  SysUtils.DeleteFile(ChangeFileExt(AFileName, '.fpt'));
-  Assert(not SysUtils.FileExists(ChangeFileExt(AFileName, '.fpt')));
+  SysUtils.DeleteFile(ChangeFileExt(AFileName, fptExtension));
+  Assert(not SysUtils.FileExists(ChangeFileExt(AFileName, fptExtension)));
 
   // Delete the Cdsfile if it exists
-  SysUtils.DeleteFile(ChangeFileExt(AFileName, '.cds'));
-  Assert(not SysUtils.FileExists(ChangeFileExt(AFileName, '.cds')));
+  SysUtils.DeleteFile(ChangeFileExt(AFileName, cdsExtension));
+  Assert(not SysUtils.FileExists(ChangeFileExt(AFileName, cdsExtension)));
 end;
 
 
@@ -3991,12 +4089,11 @@ begin
     CreateFieldDefs(CDS);
     CDS.CreateDataset;
 
-//##JVR    VerifyFields(CDS, @FieldData, Length(FieldData));
     CheckFields(CDS, DBIFieldCheckAll);
     OccupyValues(CDS);
     AssertValues(CDS);
 
-    CDS.SaveToFile(ChangeFileExt(AFileName, '.xml'), dbclient.dfXML);
+    CDS.SaveToFile(ChangeFileExt(AFileName, xmlExtension), dbclient.dfXML);
     CDS.Close;
   finally
     CDS.Free;
@@ -4021,24 +4118,22 @@ begin
     CreateFieldDefs(ODS);
     ODS.CreateDataset;
 
-//##JVR    VerifyFields(ODS);
     CheckFields(ODS, DBIFieldCheckAll);
     OccupyValues(ODS);
 
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
+    ODS.SaveToFile(ChangeFileExt(AFileName, cdsExtension), dfXML);
     CheckFields(ODS, DBIFieldCheckAll);
 
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
+    ODS.SaveToFile(ChangeFileExt(AFileName, dbfExtension));
     AssertValues(ODS);
 
     // Load Memory XBaseDataset from ObjectListDataset and verify data
     XDS := TDBIXBaseDataset.Create(nil);
     try
-      XDS.FileName := ChangeFileExt(ChangeFileExt(AFileName, '') + 'a', '.dbf');
+      XDS.FileName := ChangeFileExt(ChangeFileExt(AFileName, '') + 'a', dbfExtension);
       CreateFieldDefs(XDS);
       XDS.CreateDataset;
 
-//##JVR      VerifyFields(XDS);
       CheckFields(XDS, DBIFieldCheckAll);
       XDS.LoadFromDataset(ODS);
       CheckFields(XDS, DBIFieldCheckAll);
@@ -4055,10 +4150,11 @@ begin
       XDS.Free;
     end;
 
-    AFileName := ChangeFileExt(ChangeFileExt(AFileName, '') + 'b', '.dbf');
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.dbf'));
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.csv'), dfCSV);
+    AFileName := ChangeFileExt(ChangeFileExt(AFileName, '') + 'b', dbfExtension);
+    ODS.SaveToFile(ChangeFileExt(AFileName, dbfExtension));
+    ODS.SaveToFile(ChangeFileExt(AFileName, cdsExtension), dfXML);
+    ODS.SaveToFile(ChangeFileExt(AFileName, csvExtension), dfCSV);
+    ODS.SaveToFile(ChangeFileExt(AFileName, jsonExtension), dfJSON);
     ODS.Close;
   finally
     ODS.Free;
@@ -4074,13 +4170,12 @@ begin
 
     ODS.LoadFromFile(AFileName);
     CheckFields(ODS, DBIFieldCheckAll);
-//##JVR    VerifyFields(ODS);
     AssertValues(ODS);
 
     ClearValues(ODS);
     AssertBlanks(ODS);
 
-    ODS.SaveToFile(ChangeFileExt(AFileName, '.nulls.dbf'));
+    ODS.SaveToFile(ChangeFileExt(AFileName, '.nulls' + dbfExtension));
 
     RefillValues(ODS);
     AssertValues(ODS);
@@ -4095,7 +4190,6 @@ begin
   XDS := TDBIXBaseDataset.Create(nil);
   try
     XDS.LoadFromFile(AFileName);
-//##JVR    VerifyFields(XDS);
     CheckFields(XDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXBaseMapFieldTypes]);
     AssertValues(XDS);
     XDS.Close;
@@ -4108,7 +4202,21 @@ begin
   ODS := TDBIObjectListDataset.Create(nil);
   try
     ODS.ClassTypeName := Self.ClassName;
-    ODS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
+    ODS.LoadFromFile(ChangeFileExt(AFileName, cdsExtension));
+    CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
+    AssertValues(ODS);
+
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+
+
+  // Load the table into a ObjectListDataset from a JSON file and verify data
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    ODS.ClassTypeName := Self.ClassName;
+    ODS.LoadFromFile(ChangeFileExt(AFileName, jsonExtension));
     CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
     AssertValues(ODS);
 
@@ -4126,7 +4234,7 @@ begin
     ODS.CreateDataset;
     CheckFields(ODS, DBIFieldCheckAll);
 
-    ODS.LoadFromFile(ChangeFileExt(AFileName, '.csv'));
+    ODS.LoadFromFile(ChangeFileExt(AFileName, csvExtension));
     AssertValues(ODS);
 
     ODS.Close;
@@ -4139,10 +4247,10 @@ begin
 {$ifndef fpc}
   CDS := TDBIClientDataset.Create(nil);
   try
-    CDS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
+    CDS.LoadFromFile(ChangeFileExt(AFileName, cdsExtension));
     CheckFields(CDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
     AssertValues(CDS);
-    CDS.SaveToFile(ChangeFileExt(AFileName, '.xml'));
+    CDS.SaveToFile(ChangeFileExt(AFileName, xmlExtension));
 
     // Load Memory XBaseDataset from ClientDataset and verify data
     XDS := TDBIXBaseDataset.Create(nil);
@@ -4163,12 +4271,12 @@ begin
   end;
 
 
-  // Create a new ObjectlistDataset, add data, and verify
+  // Create a new ObjectlistDataset, load from ClientDataset xml file, and verify
   ODS := TDBIObjectListDataset.Create(nil);
   try
     ODS.ClassTypeName := Self.ClassName;
 
-    ODS.LoadFromFile(ChangeFileExt(AFileName, '.xml'));
+    ODS.LoadFromFile(ChangeFileExt(AFileName, xmlExtension));
     CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
     AssertValues(ODS);
 
@@ -4193,15 +4301,16 @@ begin
   try
     CreateFieldDefs(XDS);
 
-    XDS.FileName := ChangeFileExt(AFileName, '.dbf');
+    XDS.FileName := ChangeFileExt(AFileName, dbfExtension);
     XDS.CreateDataset;
 
     CheckFields(XDS, DBIFieldCheckAll);
     OccupyValues(XDS);
     AssertValues(XDS);
 
-    XDS.SaveToFile(ChangeFileExt(AFileName, '.cds'), dfXML);
-    XDS.SaveToFile(ChangeFileExt(AFileName, '.xml'), dfXML);
+    XDS.SaveToFile(ChangeFileExt(AFileName, cdsExtension), dfXML);
+    XDS.SaveToFile(ChangeFileExt(AFileName, xmlExtension), dfXML);
+    XDS.SaveToFile(ChangeFileExt(AFileName, jsonExtension), dfJSON);
 
     XDS.Close;
   finally
@@ -4209,7 +4318,7 @@ begin
   end;
 
 
-  // Reload XBase Table from file, test nulls and verify data
+  // Reload XBase Table from dbf file, test nulls and verify data
   XDS := TDBIXBaseDataset.Create(nil);
   try
     XDS.LoadFromFile(AFileName);
@@ -4219,7 +4328,49 @@ begin
     ClearValues(XDS);
     AssertBlanks(XDS);
 
-    XDS.SaveToFile(ChangeFileExt(AFileName, '.nulls.dbf'));
+    XDS.SaveToFile(ChangeFileExt(AFileName, '.nulls' + dbfExtension));
+
+    RefillValues(XDS);
+    AssertValues(XDS);
+
+    XDS.Close;
+  finally
+    XDS.Free;
+  end;
+
+
+  // Load XBase Table from xml file, test nulls and verify data
+  XDS := TDBIXBaseDataset.Create(nil);
+  try
+    XDS.LoadFromFile(ChangeFileExt(AFileName, xmlExtension), dfXML);
+    CheckFields(XDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
+    AssertValues(XDS);
+
+    ClearValues(XDS);
+    AssertBlanks(XDS);
+
+    XDS.SaveToFile(ChangeFileExt(AFileName, '.nulls' + xmlExtension), dfXML);
+
+    RefillValues(XDS);
+    AssertValues(XDS);
+
+    XDS.Close;
+  finally
+    XDS.Free;
+  end;
+
+
+  // Load XBase Table from json file, test nulls and verify data
+  XDS := TDBIXBaseDataset.Create(nil);
+  try
+    XDS.LoadFromFile(ChangeFileExt(AFileName, jsonExtension), dfJSON);
+    CheckFields(XDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
+    AssertValues(XDS);
+
+    ClearValues(XDS);
+    AssertBlanks(XDS);
+
+    XDS.SaveToFile(ChangeFileExt(AFileName, '.nulls' + dbfExtension));
 
     RefillValues(XDS);
     AssertValues(XDS);
@@ -4234,7 +4385,7 @@ begin
 {$ifndef fpc}
   CDS := TDBIClientDataset.Create(nil);
   try
-    CDS.LoadFromFile(ChangeFileExt(AFileName, '.cds'));
+    CDS.LoadFromFile(ChangeFileExt(AFileName, cdsExtension));
     CheckFields(CDS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
 
     AssertValues(CDS);

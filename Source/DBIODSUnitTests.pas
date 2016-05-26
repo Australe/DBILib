@@ -221,7 +221,7 @@ end;
 procedure TDBIODSUnitTests.BinaryTypes;
 const
   Caller = 'BinaryTypes';
-  TableName = 'oBinaryTypes.cds';
+  TableName = 'oBinaryTypes' + cdsExtension;
 
 var
 {$ifndef fpc}
@@ -243,7 +243,7 @@ begin
     TBinaryData.OccupyValues(CDS);
     TBinaryData.AssertValues(CDS);
 
-    CDS.SaveToFile(DataPath('cBinaryTypes.xml'));
+    CDS.SaveToFile(DataPath('cBinaryTypes' + xmlExtension));
 
     CDS.Close;
   finally
@@ -256,7 +256,7 @@ begin
     ODS.ClassTypeName := TBinaryData.ClassName;
 
     // Verify Data was loaded correctly from CDS Xml file
-    ODS.LoadFromFile(DataPath('cBinaryTypes.xml'));
+    ODS.LoadFromFile(DataPath('cBinaryTypes' + xmlExtension));
     TBinaryData.AssertValues(ODS);
 
     TBinaryData.ClearValues(ODS);
@@ -333,7 +333,7 @@ end;
 }
 procedure TDBIODSUnitTests.CreateBooks;
 const
-  TableName = 'oCreateBooks.dbf';
+  TableName = 'oCreateBooks' + dbfExtension;
 
 var
   ODS: TObjectListDataset;
@@ -364,7 +364,7 @@ end;
 
 procedure TDBIODSUnitTests.CreateGad;
 const
-  TableName = 'oCreateGad.dbf';
+  TableName = 'oCreateGad' + dbfExtension;
 var
   ODS: TObjectListDataset;
 
@@ -411,7 +411,7 @@ end;
 {$ifndef fpc}
 procedure TDBIODSUnitTests.CreateGadCDS;
 const
-  TableName = 'oCreateGadCDS.dbf';
+  TableName = 'oCreateGadCDS' + dbfExtension;
 
 var
   CDS: TDBIClientDataset;
@@ -458,7 +458,7 @@ end;
 
 procedure TDBIODSUnitTests.DataPacket;
 const
-  TableName = 'oDataPacket.dbf';
+  TableName = 'oDataPacket' + dbfExtension;
 
 var
   DataPacket: TDBIDataPacket;
@@ -561,7 +561,7 @@ end;
 
 procedure TDBIODSUnitTests.DefaultStringAttributes;
 const
-  TableName = 'DefaultStringAttributes.xml';
+  TableName = 'DefaultStringAttributes' + xmlExtension;
   
 var
   ODS: TObjectListDataset;
@@ -651,7 +651,7 @@ end;
 {$ifndef fpc}
 procedure TDBIODSUnitTests.FieldPropsCDS;
 const
-  TableName = 'FieldPropsCDS.dbf';
+  TableName = 'FieldPropsCDS' + dbfExtension;
 
 var
   CDS: TDBIClientDataset;
@@ -671,7 +671,7 @@ begin
     TStringData.VerifyFields(CDS, @FieldData, Length(FieldData));
     TStringData.AssertValues(CDS);
 
-    CDS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dbclient.dfXML);
+    CDS.SaveToFile(DataPath(ChangeFileExt(TableName, cdsExtension)), dbclient.dfXML);
     CDS.Close;
   finally
     CDS.Free;
@@ -680,7 +680,7 @@ begin
   // Create String Data CDS
   CDS := TDBIClientDataset.Create(nil);
   try
-    CDS.loadFromFile(DataPath(ChangeFileExt(TableName, '.cds')));
+    CDS.loadFromFile(DataPath(ChangeFileExt(TableName, cdsExtension)));
     TStringData.VerifyFields(CDS, @FieldData, Length(FieldData));
     TStringData.AssertValues(CDS);
 
@@ -693,7 +693,7 @@ end;
 
 procedure TDBIODSUnitTests.FieldPropsODS;
 const
-  TableName = 'FieldPropsODS.dbf';
+  TableName = 'FieldPropsODS' + dbfExtension;
 
 var
 {$ifndef fpc}
@@ -718,7 +718,7 @@ begin
     TStringData.VerifyFields(ODS, @FieldData, Length(FieldData));
     TStringData.AssertValues(ODS);
 
-    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfXML);
+    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, cdsExtension)), dfXML);
     ODS.SaveToFile(DataPath(TableName));
     ODS.Close;
 
@@ -781,7 +781,7 @@ begin
 {$ifndef fpc}
   CDS := TDBIClientDataset.Create(nil);
   try
-    CDS.loadFromFile(DataPath(ChangeFileExt(TableName, '.cds')));
+    CDS.loadFromFile(DataPath(ChangeFileExt(TableName, cdsExtension)));
     TStringData.VerifyFields(CDS, @FieldData, Length(FieldData));
     TStringData.AssertValues(CDS);
 
@@ -825,7 +825,7 @@ end;
 
 procedure TDBIODSUnitTests.Filters;
 const
-  TableName = 'oFilters.dbf';
+  TableName = 'oFilters' + dbfExtension;
 
 var
   ODS: TFilteredListDataset;
@@ -865,7 +865,7 @@ end;
 
 procedure TDBIODSUnitTests.FloatTypes;
 const
-  TableName = 'oFloatTypes.dbf';
+  TableName = 'oFloatTypes' + dbfExtension;
 begin
   TFloatData.DeleteTables(DataPath(TableName));
   TFloatData.ODSCreateTable(DataPath(TableName));
@@ -878,7 +878,7 @@ end;
 }
 procedure TDBIODSUnitTests.Indices;
 const
-  TableName = 'oIndice.dbf';
+  TableName = 'oIndice' + dbfExtension;
 
 var
 {$ifndef fpc}
@@ -893,7 +893,7 @@ begin
 {$ifndef fpc}
   CDS := TDBIClientDataset.Create(nil);
   try
-    CDS.LoadFromFile(DataPath(ChangeFileExt(TableName, '.cds')));
+    CDS.LoadFromFile(DataPath(ChangeFileExt(TableName, cdsExtension)));
     TBookData.AddIndexDefs(CDS);
 
     TBookData.CheckAscending(CDS, 'NameOrder');
@@ -905,7 +905,7 @@ begin
 
     CDS.Fields.Clear;
     CDS.FieldDefs.Clear;
-    CDS.LoadFromFile(DataPath(ChangeFileExt(TableName, '.cds')));
+    CDS.LoadFromFile(DataPath(ChangeFileExt(TableName, cdsExtension)));
 
     TBookData.CheckAscending(CDS, 'NameOrder');
     TBookData.CheckAscending(CDS, 'NameReverse');
@@ -1003,7 +1003,7 @@ end;
 }
 procedure TDBIODSUnitTests.LoadFromDataset;
 const
-  TableName = 'oLoadFromDataset.dbf';
+  TableName = 'oLoadFromDataset' + dbfExtension;
 
 var
   ODS: TObjectListDataset;
@@ -1047,7 +1047,7 @@ end;
 
 procedure TDBIODSUnitTests.LoadFromFile;
 const
-  TableName = 'oLoadFromFile.dbf';
+  TableName = 'oLoadFromFile' + dbfExtension;
 
 var
   ODS: TObjectListDataset;
@@ -1082,7 +1082,7 @@ end;
 }
 procedure TDBIODSUnitTests.Locate;
 const
-  Tablename = 'oLocate.dbf';
+  Tablename = 'oLocate' + dbfExtension;
 
 var
   ODS: TObjectListDataset;
@@ -1179,7 +1179,7 @@ end;
 }
 procedure TDBIODSUnitTests.MemoryStreams;
 const
-  TableName = 'oMemoryStreams.dbf';
+  TableName = 'oMemoryStreams' + dbfExtension;
 
 var
   DataStream: TMemoryStream;
@@ -1472,7 +1472,7 @@ end;
 
 procedure TDBIODSUnitTests.ObjectTypes;
 const
-  TableName = 'oCreateEntity.xml';
+  TableName = 'oCreateEntity' + xmlExtension;
 
 begin
   // Run Object Tests
@@ -1482,7 +1482,7 @@ end;
 
 procedure TDBIODSUnitTests.OrdinalTypes;
 const
-  TableName = 'oOrdinalTypes.dbf';
+  TableName = 'oOrdinalTypes' + dbfExtension;
 begin
   TOrdinalData.DeleteTables(DataPath(TableName));
   TOrdinalData.ODSCreateTable(DataPath(TableName));
@@ -1495,7 +1495,7 @@ end;
 }
 procedure TDBIODSUnitTests.ReadOnlyProperty;
 const
-  TableName = 'oReadOnlyProperty.dbf';
+  TableName = 'oReadOnlyProperty' + dbfExtension;
 
 var
   ODS: TObjectListDataset;
@@ -1690,7 +1690,7 @@ end;
 }
 procedure TDBIODSUnitTests.SaveAsCDS;
 const
-  TableName = 'oSaveAsCDS.dbf';
+  TableName = 'oSaveAsCDS' + dbfExtension;
 
 var
 {$ifndef fpc}
@@ -1709,10 +1709,10 @@ begin
 
     TBookData.ReviseFields(ODS);
 
-    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.cds')), dfXML);
+    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, cdsExtension)), dfXML);
     ODS.Close;
 
-    Assert(SysUtils.FileExists(DataPath(ChangeFileExt(TableName, '.cds'))));
+    Assert(SysUtils.FileExists(DataPath(ChangeFileExt(TableName, cdsExtension))));
   finally
     ODS.Free;
   end;
@@ -1723,7 +1723,7 @@ begin
 {$ifndef fpc}
   CDS := TDBIClientDataset.Create(nil);
   try
-    CDS.LoadFromFile(DataPath(ChangeFileExt(TableName, '.cds')));
+    CDS.LoadFromFile(DataPath(ChangeFileExt(TableName, cdsExtension)));
 
     // Verify Data
     TBookData.ReviseFields(CDS);
@@ -1770,7 +1770,7 @@ type
 
 procedure TDBIODSUnitTests.Streaming;
 const
-  TableName = 'oStreamBooks.dbf';
+  TableName = 'oStreamBooks' + dbfExtension;
 
 var
   Adapter: TODSStreamingComponent;
@@ -1791,13 +1791,13 @@ begin
     // Verify Data was written correctly to file
     ODS.List.Clear;
     ODS.LoadFromFile(DataPath(TableName));
-    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.xml')));
+    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, xmlExtension)));
 
     TBookData.CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
     TBookData.AssertValues(ODS);
 
     // Stream the Dataset out to File
-    Adapter.SaveToFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+    Adapter.SaveToFile(DataPath(ChangeFileExt(TableName, dfmExtension)));
     ODS.Close;
 
   finally
@@ -1811,7 +1811,7 @@ begin
 
     // Verify Data was written correctly to file
     ODS.List.Clear;
-    ODS.LoadFromFile(DataPath(ChangeFileExt(TableName, '.xml')));
+    ODS.LoadFromFile(DataPath(ChangeFileExt(TableName, xmlExtension)));
 
 //##JVR    TBookData.VerifyFields(ODS, @FieldData, Length(FieldData));
     TBookData.CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
@@ -1823,9 +1823,9 @@ begin
   Adapter := TODSStreamingComponent.Create(nil);
   try
     // Stream the Dataset Back in
-    Adapter.LoadFromFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+    Adapter.LoadFromFile(DataPath(ChangeFileExt(TableName, dfmExtension)));
     ODS := Adapter.RootComponent as TDBIObjectListDataset;
-    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.2.xml')));
+    ODS.SaveToFile(DataPath(ChangeFileExt(TableName, '.2' + xmlExtension)));
 
 //##JVR    TBookData.VerifyFields(ODS, @FieldData, Length(FieldData));
     TBookData.CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
@@ -1849,7 +1849,7 @@ end;
 }
 procedure TDBIODSUnitTests.UpdateBooks;
 const
-  TableName = 'oUpdateBooks.dbf';
+  TableName = 'oUpdateBooks' + dbfExtension;
 
 begin
   TBookData.ODSUpdateTable(DataPath(TableName));

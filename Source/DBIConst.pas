@@ -164,7 +164,7 @@ type
     ) of object;
 
 type
-  TDBIDataFormat = (dfDefault, dfXbase, dfXbasePlus, dfXML, dfCSV, dfPSV, dfINI);
+  TDBIDataFormat = (dfDefault, dfXbase, dfXbasePlus, dfXML, dfCSV, dfJSON);
   TDBIOpenMode = (omOpen, omCreateDataset, omClose);
 
 const

@@ -75,6 +75,7 @@ type
   protected
     procedure AssignTo(Dest: TPersistent); override;
     function GetTokenChar: TDBIChar;
+    function GetTokenFloat: Double;
     function GetTokenInteger: Integer;
     function GetTokenName: String;
     function GetTokenString: String;
@@ -93,6 +94,7 @@ type
     procedure Info(const AMessage: String);
 
     property AsChar: TDBIChar read GetTokenChar write SetTokenChar;
+    property AsFloat: Double read GetTokenFloat;
     property AsInteger: Integer read GetTokenInteger;
     property AsString: TDBIString read FTokenString write FTokenString;
 
@@ -795,10 +797,24 @@ end;
   Jvr - 16/12/2010 13:43:43 - Initial code.<br />
 }
 function TDBICustomAsciiLexer.Check(TokenTypes: TDBITokenTypes): String;
+
+  function GetExpectedTypes: String;
+  var
+    TokenType: TDBITokenType;
+
+  begin
+    Result := '';
+    for TokenType := Low(TDBITokenType) to High(TDBITokenType) do begin
+      if (TokenType in TokenTypes) then begin
+        Result := Result + GetEnumName(TypeInfo(TDBITokenType), Ord(TokenType)) + ' ';
+      end;
+    end;
+  end;
+
 begin
   Result := Token.TokenString;
   if not (Token.TokenType in TokenTypes) then begin
-    SyntaxError('Unexpected Token type "%s"', [Token.TokenString]);
+    SyntaxError('Unexpected Token type "%s", expected "%s"', [Token.TokenString, GetExpectedTypes]);
   end;
 end;
 
@@ -1756,6 +1772,12 @@ begin
   else begin
     Result := FTokenString[1];
   end;
+end;
+
+
+function TDBILexerToken.GetTokenFloat: Double;
+begin
+  Result := StrToFloat(String(FTokenString));
 end;
 
 

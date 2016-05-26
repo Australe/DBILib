@@ -86,7 +86,7 @@ uses
 procedure TDBICDSUnitTests.FilterGad;
 const
   Quote = #39;
-  TableName = 'cFilterGad.xml';
+  TableName = 'cFilterGad' + xmlExtension;
 
 var
   CDS: TDBIClientDataset;
@@ -196,7 +196,7 @@ type
 
 procedure TDBICDSUnitTests.Streaming;
 const
-  TableName = 'cStreamBooks.xml';
+  TableName = 'cStreamBooks' + xmlExtension;
 
 var
   Adapter: TCDSStreamingComponent;
@@ -221,7 +221,7 @@ begin
       TBookData.AssertValues(CDS);
 
       // Stream the Dataset out to File
-      Adapter.SaveToFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+      Adapter.SaveToFile(DataPath(ChangeFileExt(TableName, dfmExtension)));
       CDS.Close;
     finally
       CDS.Free;
@@ -233,7 +233,7 @@ begin
   Adapter := TCDSStreamingComponent.Create(nil);
   try
     // Stream the Dataset Back in
-    Adapter.LoadFromFile(DataPath(ChangeFileExt(TableName, '.dfm')));
+    Adapter.LoadFromFile(DataPath(ChangeFileExt(TableName, dfmExtension)));
     CDS := Adapter.RootComponent as TDBIClientDataset;
 
     TBookData.VerifyFields(CDS, @FieldData, Length(FieldData));
@@ -253,7 +253,7 @@ end;
 
 procedure TDBICDSUnitTests.UpdateBooks;
 const
-  TableName = 'cUpdateBooks.xml';
+  TableName = 'cUpdateBooks' + xmlExtension;
 
 var
   CDS: TDBIClientDataset;

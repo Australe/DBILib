@@ -282,7 +282,12 @@ type
 
     Tok_EscapeAtSign,                  // '\@'
     Tok_EscapeDollar,                  // '\$'
-    Tok_EscapeTab,                     // '\~'
+    Tok_EscapeQuotes,                  // '\"'
+    Tok_EscapeBackSpace,               // '\b'
+    Tok_EscapeFormFeed,                // '\f'
+    Tok_EscapeLineFeed,                // '\n'
+    Tok_EscapeReturn,                  // '\r'
+    Tok_EscapeTab,                     // '\t'
 
     { Special Tokens }
     Tok_None,                          // Nothing / Unassigned
