@@ -90,8 +90,8 @@ const
     'Save to fi&le...'
     );
 
-  SPipeSeperatedDataFilter = 'PSV files (*.psv)|*.psv|All Files (*.*)|*.*';
-  SPipeSeperatedDataExtension = 'psv';
+  SJsonDataFilter = 'JSON files (*.json)|*.json|All Files (*.*)|*.*';
+  SJsonDataExtension = 'json';
   SXbaseDataFilter = 'Xbase files (*.dbf)|*.dbf|All Files (*.*)|*.*';
   SXbaseDataExtension = 'dbf';
   SXmlDataFilter = 'Client Dataset (*.cds)|*.cds|XML Files (*.xml)|*.xml|All Files (*.*)|*.*';
@@ -309,13 +309,13 @@ begin
         DefaultExt := SXmlDataExtension;
         Filter := SXmlDataFilter;
       end
-      else if (DataFormat = dfPSV) then begin
-        DefaultExt := SPipeSeperatedDataExtension;
-        Filter := SPipeSeperatedDataFilter;
+      else if (DataFormat = dfJSON) then begin
+        DefaultExt := SJsonDataExtension;
+        Filter := SJsonDataFilter;
       end
       else begin
         raise EDBIException.Create(
-          '"Xbase", "XML" and "PSV" are the only formats currently supported'
+          '"Xbase", "XML" and "JSON" are the only formats currently supported'
           );
       end;
 
