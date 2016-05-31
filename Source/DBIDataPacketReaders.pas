@@ -525,11 +525,11 @@ function TDBIJsonDataPacketReader.GetMetaData: Boolean;
   end;
 
 begin
-  Result := (Context = packetContext_MetaData) and Input.Have([Tok_OpenSquareBracket]);
+  Result := (Context = packetContext_MetaData) and Input.Have([Tok_OpenCurlyBracket]);
   if Result then begin
     Input.Skip([tkWhiteSpace]);
 
-    while (ProcessColumns or ProcessParams) and not Input.Have([Tok_CloseSquareBracket]) do;
+    while (ProcessColumns or ProcessParams) and not Input.Have([Tok_CloseCurlyBracket]) do;
 
     Input.Skip([Tok_Comma]);
     Input.Skip([tkWhiteSpace]);
@@ -749,6 +749,9 @@ begin
 
       Result := Data.DataString;
     end;
+  end
+  else begin
+    Result := Fetch([Tok_Identifier, Tok_IntegerLiteral, Tok_FloatLiteral, Tok_HexLiteral]);
   end;
 
   Skip([tkWhiteSpace]);
@@ -1210,7 +1213,7 @@ begin
         end
         else if not Field.ReadOnly then begin
           case Field.DataType of
-            ftBoolean: Field.AsBoolean := CompareText('True', FieldData) = 0;
+            ftBoolean: Field.AsBoolean := CompareText('true', FieldData) = 0;
             ftCurrency: Field.AsFloat := StrToFloat(String(FieldData));
             ftDate: Field.AsDateTime := DBIStrDateStampToDateTime(PAnsiChar(AnsiString(FieldData)));
             ftDateTime: Field.AsDateTime := DBIStrToDateTime(FieldData);

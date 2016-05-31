@@ -81,8 +81,6 @@ type
   private
     FDataset: TDataset;
 
-    procedure Writeln(const Data: String = '');
-
   protected
     procedure SetDataset(Value: TDataset); virtual;
 
@@ -481,7 +479,7 @@ var
 
 begin
   // Write JSON Data to stream
-  Writeln(jsonRowDataHeader);
+  WriteLine(jsonRowDataHeader);
 
   while not Dataset.Eof do begin
     WriteStr(jsonRowDataBegin);
@@ -498,10 +496,10 @@ begin
     end;
 
     Dataset.Next;
-    Writeln(jsonRowDataEnd[Dataset.Eof]);
+    WriteLine(jsonRowDataEnd[Dataset.Eof]);
   end;
 
-  Writeln(jsonRowDataFooter);
+  WriteLine(jsonRowDataFooter);
 end;
 
 
@@ -513,6 +511,7 @@ end;
 
 procedure TDBIJsonDataPacketWriter.WriteFieldData(Field: TField);
 const
+  BoolName: array[Boolean] of String = ('false', 'true');
   Quotes = #34;
   Colon = ':';
   Space = ' ';
@@ -522,6 +521,10 @@ var
 
 begin
   case Field.DataType of
+    ftBoolean: begin
+      FieldData := BoolName[Field.AsBoolean];
+    end;
+
     ftDate: begin
       FieldData := FormatDateTime(cdsDateFormat, Field.AsDateTime);
     end;
@@ -536,7 +539,26 @@ begin
   end;
 
   WriteStr(Quotes + EncodeFieldName(Field.FieldName) + Quotes + Colon + Space);
-  WriteStr(EncodeFieldData(FieldData));
+  case Field.DataType of
+{$ifdef DELPHI2009}
+    db.ftByte,
+    db.ftLongWord,
+    db.ftShortint,
+    db.ftSingle,
+    db.ftExtended,
+{$endif}
+    db.ftAutoInc,
+    db.ftBoolean,
+    db.ftFloat,
+    db.ftCurrency,
+    db.ftWord,
+    db.ftSmallint,
+    db.ftInteger,
+    db.ftLargeint: WriteStr(FieldData);
+
+  else
+    WriteStr(EncodeFieldData(FieldData));
+  end;
 end;
 
 
@@ -579,7 +601,7 @@ const
   jsonDataPacketFooter =     '}';
 
 begin
-  Writeln(jsonDataPacketFooter);
+  WriteLine(jsonDataPacketFooter);
 end;
 
 
@@ -588,21 +610,21 @@ const
   jsonDataPacketHeader = '"version": 1.00,';
 
 begin
-  Writeln('{');
-  Writeln(jsonDataPacketHeader);
+  WriteLine('{');
+  WriteLine(jsonDataPacketHeader);
 end;
 
 {$define UseMetaData True}
 
 procedure TDBIJsonDataPacketWriter.WriteMetaData;
 const
-  jsonMetaDataHeader = '"metadata": [';
+  jsonMetaDataHeader = '"metadata": {';
   jsonFieldsHeader   = '  "fields": [';
   jsonFieldBegin     = '    {';
   jsonFieldEnd: array[Boolean] of String = ('}', '},');
   jsonFieldsFooter   = '  ],';
   jsonParams         = '  "params": null';
-  jsonMetaDataFooter = '],';
+  jsonMetaDataFooter = '},';
 
 var
   Index: Integer;
@@ -611,8 +633,8 @@ var
 begin
 {$ifdef UseMetaData}
   // Write cds Metadata to stream
-  Writeln(jsonMetaDataHeader);
-  Writeln(jsonFieldsHeader);
+  WriteLine(jsonMetaDataHeader);
+  WriteLine(jsonFieldsHeader);
 
   // Get info without opening the database
   FieldDefs := Dataset.FieldDefs;
@@ -629,12 +651,12 @@ begin
     WriteFieldAttributes(FieldDefs[Index]);
     WriteFieldWidth(FieldDefs[Index]);
 
-    Writeln(jsonFieldEnd[Index < Pred(FieldDefs.Count)]);
+    WriteLine(jsonFieldEnd[Index < Pred(FieldDefs.Count)]);
   end;
 
-  Writeln(jsonFieldsFooter);
-  Writeln(jsonParams);
-  Writeln(jsonMetaDataFooter);
+  WriteLine(jsonFieldsFooter);
+  WriteLine(jsonParams);
+  WriteLine(jsonMetaDataFooter);
 {$endif}
 end;
 
@@ -674,14 +696,42 @@ var
 
 begin
   for Index := Length(FieldData) downto 1 do begin
-    if (Ord(FieldData[Index]) in [1..31, 38..39]) then begin
+    // escape all characters less than 32 (space) and greater than 126
+    if (Ord(FieldData[Index]) in [1..31, 127..255]) then begin
       Insert('&#' + IntToStr(Ord(FieldData[Index])) + ';', FieldData, Index+1);
       Delete(FieldData, Index ,1)
     end
+
+    // escape double quotes
     else if (FieldData[Index] = #34) then begin
       Insert('&quot;', FieldData, Index+1);
       Delete(FieldData, Index ,1)
     end
+
+    // escape apostrophe
+    else if (FieldData[Index] = #39) then begin
+      Insert('&apos;', FieldData, Index+1);
+      Delete(FieldData, Index ,1)
+    end
+
+    // escape lesser than
+    else if (FieldData[Index] = #60) then begin
+      Insert('&lt;', FieldData, Index+1);
+      Delete(FieldData, Index ,1)
+    end
+
+    // escape greater than
+    else if (FieldData[Index] = #62) then begin
+      Insert('&gt;', FieldData, Index+1);
+      Delete(FieldData, Index ,1)
+    end
+
+    // escape ampersand
+    else if (FieldData[Index] = #38) then begin
+      Insert('&amp;', FieldData, Index+1);
+      Delete(FieldData, Index ,1)
+    end
+
     else if (FieldData[Index] = #0) then begin
       Delete(FieldData, Index, 1);
     end;
@@ -794,7 +844,7 @@ begin
       WriteFieldData(Dataset.Fields[Index]);
     end;
 
-    Writeln(cdsRowDataEnd);
+    WriteLine(cdsRowDataEnd);
     Dataset.Next;
   end;
 
@@ -1074,12 +1124,6 @@ end;
 procedure TDBICustomDataPacketWriter.WriteFieldWidth;
 begin
   //##NOP
-end;
-
-
-procedure TDBICustomDataPacketWriter.Writeln(const Data: String);
-begin
-  WriteStr(Data + #10);
 end;
 
 
