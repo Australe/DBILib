@@ -37,6 +37,7 @@ requires
 contains
   DBIConst in 'DBIConst.pas',
   DBITypInfo in 'DBITypInfo.pas',
+  DBIComponents in 'DBIComponents.pas',
   DBICustomListDataConnections in 'DBICustomListDataConnections.pas',
   DBICustomStreamDataConnections in 'DBICustomStreamDataConnections.pas',
   DBIComponentDataConnections in 'DBIComponentDataConnections.pas',

@@ -63,7 +63,7 @@ type
   TDBIDebugKinds = set of TDBIDebugKind;
 
 const
-  DBIDebugKinds = [];
+  DBIDebugKinds: TDBIDebugKinds = [];
 
 type
   TDBIDebugInfo = class(TPersistent)

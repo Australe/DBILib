@@ -43,7 +43,7 @@ type
 {$ifdef fpc}
   TFieldsEditor = TDSFieldsEditorFrm;
 {$else}
-  IDBIDesigner = {$ifdef Delphi6} IDesigner; {$else} IFormDesigner; {$endif}
+  {$ifdef Delphi6} IDBIDesigner = IDesigner; {$else} IDBIDesigner = IFormDesigner; {$endif}
 {$endif}
 
   EDBIPropertyEditorException = class(EDBICustomException);

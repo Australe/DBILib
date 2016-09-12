@@ -30,7 +30,7 @@ interface
 
 uses
   Classes, SysUtils, DBIComponents, DBIDialogs, DBIStreamAdapters, DBITokenizers,
-  DBITokenizerConsts, omSendMail;
+  DBITokenizerConsts;
 
 type
  TDBIPascalMacro = (
@@ -45,6 +45,10 @@ type
 type
   TDBIPascalKeyword = (
     pasUnknown,
+
+    // Attributes
+    pasWeak,
+    pasUnsafe,
 
     // General
     pasAs,
@@ -111,11 +115,14 @@ type
     pasDispid,
     pasDynamic,
     pasExternal,
+    pasExperimental,
     pasForward,
     pasInline,
     pasMessage,
+    pasName,
     pasOverload,
     pasOverride,
+    pasPlatform,
     pasReintroduce,
     pasSafecall,
     pasStatic,
@@ -398,6 +405,7 @@ type
   public
     procedure Check(const Value: TDBIPascalKeyword); overload;
     function Collate(ATokenKind: TDBITokenKind): String; overload;
+    function Collate(const Start: TDBITokenType; const Finish: TDBITokenType): String; overload;
     function Fetch(const Value: TDBIPascalKeyword): String; overload;
     function Have(const Value: TDBIPascalKeyword): Boolean; overload;
     function Skip(const Value: TDBIPascalKeyword): String; overload;
@@ -513,13 +521,19 @@ var
 begin
   Assert(Assigned(AScope));
   Result := True;
+  TypeNames := Local(TStringList.Create).Obj as TStrings;
 
   Input.Fetch(pasCase);
-  Input.Fetch([Tok_Identifier]);
+  TypeName := Input.Fetch([Tok_Identifier]);
+  if Input.Have([Tok_Colon]) then begin
+    TypeNames.Add(TypeName);
+    Input.Fetch([Tok_Identifier, Tok_NameSpace]);
+  end;
+
   Input.Fetch(pasOf);
 
   while not Input.Eof do begin
-    if (Input.Token.TokenType = Tok_CloseBracket) or (Input.keyword = pasEnd) then begin
+    if (Input.Token.TokenType = Tok_CloseBracket) or (Input.Keyword = pasEnd) then begin
       Break;
     end;
 
@@ -539,7 +553,6 @@ begin
           pasCase: ProcessCaseType(AScope);
 
         else
-          TypeNames := Local(TStringList.Create).Obj as TStrings;
           repeat
             TypeNames.Add(Input.Fetch([Tok_Identifier]));
           until not Input.Have([Tok_Comma]);
@@ -661,7 +674,7 @@ begin
       pasEnd: begin
         Input.Fetch(pasEnd);
 
-        ProcessDirectives([pasDeprecated], LocalDirectives);
+        ProcessDirectives([pasDeprecated, pasPlatform, pasExperimental], LocalDirectives);
         Input.Skip([Tok_SemiColon]);
 
         if AScope.Parent is TDBIPascalComplexes then begin
@@ -701,8 +714,14 @@ begin
     case Keyword of
       pasDeprecated: Input.GetQuotedString;
       pasDispid: Input.Fetch([Tok_IntegerLiteral]);
-      pasExternal: Input.GetQuotedString;
       pasMessage: Input.Fetch([Tok_Identifier]);
+
+      pasExternal, pasName: begin
+        if not Input.Have([Tok_Identifier]) then begin
+          Input.GetQuotedString;
+        end;
+      end;
+
     end;
     Input.Skip([Tok_SemiColon]);
 
@@ -793,6 +812,9 @@ begin
     Item := AScope.NewProcedure(ItemName, Position);
   end;
 
+  // Generics
+  Item.Data := Input.Collate(Tok_Smaller, Tok_Greater);
+
   // Do we have parameters?
   if (Input.Token.TokenType = Tok_OpenBracket) then begin
     Input.GetArguments(Item);
@@ -802,7 +824,7 @@ begin
   if (Input.Token.TokenType in [Tok_Colon, Tok_Equals]) then begin
     Item.KindName := Input.GetTypeSpecifier(nil, LocalDirectives);
   end;
-  Input.Fetch([Tok_SemiColon]);
+  Input.Have([Tok_SemiColon]);
 
   ProcessDirectives(TDBIPascalMethodDirectives, LocalDirectives);
   Item.Directives := LocalDirectives;
@@ -884,7 +906,7 @@ begin
   LocalDirectives := [];
   Result := True;
 
-  Args := Local(TDBIPascalArguments.Create(AScope.ChildOwner, AScope)).Obj as TDBIPascalArguments;
+  Args := TDBIPascalArguments.Create(AScope.ChildOwner, AScope);
   KindName := Input.GetTypeSpecifier(Args, LocalDirectives);
   Input.Skip([Tok_SemiColon]);
 
@@ -937,14 +959,23 @@ end;
 
 
 function TDBIPascalInterfaceAnalyser.ProcessUnit(AScope: TDBIPascalScope): Boolean;
+var
+  LocalDirectives: TDBIPascalKeywords;
+
 begin
   Assert(Assigned(AScope));
   Result := True;
+  LocalDirectives := [];
+
   Input.Fetch(pasUnit);
 
   GetUnit.Position := Input.Token.TokenPosition;
   GetUnit.Text := Input.Fetch([Tok_NameSpace, Tok_Identifier]);
-  Input.Fetch([Tok_SemiColon]);
+
+  ProcessDirectives([pasDeprecated, pasPlatform, pasExperimental], LocalDirectives);
+  Input.Skip([Tok_SemiColon]);
+
+  AScope.Directives := LocalDirectives;
 end;
 
 
@@ -999,6 +1030,9 @@ begin
     LocalDirectives := [];
     KindName := '';
     Data := '';
+
+    // [Weak] / [Unsafe] - Disgard Attributes for now
+    Data := Input.Collate(Tok_OpenSquareBracket, Tok_CloseSquareBracket);
 
     // Multiple Names
     Items.Clear;
@@ -1085,22 +1119,22 @@ begin
     end
 
     // tsComment1 or leadin
-    else if (tsComment1 in Token.TokenStatus) or (Token.TokenType in Tokens_Comment1) then begin
+    else if ((tsComment1 in Token.TokenStatus) or (Token.TokenType in Tokens_Comment1)) and not (tsStringLiteral in Token.TokenStatus) then begin
       inherited NextToken;
     end
 
     // tsComment2 or leadin
-    else if (tsComment2 in Token.TokenStatus) or (Token.TokenType = Tok_SlashSlash) then begin
+    else if ((tsComment2 in Token.TokenStatus) or (Token.TokenType = Tok_SlashSlash)) and not (tsStringLiteral in Token.TokenStatus) then begin
       inherited NextToken;
     end
 
     // tsComment3 or leadin
-    else if (tsComment3 in Token.TokenStatus) or (Token.TokenType in Tokens_Comment3) then begin
+    else if ((tsComment3 in Token.TokenStatus) or (Token.TokenType in Tokens_Comment3)) and not (tsStringLiteral in Token.TokenStatus) then begin
       inherited NextToken;
     end
 
     // Macros
-    else if (tsMacro in Token.TokenStatus) or (Token.TokenType in Tokens_Macro) then begin
+    else if ((tsMacro in Token.TokenStatus) or (Token.TokenType in Tokens_Macro)) and not (tsStringLiteral in Token.TokenStatus) then begin
       inherited NextToken;
     end
 
@@ -1135,6 +1169,22 @@ begin
   Result := '';
 
   while (Token.TokenKind = ATokenKind) do begin
+    Result := Result + Token.TokenString;
+    NextToken;
+  end;
+end;
+
+
+function TDBICustomPascalLexer.Collate(const Start: TDBITokenType; const Finish: TDBITokenType): String;
+begin
+  Result := '';
+
+  if (Token.TokenType = Start) then begin
+    repeat
+      Result := Result + Token.TokenString;
+      NextToken;
+    until (Token.TokenType = Finish);
+
     Result := Result + Token.TokenString;
     NextToken;
   end;
@@ -1227,7 +1277,7 @@ begin
   Success := Have([Tok_Equals]);
   while Success do begin
     // Arithmetic
-    if (Token.TokenType in Tok_ArithmeticOperators) or (keyword in [pasDiv, pasNot]) then begin
+    if (Token.TokenType in Tok_ArithmeticOperators) or (Keyword in [pasDiv, pasNot]) then begin
       Result := Result + Chr_Space + Fetch(Tok_ArithmeticOperators);
     end
 
@@ -1386,11 +1436,23 @@ begin
     Include(ADirectives, pasPacked);
   end;
 
-
   // Procedural Type
-  if (Keyword in [pasFunction, pasProcedure]) then begin
+  if (Keyword in [pasFunction, pasProcedure, pasReference]) then begin
     Include(ADirectives, Keyword);
-    Result := Result + Fetch(Keyword);
+
+    if (Keyword = pasReference) then begin
+      Result := Result + Fetch(pasReference);
+      Result := Result + Chr_Space + Fetch(pasTo);
+    end
+    else begin
+      Result := Result + Fetch(Keyword);
+    end;
+
+    // Is this a reference to a function or procedure?
+    if (Keyword in [pasFunction, pasProcedure]) then begin
+      Include(ADirectives, Keyword);
+      Result := Result + Chr_Space + Fetch(Keyword);
+    end;
 
     // Do we have parameters?
     if (Token.TokenType = Tok_OpenBracket) then begin
@@ -1442,14 +1504,6 @@ begin
     Result := Result + Skip([Tok_Caret]);
     Result := Result + Chr_Space + Fetch([Tok_Identifier, Tok_NameSpace]);
     Result := Result + GetDimensions;
-  end
-
-  // Reference to
-  else if (Keyword = pasReference) then begin
-    Result := Result + Fetch(pasReference);
-    Result := Result + Chr_Space + Fetch(pasTo);
-    Result := Result + Chr_Space + Fetch([Tok_Identifier, Tok_NameSpace]);
-    Result := Result + Chr_Space + Upto([Tok_SemiColon]);
   end
 
   // Record Pointer
@@ -1512,7 +1566,13 @@ begin
     end
   end;
 
-  // To Help avoid {$ifdef} - {$else} - {$endif} problens, skip the {$else} bit
+  // Disgard 'deprecated'
+  if Have(pasDeprecated) then begin
+    Result := Result + 'deprecated' + Collate(Tok_Apostrophe, Tok_Apostrophe);
+  end;
+
+
+  // To Help avoid {$ifdef} - {$else} - {$endif} problems, skip the {$else} bit
   if (Keyword <> pasEnd) then begin
     Skip([Tok_Identifier, Tok_NameSpace]);
   end;
@@ -1521,11 +1581,8 @@ begin
 
 
   // Generics
-  Success := Have([Tok_Smaller]);
-  while Success do begin
-    Success := not (Token.TokenType in [Tok_Greater, Tok_Eof]);
-    Result := Result + Token.TokenString;
-    NextToken;
+  if (Token.TokenType = Tok_Smaller) then begin
+    Result := Result + Collate(Tok_Smaller, Tok_Greater);
   end;
 end;
 
@@ -1556,7 +1613,9 @@ function TDBICustomPascalLexer.IsKeywordScopeInterrupter: Boolean;
 begin
   Result := Keyword in TDBIPascalScopeInterruptors;
   if not (Result or (Keyword in [pasUnknown, pasIndex]) ) then begin
-    Check(pasUnknown);
+    if (Keyword <> pasName) then begin
+      Check(pasUnknown);
+    end;
   end;
 end;
 
@@ -1686,9 +1745,6 @@ begin
   // State: tsComment3 - (*...*) style comments
   MapDualSymbol(LexNone, Chr_OpenBracket_Star, Tok_OpenBracket_Star, tkSymbol, [tsComment3]);
   MapDualSymbol(LexNone, Chr_CloseBracket_Star, Tok_CloseBracket_Star, tkSymbol, [tsComment3, tsMask]);
-
-  // $ Dollar Macros
-  MapDualSymbol(LexNone, Chr_OpenCurlyBracket_Dollar, Tok_OpenCurlyBracket_Dollar, tkSymbol, [tsMacro]);
 
   // Common Pascal Symbols
   MapDualSymbol(LexNone, Chr_DotDot, Tok_DotDot);

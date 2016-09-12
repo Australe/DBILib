@@ -34,17 +34,32 @@ uses
   Classes, SysUtils, DBIStreamAdapters;
 
 type
+  TDBICompoundComponent = class;
+
+  TDBIChildList = class(TList)
+  private
+    FOwner: TComponent;
+
+  protected
+    class function ListAdd(AOwner: TComponent; var List: TDBIChildList; Instance: TDBICompoundComponent): Integer;
+    class function ListRemove(AOwner: TComponent; var List: TDBIChildList; Instance: TDBICompoundComponent): Integer;
+
+  public
+    constructor Create(AOwner: TComponent); virtual;
+    destructor Destroy; override;
+  end;
+
+
   TDBICompoundComponent = class(TComponent)
   private
     FParent: TDBICompoundComponent;
-    FChildren: TList;
+    FChildren: TDBIChildList;
 
   protected
     procedure ChangeParent(AParent: TDBICompoundComponent); virtual;
     function GetChild(const Index: Integer): TDBICompoundComponent; virtual;
     function GetChildCount: Integer; virtual;
     function GetChildIndex: Integer;
-    function GetChildList: TList;
     procedure GetChildren(Proc: TGetChildProc; Root: TComponent); override;
     function GetCompoundName: String; virtual;
     function GetDisplayName: string; overload; virtual;
@@ -61,7 +76,6 @@ type
     procedure SetReference(Enable: Boolean);
 
     property ChildIndex: Integer read GetChildIndex write SetChildIndex stored False;
-    property ChildList: TList read GetChildList;
     property DisplayName: String read GetDisplayName;
 
   public
@@ -142,8 +156,12 @@ type
 
 
 type
+  TDBIFilePersistanceOption = (fpIgnoreSectionNotFound);
+  TDBIFilePersistanceOptions = set of TDBIFilePersistanceOption;
+
   TDBICustomIniFilePersistenceAdapter = class(TDBICustomPersistenceAdapter)
   private
+    FOptions: TDBIFilePersistanceOptions;
     FStrings: TStrings;
 
   protected
@@ -162,6 +180,7 @@ type
 
     function SaveToFile(AFileName: TFileName = ''): Boolean; override;
 
+    property Options: TDBIFilePersistanceOptions read FOptions write FOptions;
   end;
 
   TDBIIniFilePersistenceAdapter = class(TDBICustomIniFilePersistenceAdapter)
@@ -296,8 +315,7 @@ end;
 
 destructor TDBICustomIniFilePersistenceAdapter.Destroy;
 begin
-  FStrings.Free;
-  FStrings := nil;
+  FreeAndNil(FStrings);
 
   inherited Destroy;
 end;
@@ -445,10 +463,9 @@ begin
       RootComponent := AComponent;
       Result := LoadFromStream(StreamAdapter.Stream);
     end
-    else begin
+    else if not (fpIgnoreSectionNotFound in Options) then begin
       Result := AComponent;
-
-      raise Exception.CreateFmt('Unable to load "%s" from "%s"', [Result.ClassName, AFileName]);
+      raise Exception.CreateFmt('Unable to load section "%s" from "%s"', [Result.ClassName, AFileName]);
     end;
   end;
 end;
@@ -782,11 +799,11 @@ constructor TDBICompoundComponent.Create(AOwner: TComponent; AParent: TDBICompou
 begin
   inherited Create(AOwner);
 
+  Name := FindUniqueName;
+
   if Assigned(AParent) then begin
     AParent.InsertChild(Self);
   end;
-
-  Name := FindUniqueName;
 end;
 
 
@@ -797,7 +814,6 @@ end;
 destructor TDBICompoundComponent.Destroy;
 begin
   SetParent(nil);
-  FreeAndNil(FChildren);
   
   inherited Destroy;
 end;
@@ -829,8 +845,8 @@ end;
 function TDBICompoundComponent.GetChild(const Index: Integer): TDBICompoundComponent;
 begin
   Result := nil;
-  if (Index >= 0) and (Index < ChildList.Count) then begin
-    Result := ChildList[Index];
+  if (Index >= 0) and (Index < ChildCount) then begin
+    Result := FChildren[Index];
   end;
 end;
 
@@ -841,7 +857,10 @@ end;
 }
 function TDBICompoundComponent.GetChildCount: Integer;
 begin
-  Result := ChildList.Count;
+  Result := 0;
+  if Assigned(FChildren) then begin
+    Inc(Result, FChildren.Count);
+  end;
 end;
 
 
@@ -851,27 +870,12 @@ end;
 }
 function TDBICompoundComponent.GetChildIndex: Integer;
 begin
-  if (Parent <> nil) then begin
-    Result := Parent.ChildList.IndexOf(Self);
+  if (Parent <> nil) and (Parent.ChildCount > 0) then begin
+    Result := Parent.FChildren.IndexOf(Self);
   end
   else begin
     Result := -1;
   end;
-end;  { GetChildIndex }
-
-
-// _____________________________________________________________________________
-{**
-  Jvr - 01/09/2010 09:33:34 - Initial code.<br />
-}
-function TDBICompoundComponent.GetChildList: TList;
-begin
-  if (FChildren = nil) then begin
-    FChildren := TList.Create;
-  end;
-  Result := FChildren;
-
-  Assert(Assigned(Result));
 end;
 
 
@@ -1007,7 +1011,7 @@ end;
 procedure TDBICompoundComponent.InsertChild(AComponent: TDBICompoundComponent);
 begin
   if (AComponent is TDBICompoundComponent) then begin
-    ChildList.Add(AComponent);
+    TDBIChildList.ListAdd(Self, FChildren, AComponent);
     TDBICompoundComponent(AComponent).ChangeParent(Self);
     TDBICompoundComponent(AComponent).SetParentReference(True);
   end;
@@ -1036,7 +1040,7 @@ procedure TDBICompoundComponent.RemoveChild(AComponent: TDBICompoundComponent);
 begin
   if (AComponent is TDBICompoundComponent) then begin
     TDBICompoundComponent(AComponent).SetParentReference(False);
-    ChildList.Remove(AComponent);
+    TDBIChildList.ListRemove(Self, FChildren, AComponent);
     TDBICompoundComponent(AComponent).ChangeParent(nil);
   end;
 end;
@@ -1056,13 +1060,13 @@ var
 
 begin
   if (Parent <> nil) then begin
-    MaxPageIndex := Parent.ChildList.Count - 1;
+    MaxPageIndex := Parent.ChildCount - 1;
 
     if (Value > MaxPageIndex) then begin
       raise EListError.CreateResFmt(@SPageIndexError, [Value, MaxPageIndex]);
     end;
-    Parent.ChildList.Move(ChildIndex, Value);
-  end;  { if }
+    Parent.FChildren.Move(ChildIndex, Value);
+  end;
 end;
 
 
@@ -1173,6 +1177,56 @@ begin
   end;
 end;
 
+
+
+
+
+{ TDBIChildList }
+
+constructor TDBIChildList.Create(AOwner: TComponent);
+begin
+  inherited Create;
+
+  //##DEBUG
+  FOwner := AOwner;
+end;
+
+destructor TDBIChildList.Destroy;
+begin
+  //##DEBUG
+
+  inherited Destroy;
+end;
+
+
+class function TDBIChildList.ListAdd(AOwner: TComponent; var List: TDBIChildList; Instance: TDBICompoundComponent): Integer;
+begin
+{$ifdef DebugInfo}
+  TDBIDebugInfo.LogMsg(dkDebug, '++ %1:-20.20s -> %0:-20.20s', [AOwner.Name, Instance.Name]);
+{$endif}
+  if not Assigned(List) then begin
+    List := Self.Create(AOwner);
+  end;
+  Result := List.Add(Instance);
+
+end;
+
+
+class function TDBIChildList.ListRemove(AOwner: TComponent; var List: TDBIChildList; Instance: TDBICompoundComponent): Integer;
+begin
+  Result := -1;
+
+  if Assigned(List) then begin
+    Assert(List.FOwner = AOwner);
+{$ifdef DebugInfo}
+    TDBIDebugInfo.LogMsg(dkDebug, '-- %1:-20.20s -> %0:-20.20s', [AOwner.Name, Instance.Name]);
+{$endif}
+    Result := List.Remove(Instance);
+    if (List.Count = 0) then begin
+      FreeAndNil(List);
+    end;
+  end;
+end;
 
 
 initialization
