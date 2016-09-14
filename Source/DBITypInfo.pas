@@ -191,6 +191,12 @@ type
     class function Decapitalise(const Value: String): String;
 
   public
+    class procedure GetEnumNames(PInfo: PTypeInfo; Strings: TStrings);
+    class procedure GetMethodParameterInfo(PInfo: PTypeInfo; Strings: TStrings);
+    class function GetSetAsString(Value: Cardinal; PInfo: PTypeInfo): String;
+
+    class function GetTypeInfo(PInfo: PTypeInfo; Strings: TStrings): PTypeData;
+
     class procedure GetProperties(
       AInstance: TObject;
       Strings: TStrings;
@@ -201,6 +207,17 @@ type
       AInstance: TObject;
       Options: TDBIPropertyOptions
       ); overload; virtual;
+
+    class function GetPropValue(
+      AInstance: TObject;
+      const PropName: String
+      ): String; overload;
+
+    class function GetPropValue(
+      AInstance: TObject;
+      PropInfo: PPropInfo
+      ): String; overload;
+
   end;
 
 
@@ -224,6 +241,9 @@ type
 implementation
 
 uses
+  Graphics,
+  Controls,
+  Forms,
 {$ifndef fpc}
   {$ifdef DELPHI6}
   RtlConsts,
@@ -250,7 +270,7 @@ function DBIFindPropInfo(Instance: TObject; const PropName: string): PPropInfo;
 begin
   Result := GetPropInfo(Instance, PropName);
   if Result = nil then begin
-    raise EPropertyError.CreateResFmt(@SUnknownProperty, [PropName]);
+    raise EPropertyError.CreateFmt('Property %s does not exist', [PropName]);
   end;
 end;
 
@@ -579,7 +599,114 @@ end;
 
 
 
-{ TDBIPropertyList }
+{ TDBIProperties }
+
+class procedure TDBIProperties.GetEnumNames(PInfo: PTypeInfo; Strings: TStrings);
+var
+  Index: Integer;
+  PType: PTypeData;
+
+begin
+  PType := GetTypeData(PInfo);
+  for Index := PType^.MinValue to PType^.MaxValue do begin
+    Strings.Add(GetEnumName(PInfo, Index));
+  end;
+end;
+
+{
+  ParamList: array[1..ParamCount] of
+    record
+      Flags: TParamFlags;
+      ParamName: ShortString;
+      TypeName: ShortString;
+    end;
+  ResultType: ShortString;   // only if MethodKind = mkFunction
+  ResultTypeRef: PPTypeInfo; // only if MethodKind = mkFunction
+  CC: TCallConv;
+  ParamTypeRefs: array[1..ParamCount] of PPTypeInfo;
+  MethSig: PProcedureSignature;
+  MethAttrData: TAttrData
+}
+
+type
+  PParamData = ^TParamData;
+  TParamData = record
+    Flags: TParamFlags;
+    ParamName: ShortString;
+    TypeName: ShortString;
+    // beware: string length varies!!!
+  end;
+
+type
+{$ifdef Delphi2009}
+  TMethodParamType = pfVar..pfResult;
+{$else}
+  TMethodParamType = pfVar..pfOut;
+{$endif}
+
+class procedure TDBIProperties.GetMethodParameterInfo(PInfo: PTypeInfo; Strings: TStrings);
+const
+  ParamTypeNames: array[TMethodParamType, Boolean] of String = (
+      ('', 'var ')
+    , ('', 'const ')
+    , ('', 'array ')
+    , ('', ' address')
+    , ('', ' reference')
+    , ('', ' out')
+{$ifdef Delphi2009}
+    , ('', ' result')
+{$endif}
+    );
+
+var
+  TypeData: PTypeData;
+  PParam: PParamData;
+  Param: String;
+  ParamIndex: Integer;
+  PTypeName: ^ShortString;
+  PResultType: ^ShortString;
+
+begin
+  if (PInfo^.Kind = tkMethod) then begin
+    TypeData := GetTypeData(PInfo);
+
+    PParam := PParamData(@(TypeData^.ParamList));
+    for ParamIndex := 1 to TypeData^.ParamCount do begin
+      Param := '';
+      Param := Param + ParamTypeNames[pfVar, pfVar in PParam^.Flags];
+      Param := Param + ParamTypeNames[pfConst, pfConst in PParam^.Flags];
+      Param := Param + ParamTypeNames[pfOut, pfOut in PParam^.Flags];
+      Param := Param + String(PParam^.ParamName) + ': ';
+      Param := Param + ParamTypeNames[pfArray, pfArray in PParam^.Flags];
+
+      // The type name string must be located...
+      // moving a pointer past the params and
+      // the string (including its size byte)
+      PTypeName := Pointer(Integer(PParam) + SizeOf(TParamFlags) + Length(PParam^.ParamName) + 1);
+      Param := Param + String(PTypeName^);
+
+      // Add Parameter
+      TDBIDebugInfo.LogMsg(dkAudit, Param, []);
+      Strings.Add(Param);
+
+      // Move the pointer to the next structure,
+      // past the two strings (including size byte)
+      PParam := PParamData(Integer(PParam) +
+        SizeOf(TParamFlags) +
+        Length(PParam^.ParamName) + 1 +
+        Length(PTypeName^) + 1);
+    end;
+
+    // Show the return type if a function
+    if (TypeData^.MethodKind = mkFunction) then begin
+      // at the end, instead of a param data,
+      // there is the return string
+      PResultType := Pointer(PParam);
+      Strings.Add('Result=' + String(PResultType));
+    end;
+  end;
+end;
+
 
 procedure TDBIProperties.GetProperties(
   AInstance: TObject;
@@ -658,6 +785,177 @@ begin
 end;
 
 
+class function TDBIProperties.GetPropValue(AInstance: TObject; const PropName: String): String;
+
+  procedure PropertyNotFound(const Name: string);
+  begin
+    raise EPropertyError.CreateFmt('Property %s does not exist', [Name]);
+  end;
+
+  function FindPropInfo(Instance: TObject; const PropName: string): PPropInfo; overload;
+  begin
+    Result := GetPropInfo(PTypeInfo(Instance.ClassInfo), PropName);
+    if Result = nil then begin
+      PropertyNotFound(PropName);
+    end;
+  end;
+
+begin
+  Result := GetPropValue(AInstance, FindPropInfo(AInstance, PropName));
+end;
+
+
+class function TDBIProperties.GetPropValue(AInstance: TObject; PropInfo: PPropInfo): String;
+
+  function GetOwnerForm (Comp: TComponent): TComponent;
+  begin
+    while not (Comp is TForm) and not (Comp is TDataModule) do begin
+      Comp := Comp.Owner;
+    end;
+    Result := Comp;
+  end;
+
+var
+  PAttribute: Pointer;
+  Word: Cardinal;
+  PropType: PTypeInfo;
+
+begin
+  Result := 'Undefined type';
+  PropType := {$ifdef fpc} PropInfo^.PropType; {$else} PropInfo^.PropType^; {$endif}
+
+  case PropType^.Kind of
+    tkUnknown:
+      Result := 'Unknown type';
+
+    tkChar:
+    begin
+      Word := GetOrdProp(AInstance, PropInfo);
+      if (Word > 32) then begin
+        Result := Char(Word);
+      end
+      else begin
+        Result := '#' + IntToStr(Word);
+      end;
+    end;
+
+    tkWChar:
+    begin
+      Word := GetOrdProp(AInstance, PropInfo);
+      if (Word > 32) then begin
+        Result := WideChar(Word);
+      end
+      else begin
+        Result := '#' + IntToStr(Word);
+      end;
+    end;
+
+    tkInteger:
+      if (PropInfo.PropType^.Name = 'TColor') then begin
+        Result := ColorToString(GetOrdProp(AInstance, PropInfo));
+      end
+      else if (PropInfo.PropType^.Name = 'TCursor') then begin
+        Result := CursorToString(GetOrdProp(AInstance, PropInfo));
+      end
+      else begin
+        Result := Format('%d', [GetOrdProp(AInstance, PropInfo)]);
+      end;
+
+    tkEnumeration:
+      Result := GetEnumName(PropType, GetOrdProp(AInstance, PropInfo));
+
+    tkFloat:
+      Result := FloatToStr(GetFloatProp(AInstance, PropInfo));
+
+    tkString, tkLString, tkWString {$ifdef DELPHIXE2}, tkUString {$endif} {$ifdef fpc} , tkAString {$endif} :
+      Result := GetStrProp(AInstance, PropInfo);
+
+    tkSet:
+      Result := GetSetAsString(GetOrdProp(AInstance, PropInfo), PropType);
+
+    tkClass:
+    begin
+      PAttribute := Pointer(GetOrdProp(AInstance, PropInfo));
+      if Assigned(PAttribute) then begin
+        Result := Format ('(Object %p)', [PAttribute]);
+      end
+      else begin
+        Result := '(None)';
+      end;
+    end;
+
+    tkMethod:
+    begin
+      PAttribute := GetMethodProp(AInstance, PropInfo).Code;
+      if Assigned(PAttribute) then begin
+        Result := GetOwnerForm(AInstance as TComponent).MethodName(PAttribute);
+      end
+      else begin
+        Result := '';
+      end;
+    end;
+
+    tkVariant:
+      Result := GetVariantProp(AInstance, PropInfo);
+
+    tkArray, tkRecord, tkInterface:
+      Result := 'Unsupported type';
+
+  end;
+end;
+
+
+class function TDBIProperties.GetTypeInfo(PInfo: PTypeInfo; Strings: TStrings): PTypeData;
+var
+  TypeData: PTypeData;
+  Values: TStrings;
+  Params: TStrings;
+
+begin
+  TypeData := GetTypeData(PInfo);
+
+  Strings.Add('Kind=' + GetEnumName(TypeInfo(TTypeKind), Ord(PInfo^.Kind)));
+  Strings.Add('Name=' + String(PInfo^.Name));
+
+  if not (PInfo^.Kind in [tkSet, tkClass, tkMethod]) then begin
+    Strings.Add('Minimum=' + IntToStr(TypeData^.MinValue));
+    Strings.Add('Maximum=' + IntToStr(TypeData^.MaxValue));
+  end;
+
+  if (PInfo^.Kind = tkClass) then begin
+    Strings.Add('Size=' + IntToStr(TypeData.ClassType.InstanceSize));
+    Strings.Add('Unit=' + String(TypeData.UnitName));
+  end
+  else begin
+    Strings.Add('Native=' + GetEnumName(TypeInfo(TOrdType), Ord(TypeData^.OrdType)));
+  end;
+
+  if (PInfo^.Kind = tkEnumeration) then begin
+    Values := Local(TStringList.Create).Obj as TStrings;
+    TDBIProperties.GetEnumNames(PInfo, Values);
+    Strings.Add('Values=' + Values.CommaText);
+  end;
+
+  // show RTTI info about set base type
+  if (PInfo^.Kind = tkSet) then begin
+    Strings.Add('');
+    Strings.Add('Set base type information...');
+    GetTypeInfo({$ifdef fpc} TypeData^.CompType {$else} TypeData^.CompType^ {$endif}, Strings);
+  end;
+
+  if (PInfo^.Kind = tkMethod) then begin
+    Strings.Add('Method.Type=' + GetEnumName(TypeInfo(TMethodKind), Ord(TypeData^.MethodKind)));
+    Strings.Add('Params.Count=' + IntToStr(TypeData^.ParamCount));
+
+    Params := Local(TStringList.Create).Obj as TStrings;
+    GetMethodParameterInfo(PInfo, Params);
+    Strings.Add('Params.Values=' + Params.CommaText);
+  end;
+
+  Result := TypeData;
+end;
+
+
 class function TDBIProperties.Decapitalise(const Value: String): String;
 var
   Size: Integer;
@@ -675,6 +973,42 @@ begin
       'A'..'Z': PResult^ := Char(Word(PValue^) or $0020);
     end;
   end;
+end;
+
+
+class function TDBIProperties.GetSetAsString(Value: Cardinal; PInfo: PTypeInfo): String;
+
+  function IsBitOn (Value: Integer; Bit: Byte): Boolean;
+  begin
+    Result := (Value and (1 shl Bit)) <> 0;
+  end;
+
+var
+  BaseType: PTypeInfo;
+  Index: Integer;
+  Found: Boolean;
+
+begin
+  Result := '[';
+  BaseType := {$ifdef fpc} GetTypeData(PInfo).CompType; {$else} GetTypeData(PInfo).CompType^; {$endif}
+
+  Found := False;
+  for Index := GetTypeData(BaseType).MinValue to GetTypeData(BaseType).MaxValue do begin
+    // If the bit Index (computed as 1 shl Index) is set,
+    // then the corresponding element is in the set
+    // (the and is a bitwise and, not a boolean operation)
+    if IsBitOn(Value, Index) then begin
+      // add the name of the element
+      Result := Result + GetEnumName (BaseType, Index) + ', ';
+      Found := True;
+    end;
+  end;
+
+  if Found then begin
+    // Remove the final comma and space (2 chars)
+    SetLength(Result, Length(Result) - 2);
+  end;
+  Result := Result + ']';
 end;
 
 
@@ -992,6 +1326,9 @@ end;
 destructor TDBIParamsAdapter.Destroy;
 begin
   if (FParams is TDBIDefaultParams) then begin
+  //##JVR
+    FParams.Clear;
+
     FreeAndNil(FParams);
   end;
 

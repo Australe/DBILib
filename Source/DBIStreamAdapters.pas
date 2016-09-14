@@ -72,13 +72,26 @@ type
     destructor Destroy; override;
 
     procedure Clear;
+
+{$ifdef Delphi2009}
+    class function EncodeStream(Source: TStream; Target: TStream; Count: Int64; Encoding: TEncoding): Int64;
+{$endif}
+
     procedure LoadFromFile(const AFileName: TFileName);
     procedure LoadFromStream(AStream: TStream);
 
     function ReadChar(var AChar: AnsiChar): Integer; virtual;
     procedure Reset; virtual;
-    procedure SaveToFile(const AFileName: TFileName);
-    procedure SaveToStream(AStream: TStream);
+
+    procedure SaveToFile(const AFileName: TFileName); overload;
+{$ifdef Delphi2009}
+    procedure SaveToFile(const AFileName: TFileName; Encoding: TEncoding); overload;
+{$endif}
+
+    procedure SaveToStream(AStream: TStream); overload;
+{$ifdef Delphi2009}
+    procedure SaveToStream(AStream: TStream; Encoding: TEncoding); overload;
+{$endif}
 
   end;
 
@@ -307,6 +320,52 @@ begin
 end;
 
 
+{$ifdef Delphi2009}
+class function TDBICustomStreamAdapter.EncodeStream(Source: TStream; Target: TStream; Count: Int64; Encoding: TEncoding): Int64;
+const
+  MaxBufSize = $F000;
+
+var
+  BufSize: Integer;
+  ByteCount: Integer;
+  SourceBuffer: TBytes;
+  TargetBuffer: TBytes;
+
+begin
+  if (Count <= 0) then begin
+    Source.Position := 0;
+    Count := Source.Size;
+  end;
+
+  if (Count > MaxBufSize) then begin
+    BufSize := MaxBufSize;
+  end
+  else begin
+    BufSize := Count;
+  end;
+
+  SetLength(SourceBuffer, BufSize);
+
+  while (Count <> 0) do begin
+    if (Count > BufSize) then begin
+      ByteCount := BufSize;
+    end
+    else begin
+      ByteCount := Count;
+    end;
+
+    Source.ReadBuffer(SourceBuffer, ByteCount);
+    TargetBuffer := Encoding.GetBytes(TEncoding.ANSI.GetChars(SourceBuffer, 0, ByteCount));
+    Target.WriteBuffer(TargetBuffer, Length(TargetBuffer));
+
+    Dec(Count, ByteCount);
+  end;
+
+  Result := Target.Size;
+end;
+{$endif}
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 18/03/2005 17:10:55 - Initial code.<br>
@@ -459,6 +518,25 @@ begin
 end;
 
 
+{$ifdef Delphi2009}
+procedure TDBICustomStreamAdapter.SaveToFile(const AFileName: TFileName; Encoding: TEncoding);
+var
+  LocalStream: TMemoryStream;
+
+begin
+  Assert(AFileName <> '', SNoFileName);
+
+  LocalStream := TMemoryStream.Create;
+  try
+    SaveToStream(LocalStream, Encoding);
+    LocalStream.SaveToFile(AFileName);
+  finally
+    LocalStream.Free;
+  end;
+end;
+{$endif}
+
+
 // _____________________________________________________________________________
 {**
   Jvr - 17/03/2005 18:38:55 - Initial code.<br>
@@ -479,6 +557,31 @@ begin
 
   AStream.Seek(0, soFromBeginning);
 end;
+
+
+{$ifdef Delphi2009}
+procedure TDBICustomStreamAdapter.SaveToStream(AStream: TStream; Encoding: TEncoding);
+var
+  Offset: Integer;
+
+begin
+  Assert(AStream <> nil, SStreamUnAssigned);
+
+  Offset := Stream.Position;
+  try
+    if Assigned(Encoding) then begin
+      AStream.Size := EncodeStream(Stream, AStream, 0, Encoding);
+    end
+    else begin
+      AStream.Size := AStream.CopyFrom(Stream, 0);
+    end;
+  finally
+    Stream.Seek(Offset, soFromBeginning);
+  end;
+
+  AStream.Seek(0, soFromBeginning);
+end;
+{$endif}
 
 
 // _____________________________________________________________________________
