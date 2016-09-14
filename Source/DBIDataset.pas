@@ -219,7 +219,7 @@ type
     );
   TDataSetOptions = set of TDataSetOption;
 
-  TDBIInternalOption = (ioCreateDataset, ioCreating, ioLoading);
+  TDBIInternalOption = (ioCreateDataset, ioCreating, ioLoading, ioCreateFields);
   TDBIInternalOptions = set of TDBIInternalOption;
 
   TDBILockOption = (loExceptionOnFail);
@@ -1712,7 +1712,9 @@ end;
 }
 procedure TDBIDataset.DefChanged(Sender: TObject);
 begin
-  FStoreDefs := True;
+  if not (ioCreateFields in FInternalOptions) then begin
+    FStoreDefs := True;
+  end;
 end;
 
 
@@ -2913,16 +2915,6 @@ end;
 }
 procedure TDBIDataset.CreateDataset;
 
-//## This method needs a better name.
-  procedure CheckFieldDef(FieldDef: TFieldDef);
-  begin
-    //## Please remove the "with" statement.
-    with FieldDef do
-      if Required then
-        Attributes := Attributes + [faRequired] else
-        Attributes := Attributes - [faRequired];
-  end;
-
   procedure GetFieldDefCount(FieldDefs: TFieldDefs; var Count: Integer);
   var
     I: Integer;
@@ -2940,7 +2932,6 @@ procedure TDBIDataset.CreateDataset;
   begin
     for I := 0 to FieldDefs.Count - 1 do
     begin
-      CheckFieldDef(FieldDefs[I]);
       EncodeFieldDesc(FieldDescs[DescNo], FieldDefs[I].Name, FieldDefs[I].DataType, FieldDefs[I].Size, FieldDefs[I].Precision, False, FieldDefs[I].Attributes);
       Inc(DescNo);
 
@@ -2992,16 +2983,23 @@ var
 begin
   // Set the property to indicate the dataset is to be created on loading
   Include(FInternalOptions, ioCreateDataset);
+  Include(FInternalOptions, ioCreateFields);
 
-  CheckInactive;
-  InitFieldDefsFromFields;
-  FieldDefCount := 0;
-  GetFieldDefCount(FieldDefs, FieldDefCount);
-  if FieldDefCount = 0 then
-    DatabaseError(SCannotCreateDataSet);
-  SetLength(FieldDescs, FieldDefCount);
-  DescNo := 0;
-  EncodeFieldDescs(FieldDefs, FieldDescs, DescNo);
+  try
+    CheckInactive;
+    InitFieldDefsFromFields;
+    TDBIFieldDef.SyncFieldDefs(FieldDefs);
+    FieldDefCount := 0;
+    GetFieldDefCount(FieldDefs, FieldDefCount);
+    if FieldDefCount = 0 then
+      DatabaseError(SCannotCreateDataSet);
+    SetLength(FieldDescs, FieldDefCount);
+    DescNo := 0;
+    EncodeFieldDescs(FieldDefs, FieldDescs, DescNo);
+  finally
+    Exclude(FInternalOptions, ioCreateFields);
+  end;
+
   FDSBase := CreateDSBase;
   try
     Check(FDSBase.CreateDS(FieldDefCount, pDSFLDDesc(FieldDescs), TDBINameBuffer(TDBIString(Name))));

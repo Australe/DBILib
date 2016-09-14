@@ -55,6 +55,8 @@ type
   public
     class function ChildDefs(FieldDef: TFieldDef): TFieldDefs;
     class function HasChildDefs(FieldDef: TFieldDef): Boolean;
+    class procedure SyncFieldDef(FieldDef: TFieldDef);
+    class procedure SyncFieldDefs(FieldDefs: TFieldDefs);
   end;
 
 
@@ -5785,6 +5787,37 @@ begin
 {$else}
   Result := FieldDef.HasChildDefs;
 {$endif}
+end;
+
+
+class procedure TDBIFieldDef.SyncFieldDef(FieldDef: TFieldDef);
+begin
+  if FieldDef.Required then begin
+    FieldDef.Attributes := FieldDef.Attributes + [faRequired];
+  end
+  else begin
+    FieldDef.Attributes := FieldDef.Attributes - [faRequired];
+  end;
+end;
+
+
+class procedure TDBIFieldDef.SyncFieldDefs(FieldDefs: TFieldDefs);
+var
+  Index: Integer;
+
+begin
+  FieldDefs.BeginUpdate;
+  try
+    for Index := 0 to FieldDefs.Count - 1 do begin
+      SyncFieldDef(FieldDefs[Index]);
+
+      if TDBIFieldDef.HasChildDefs(FieldDefs[Index]) then begin
+        SyncFieldDefs(TDBIFieldDef.ChildDefs(FieldDefs[Index]));
+      end;
+    end;
+  finally
+    FieldDefs.EndUpdate;
+  end;
 end;
 
 
