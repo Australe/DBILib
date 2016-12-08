@@ -2586,7 +2586,9 @@ var
 
           tkFloat: begin
             // Is it a TDateTime?
-            if DBICompareText(PropInfo^.PropType^.Name, 'TDateTime') = 0 then begin
+            if (DBICompareText(PropInfo^.PropType^.Name, 'TDateTime') = 0) or
+              (DBICompareText(PropInfo^.PropType^.Name, 'TDate') = 0) then
+            begin
               PFieldDesc^.iFldType := fldTimeStamp;
             end
 
