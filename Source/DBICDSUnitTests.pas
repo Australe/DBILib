@@ -58,6 +58,7 @@ type
 {$endif}
 
   published
+    procedure Calculated;
     procedure FilterGad;
     procedure Streaming;
     procedure UpdateBooks;
@@ -81,6 +82,53 @@ uses
   DBIDataset,
   DBIXbaseDatasets;
 
+
+
+procedure TDBICDSUnitTests.Calculated;
+const
+  Quote = #39;
+  TableName = 'cCalculated' + xmlExtension;
+
+var
+  CDS: TDBIClientDataset;
+
+begin
+  // Create Gad CDS
+  CDS := TDBIClientDataset.Create(nil);
+  try
+    TCalculatedData.CreateFields(CDS);
+    CDS.CreateDataset;
+
+    TCalculatedData.OccupyValues(CDS);
+    TCalculatedData.AssertValues(CDS);
+
+    CDS.SaveToFile(DataPath(TableName));
+    Assert(SysUtils.FileExists(DataPath(TableName)), 'Failed to create Calc XML file');
+
+    CDS.Close;
+  finally
+    CDS.Free;
+  end;
+
+
+  // Reload Table Data and verify data
+  CDS := TDBIClientDataset.Create(nil);
+  try
+    TCalculatedData.CreateFields(CDS);
+    CDS.LoadFromFile(DataPath(TableName));
+    TCalculatedData.AssertValues(CDS);
+
+    TCalculatedData.ClearValues(CDS);
+    TCalculatedData.AssertBlanks(CDS);
+
+    TCalculatedData.UpdateValues(CDS);
+    TCalculatedData.AssertValues(CDS);
+
+    CDS.Close;
+  finally
+    CDS.Free;
+  end;
+end;
 
 
 procedure TDBICDSUnitTests.FilterGad;

@@ -783,6 +783,56 @@ type
 
   end;
 
+
+type
+  TCalcRecord = record
+    ID: Word;
+    Comment: String;
+    Even: Boolean;
+    RecNo: Integer;
+    Date: TDateTime;
+    TimeStamp: String;
+  end;
+
+  TCalcRecords = array[0..3] of TCalcRecord;
+  TCalcFields = array[0..5] of TFieldRecord;
+
+type
+  TCalculatedData = class(TDBIUnitTest)
+  private
+    FID: Word;
+    FComment: String;
+
+  protected
+    procedure DatasetCalcFields(DataSet: TDataSet);
+
+    class function GetFields: TCalcFields;
+    class function GetRecordCount: Integer; override;
+
+  public
+    class procedure ApplyValues(ADataset: TDataset; Index: Integer); override;
+    class procedure AssignValues(ADataset: TDataset; Index: Integer; CalcRecord: TCalcRecord);
+
+    class procedure CheckFields(
+      ADataset: TDataset;
+      const CheckingOptions: TDBIFieldChecks
+      ); overload; override;
+
+    class procedure CheckValues(ADataset: TDataset; Index: Integer); override;
+    class procedure CreateFields(ADataset: TDataset); override;
+    class procedure CreateFieldDefs(ADataset: TDataset); override;
+    class function GetRecords: TCalcRecords;
+    class procedure UpdateValues(ADataset: TDataset);
+
+    class procedure ODSCreateTable(AFileName: String); override;
+
+  published
+    property ID: Word read FID write FID;
+    property Comment: String read FComment write FComment;
+
+  end;
+
+
 {$ifndef fpc}
 procedure CompareFieldProps(CDS: TDBIClientDataset; ODS: TDBIObjectListDataset);
 {$endif}
@@ -907,6 +957,321 @@ end;
 procedure Equalz(const Str1: String; const Str2: AnsiString);
 begin
   Assert(AnsiCompareStr(Str1, String(Str2)) = 0 );
+end;
+
+
+
+
+
+{ TCalculatedData }
+
+class procedure TCalculatedData.ApplyValues(ADataset: TDataset; Index: Integer);
+var
+  CalcData: TCalcRecords;
+
+begin
+  CalcData := TCalculatedData.GetRecords;
+  AssignValues(ADataset, Index, CalcData[Index]);
+  ADataset.Post;
+end;
+
+
+class procedure TCalculatedData.AssignValues(ADataset: TDataset; Index: Integer; CalcRecord: TCalcRecord);
+begin
+  ADataset.FieldByName('ID').AsInteger := Index;
+  ADataset.FieldByName('Comment').AsString := String(CalcRecord.Comment);
+end;
+
+
+class procedure TCalculatedData.CheckFields(
+  ADataset: TDataset;
+  const CheckingOptions: TDBIFieldChecks
+  );
+var
+  Index: Integer;
+  FieldData: TCalcFields;
+
+begin
+  FieldData := GetFields;
+
+  for Index := Low(FieldData) to High(FieldData) do begin
+    CheckField(ADataset.Fields[Index], FieldData[Index], CheckingOptions);
+  end;
+end;
+
+
+class procedure TCalculatedData.CheckValues(ADataset: TDataset; Index: Integer);
+var
+  CalcData: TCalcRecords;
+
+begin
+  CalcData := TCalculatedData.GetRecords;
+  Assert(ADataset.FieldByName('ID').AsInteger = CalcData[Index].ID);
+  Assert(ADataset.FieldByName('Comment').AsString = String(CalcData[Index].Comment));
+
+  Assert(ADataset.FieldByName('Even').AsBoolean = CalcData[Index].Even);
+  Assert(ADataset.FieldByName('RecNo').AsInteger = CalcData[Index].RecNo);
+  Assert(ADataset.FieldByName('Date').AsDateTime = CalcData[Index].Date);
+  Assert(ADataset.FieldByName('TimeStamp').AsString = CalcData[Index].TimeStamp);
+
+end;
+
+
+class procedure TCalculatedData.CreateFieldDefs(ADataset: TDataset);
+var
+  CalcFields: TCalcFields;
+begin
+  CalcFields := TCalculatedData.GetFields;
+  BuildFieldDefs(ADataset, @CalcFields, Length(CalcFields));
+end;
+
+
+class procedure TCalculatedData.CreateFields(ADataset: TDataset);
+var
+  CalcFields: TCalcFields;
+  CalcData: TCalculatedData;
+
+begin
+  CalcData := nil; // No instance required, self is not accessed???
+  CalcFields := TCalculatedData.GetFields;
+  BuildFields(ADataset, @CalcFields, Length(CalcFields));
+
+  // Calculated Fields
+  ADataset.OnCalcFields := CalcData.DatasetCalcFields;
+end;
+
+
+procedure TCalculatedData.DatasetCalcFields(DataSet: TDataSet);
+var
+  CalcData: TCalcRecords;
+
+begin
+  CalcData := TCalculatedData.GetRecords;
+
+  Dataset.FieldByName('Even').AsBoolean := Dataset.FieldByName('ID').AsInteger mod 2 = 0;
+  Dataset.FieldByName('RecNo').AsInteger := 1 + Dataset.FieldByName('ID').AsInteger;
+  Dataset.FieldByName('Date').AsDateTime := CalcData[Dataset.FieldByName('ID').AsInteger].Date;
+  DataSet.FieldByName('TimeStamp').AsString := FormatDateTime('DD/MM/YYYY HH:NN:SS', CalcData[Dataset.FieldByName('ID').AsInteger].Date);
+end;
+
+
+class function TCalculatedData.GetFields: TCalcFields;
+const
+  CData: TCalcFields = (
+    (FieldName: 'ID';         FieldType: ftWord;       FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkData ),
+    (FieldName: 'Comment';    FieldType: ftString;     FieldSize: 20; Precision: 0; Required: False; ReadOnly: False; FieldKind: fkData ),
+
+    (FieldName: 'Even';       FieldType: ftBoolean;    FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkCalculated ),
+    (FieldName: 'RecNo';      FieldType: ftInteger;    FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkCalculated ),
+    (FieldName: 'Date';       FieldType: ftDateTime;   FieldSize:  0; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkCalculated ),
+    (FieldName: 'TimeStamp';  FieldType: ftString;     FieldSize: 20; Precision: 0; Required: True;  ReadOnly: False; FieldKind: fkCalculated )
+    );
+begin
+  Result := CData;
+end;
+
+
+class function TCalculatedData.GetRecordCount: Integer;
+begin
+  Result := Length(TCalculatedData.GetRecords);
+end;
+
+
+class function TCalculatedData.GetRecords: TCalcRecords;
+const
+  CData: TCalcRecords = (
+    ( ID: 0; Comment: 'Zero';  Even: True;  RecNo: 1; Date: 12345.12345; TimeStamp: '18/10/1933 02:57:46'),
+    ( ID: 1; Comment: 'One';   Even: False; RecNo: 2; Date: 54321.12345; TimeStamp: '20/09/2048 02:57:46'),
+    ( ID: 2; Comment: 'Two';   Even: True;  RecNo: 3; Date: 54321.54321; TimeStamp: '20/09/2048 13:02:13'),
+    ( ID: 3; Comment: 'Three'; Even: False; RecNo: 4; Date: 12345.54321; TimeStamp: '18/10/1933 13:02:13')
+  );
+begin
+  Result := CData;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 18/01/2017 09:55:02<P>
+}
+class procedure TCalculatedData.ODSCreateTable(AFileName: String);
+var
+  ODS: TDBIObjectListDataset;
+  XDS: TDBIXbaseDataset;
+  Calc: TCalculatedData;
+  Index: Integer;
+  CalcData: TCalcRecords;
+  FieldData: TCalcFields;
+
+begin
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    CalcData := TCalculatedData.GetRecords;
+    for Index := Low(CalcData) to High(CalcData) do begin
+      Calc := TCalculatedData.Create;
+      Calc.ID := Index;
+      Calc.Comment := CalcData[Index].Comment;
+
+      ODS.List.Add(Calc);
+      Sleep(5);
+    end;
+
+    CreateFields(ODS);
+    ODS.CreateDataset;
+
+    FieldData := GetFields;
+    CheckFields(ODS, DBIFieldCheckAll);
+    VerifyFields(ODS, @FieldData, Length(FieldData));
+    AssertValues(ODS);
+
+    ODS.SaveToFile(ChangeFileExt(AFileName, dbfExtension));
+    ODS.SaveToFile(ChangeFileExt(AFileName, xmlExtension));
+    ODS.SaveToFile(ChangeFileExt(AFileName, jsonExtension));
+
+    // Load XDS from dataset
+    XDS := TDBIXbaseDataset.Create(nil);
+    try
+      CreateFields(XDS);
+      XDS.CreateDataset;
+      VerifyFields(XDS, @FieldData, Length(FieldData));
+      XDS.LoadFromDataset(ODS);
+
+      CheckFields(XDS, DBIFieldCheckAll);
+      VerifyFields(XDS, @FieldData, Length(FieldData));
+      AssertValues(XDS);
+    finally
+      XDS.Free;
+    end;
+
+    ODS.SaveToFile(ChangeFileExt(AFileName, dbfExtension));
+    ODS.SaveToFile(ChangeFileExt(AFileName, cdsExtension), dfXML);
+
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, dbfExtension)), 'Failed to create Calc Table dbf');
+  Assert(SysUtils.FileExists(ChangeFileExt(AFileName, cdsExtension)), 'Failed to create Calc Table cds');
+
+
+  // Load XDS from dbf file
+  XDS := TDBIXbaseDataset.Create(nil);
+  try
+    CreateFields(XDS);
+    XDS.CreateDataset;
+    VerifyFields(XDS, @FieldData, Length(FieldData));
+    XDS.LoadFromFile(ChangeFileExt(AFileName, dbfExtension));
+
+    CheckFields(XDS, DBIFieldCheckAll);
+    VerifyFields(XDS, @FieldData, Length(FieldData));
+    AssertValues(XDS);
+    XDS.SaveToFile(ChangeFileExt(AFileName, dbfExtension));
+  finally
+    XDS.Free;
+  end;
+
+
+  // Load ODS from dbf file
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    CreateFields(ODS);
+    ODS.CreateDataset;
+    CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly{, fcXbaseMapFieldTypes}]);
+    VerifyFields(ODS, @FieldData, Length(FieldData));
+
+    ODS.LoadFromFile(ChangeFileExt(AFileName, dbfExtension));
+
+    CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly{, fcXbaseMapFieldTypes}]);
+    VerifyFields(ODS, @FieldData, Length(FieldData));
+    AssertValues(ODS);
+  finally
+    ODS.Free;
+  end;
+
+
+  // Load XDS from xml file
+  XDS := TDBIXbaseDataset.Create(nil);
+  try
+    CreateFields(XDS);
+    XDS.LoadFromFile(ChangeFileExt(AFileName, xmlExtension));
+
+    CheckFields(XDS, DBIFieldCheckAll);
+    VerifyFields(XDS, @FieldData, Length(FieldData));
+    AssertValues(XDS);
+    XDS.SaveToFile(ChangeFileExt(AFileName, xmlExtension));
+  finally
+    XDS.Free;
+  end;
+
+
+  // Load ODS from xml file
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    CreateFields(ODS);
+    ODS.LoadFromFile(ChangeFileExt(AFileName, xmlExtension));
+
+    CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
+    VerifyFields(ODS, @FieldData, Length(FieldData));
+    AssertValues(ODS);
+  finally
+    ODS.Free;
+  end;
+
+
+  // Load XDS from json file
+  XDS := TDBIXbaseDataset.Create(nil);
+  try
+    CreateFields(XDS);
+    XDS.LoadFromFile(ChangeFileExt(AFileName, jsonExtension));
+
+    CheckFields(XDS, DBIFieldCheckAll);
+    VerifyFields(XDS, @FieldData, Length(FieldData));
+    AssertValues(XDS);
+    XDS.SaveToFile(ChangeFileExt(AFileName, jsonExtension));
+  finally
+    XDS.Free;
+  end;
+
+
+  // Load ODS from json file
+  ODS := TDBIObjectListDataset.Create(nil);
+  try
+    CreateFields(ODS);
+    ODS.LoadFromFile(ChangeFileExt(AFileName, jsonExtension));
+
+    CheckFields(ODS, [fcFieldName, fcFieldKind, fcFieldType, fcFieldSize, fcPrecision, fcRequired, fcReadOnly, fcXmlMapFieldTypes]);
+    VerifyFields(ODS, @FieldData, Length(FieldData));
+    AssertValues(ODS);
+  finally
+    ODS.Free;
+  end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 17/01/2017 11:33:01.<P>
+}
+class procedure TCalculatedData.UpdateValues(ADataset: TDataset);
+var
+  Index: Integer;
+  CalcData: TCalcRecords;
+
+begin
+  CalcData := TCalculatedData.GetRecords;
+  Index := Low(CalcData);
+  ADataset.First;
+
+  while not ADataset.Eof do begin
+    ADataset.Edit;
+    ADataset.FieldByName('ID').AsInteger := CalcData[Index].ID;
+    ADataset.FieldByName('Comment').AsString := String(CalcData[Index].Comment);
+    ADataset.CheckBrowseMode;
+
+    Inc(Index);
+    ADataset.Next;
+  end;
 end;
 
 
@@ -3888,6 +4253,7 @@ var
   CursorProps: DSIntf.DSProps;
   FieldProps: DBClient.TFieldDescList;
   Index: Integer;
+  PAttributes: PDBIFieldAttributes;
 
 begin
   Assert(ADataset.DSBase.GetProps(CursorProps) = 0);
@@ -3896,7 +4262,12 @@ begin
   SetLength(FieldProps, CursorProps.iFields);
   Assert(ADataset.DSBase.GetFieldDescs(DSIntf.PDSFldDesc(FieldProps)) = 0);
 
-  for Index := 0 to Count-1 do begin
+  for Index := Low(FieldProps) to High(FieldProps) do begin
+    PAttributes := @(FieldProps[Index].iFldAttr);
+    if (faHiddenCol in PAttributes^) then begin
+      Continue;
+    end;
+
     CheckFieldProps(
       PFieldData^[Index],
       String(FieldProps[Index].szName),
@@ -3919,6 +4290,7 @@ var
   CursorProps: DBIIntfConsts.DSProps;
   FieldProps: DBIIntfConsts.TFieldDescList;
   Index: Integer;
+  PAttributes: PDBIFieldAttributes;
 
 begin
   Assert(ADataset.DSBase.GetProps(CursorProps) = 0);
@@ -3926,7 +4298,12 @@ begin
   SetLength(FieldProps, CursorProps.iFields);
   Assert(ADataset.DSBase.GetFieldDescs(DBIIntfConsts.PDSFldDesc(FieldProps)) = 0);
 
-  for Index := 0 to Count-1 do begin
+  for Index := Low(FieldProps) to High(FieldProps) do begin
+    PAttributes := @(FieldProps[Index].iFldAttr);
+    if (faHiddenCol in PAttributes^) then begin
+      Continue;
+    end;
+
     CheckFieldProps(
       PFieldData^[Index],
       String(FieldProps[Index].szName),
@@ -3949,6 +4326,7 @@ var
   CursorProps: DBIIntfConsts.DSProps;
   FieldProps: DBIIntfConsts.TFieldDescList;
   Index: Integer;
+  PAttributes: PDBIFieldAttributes;
 
 begin
   Assert(ADataset.DSBase.GetProps(CursorProps) = 0);
@@ -3956,7 +4334,12 @@ begin
   SetLength(FieldProps, CursorProps.iFields);
   Assert(ADataset.DSBase.GetFieldDescs(DBIIntfConsts.PDSFldDesc(FieldProps)) = 0);
 
-  for Index := 0 to Count-1 do begin
+  for Index := Low(FieldProps) to High(FieldProps) do begin
+    PAttributes := @(FieldProps[Index].iFldAttr);
+    if (faHiddenCol in PAttributes^) then begin
+      Continue;
+    end;
+
     CheckFieldProps(
       PFieldData^[Index],
       String(FieldProps[Index].szName),
@@ -4024,7 +4407,7 @@ begin
     end;
 
     ApplyValues(ADataset, Index);
-    ADataset.Post;
+    ADataset.CheckBrowseMode;
 
     CheckValues(ADataset, Index);
   end;
@@ -4567,6 +4950,7 @@ initialization
   Classes.RegisterClass(TOrdinalData);
   Classes.RegisterClass(TStringData);
   Classes.RegisterClass(TEntityData);
+  Classes.RegisterClass(TCalculatedData);
 
   TDBIUnitTest.RegisterDBClasses;
 

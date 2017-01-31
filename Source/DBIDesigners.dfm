@@ -1,6 +1,6 @@
 object FormODSDesigner: TFormODSDesigner
-  Left = 512
-  Top = 596
+  Left = 505
+  Top = 634
   Width = 428
   Height = 399
   Caption = 'ObjectlistDataset Designer'
@@ -51,6 +51,7 @@ object FormODSDesigner: TFormODSDesigner
         Font.Name = 'MS Sans Serif'
         Font.Style = []
         ParentFont = False
+        PopupMenu = PopupMenuPreferences
         TabOrder = 0
         object PanelIntro: TPanel
           Left = 10
@@ -241,7 +242,7 @@ object FormODSDesigner: TFormODSDesigner
         Left = 0
         Top = 0
         Width = 404
-        Height = 305
+        Height = 303
         Align = alClient
         BorderStyle = bsNone
         Font.Charset = ANSI_CHARSET
@@ -250,6 +251,7 @@ object FormODSDesigner: TFormODSDesigner
         Font.Name = 'Courier New'
         Font.Style = []
         ParentFont = False
+        PopupMenu = PopupMenuCode
         ScrollBars = ssBoth
         TabOrder = 0
       end
@@ -279,5 +281,49 @@ object FormODSDesigner: TFormODSDesigner
       ParentFont = False
       OnClick = GenerateExecute
     end
+  end
+  object PopupMenuCode: TPopupMenu
+    Left = 72
+    object EditCutItem: TMenuItem
+      Caption = 'Cu&t'
+      ShortCut = 16472
+      OnClick = EditCutItemExecute
+    end
+    object EditCopyItem: TMenuItem
+      Caption = '&Copy'
+      ShortCut = 16451
+      OnClick = EditCopyItemExecute
+    end
+    object EditPasteItem: TMenuItem
+      Caption = '&Paste'
+      ShortCut = 16470
+      OnClick = EditPasteItemExecute
+    end
+    object EditDeleteItem: TMenuItem
+      Caption = '&Delete'
+      ShortCut = 46
+      OnClick = EditDeleteItemExecute
+    end
+    object EditSelectAllItem: TMenuItem
+      Caption = 'Se&lect All'
+      ShortCut = 16449
+      OnClick = EditSelectAllExecute
+    end
+    object N1: TMenuItem
+      Caption = '-'
+    end
+    object EditSaveItem: TMenuItem
+      Caption = '&Save'
+      ShortCut = 16467
+      OnClick = EditSaveItemExecute
+    end
+  end
+  object PopupMenuPreferences: TPopupMenu
+    Left = 104
+  end
+  object SaveDialog: TSaveDialog
+    DefaultExt = '*.pas'
+    Options = [ofOverwritePrompt, ofHideReadOnly, ofShareAware, ofEnableSizing]
+    Left = 40
   end
 end

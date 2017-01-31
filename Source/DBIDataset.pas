@@ -3088,7 +3088,7 @@ begin
     if WriteSize then begin
       Stream.Write(Size, SizeOf(Size));
     end;
-	//## You are copying from "FSavedPacket's" current position - Is that what you want?
+    //## You are copying from "FSavedPacket's" current position - Is that what you want?
     Stream.CopyFrom(FSavedPacket, Size);
 
     if Active then begin
@@ -4126,7 +4126,7 @@ begin
     Boolean(RecBuf[0]) := PLongBool(Buffer)^;
     if Boolean(RecBuf[0]) then Move(Buffer^, RecBuf[1], Field.DataSize);
 {$else}
-    Boolean(RecBuf[0]) := LongBool(Buffer[0]);
+    Boolean(RecBuf[0]) := Buffer <> nil;
     if Boolean(RecBuf[0]) then Move(Buffer[0], RecBuf[1], Field.DataSize);
 {$endif}
   end;
@@ -7832,6 +7832,10 @@ var
   begin
     for FieldNo := 0 to FieldMap.FieldCount - 1 do begin
       DataField := FieldMap.SourceFields[FieldNo];
+      if (DataField.FieldKind <> fkData) then begin
+        Continue;
+      end;
+
 ///left off here Assert(DataField.DataType = FieldMap.TargetFields[FieldNo].DataType);
       TargetFieldNo := FieldMap.TargetFields[FieldNo].FieldNo - 1;
       FieldOffset := FDataConnection.FieldProps[TargetFieldNo].iFldOffsInRec;

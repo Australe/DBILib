@@ -61,6 +61,7 @@ type
   published
     procedure AutoFieldDefs;
     procedure BinaryTypes;
+    procedure Calculated;
     procedure CreateBooks;
     procedure CreateGad;
 {$ifndef fpc}
@@ -319,6 +320,53 @@ begin
       ODSClone.Free;
     end;
 
+
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+end;
+
+
+procedure TDBIODSUnitTests.Calculated;
+const
+  TableName = 'oCalculated' + dbfExtension;
+var
+  ODS: TObjectListDataset;
+
+begin
+  TCalculatedData.DeleteTables(DataPath(TableName));
+  TCalculatedData.ODSCreateTable(DataPath(TableName));
+
+  // Reload Calculated Table and verify data
+  ODS := TObjectListDataset.Create(nil);
+  try
+    TCalculatedData.CreateFields(ODS);
+    ODS.LoadFromFile(DataPath(TableName), dfDefault, omCreateDataset);
+    ODS.SaveToFile(DataPath(TableName));
+
+    TCalculatedData.AssertValues(ODS);
+    ODS.Close;
+
+    ODS.Open;
+    TCalculatedData.AssertValues(ODS);
+    ODS.Close;
+  finally
+    ODS.Free;
+  end;
+
+  // Reload Table Data and clear/edit/update data
+  ODS := TObjectListDataset.Create(nil);
+  try
+    TCalculatedData.CreateFields(ODS);
+    ODS.LoadFromFile(DataPath(TableName), dfDefault, omCreateDataset);
+    TCalculatedData.AssertValues(ODS);
+
+    TCalculatedData.ClearValues(ODS);
+    TCalculatedData.AssertBlanks(ODS);
+
+    TCalculatedData.UpdateValues(ODS);
+    TCalculatedData.AssertValues(ODS);
 
     ODS.Close;
   finally

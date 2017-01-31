@@ -130,6 +130,8 @@ type
 
   { Generic Types - Used to port Delphi code to XE3 }
 
+  PDBIFieldAttributes = ^TFieldAttributes; { faHiddenCol, faReadonly, faRequired, faLink, faUnNamed, faFixed }
+
   TDBIFieldName = String;
   TDBINumberString = String;
   TDBIPropName = String;

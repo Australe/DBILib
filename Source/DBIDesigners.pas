@@ -37,7 +37,7 @@ uses
   {$ifdef Delphi6} DesignIntf, {$else} DsgnIntf, {$endif} DSDesign,
 {$endif}
   SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, ExtCtrls, ComCtrls, Buttons, DB, DBIConst;
+  StdCtrls, ExtCtrls, ComCtrls, Buttons, DB, DBIConst, Menus;
 
 type
 {$ifdef fpc}
@@ -70,8 +70,25 @@ type
     LabelName: TLabel;
     LabelClass: TLabel;
     LabelAccessors: TLabel;
+    PopupMenuCode: TPopupMenu;
+    PopupMenuPreferences: TPopupMenu;
+    EditCutItem: TMenuItem;
+    EditCopyItem: TMenuItem;
+    EditPasteItem: TMenuItem;
+    EditDeleteItem: TMenuItem;
+    EditSelectAllItem: TMenuItem;
+    N1: TMenuItem;
+    EditSaveItem: TMenuItem;
+    SaveDialog: TSaveDialog;
+
+    procedure EditCopyItemExecute(Sender: TObject);
+    procedure EditSelectAllExecute(Sender: TObject);
     procedure GenerateExecute(Sender: TObject);
     procedure PageControlChange(Sender: TObject);
+    procedure EditCutItemExecute(Sender: TObject);
+    procedure EditPasteItemExecute(Sender: TObject);
+    procedure EditDeleteItemExecute(Sender: TObject);
+    procedure EditSaveItemExecute(Sender: TObject);
   protected
     function GetDataset: TDataset;
 
@@ -270,11 +287,7 @@ end;
 
 procedure TDBIBusinessObjectPublisher.Publish(Output: TStrings);
 const
-{$ifdef fpc}
   Prefix: array[Boolean] of String = ('T', 'TCustom');
-{$else}
-  Prefix: array[Boolean] of String = ('Tom', 'TomCustom');
-{$endif}
   PropertyScope: array[Boolean] of String = ('published', 'protected');
   UseFieldDefs = True;
 
@@ -374,14 +387,16 @@ begin
     WriteFmt('begin', []);
 
     for Index := 0 to Count-1 do begin
-      WriteFmt('  FieldDef := ADataset.FieldDefs.AddFieldDef;', []);
-      WriteFmt('  FieldDef.Name := ''%s'';', [FieldNames[Index]]);
-      WriteFmt('  FieldDef.DataType := %s;', [FieldTypeNames[Index]]);
+      if Dataset.Fields[Index].FieldKind = fkData then begin
+        WriteFmt('  FieldDef := ADataset.FieldDefs.AddFieldDef;', []);
+        WriteFmt('  FieldDef.Name := ''%s'';', [FieldNames[Index]]);
+        WriteFmt('  FieldDef.DataType := %s;', [FieldTypeNames[Index]]);
 
-      if (FieldSizes[Index] > 0) then begin
-        WriteFmt('  FieldDef.Size := %d;', [FieldSizes[Index]]);
+        if (FieldSizes[Index] > 0) then begin
+          WriteFmt('  FieldDef.Size := %d;', [FieldSizes[Index]]);
+        end;
+        WriteFmt('', []);
       end;
-      WriteFmt('', []);
    end;
 
     WriteFmt('end;', []);
@@ -651,6 +666,45 @@ begin
   FEditorControls := nil;
 
   inherited Destroy;
+end;
+
+
+procedure TFormODSDesigner.EditCutItemExecute(Sender: TObject);
+begin
+  MemoBusinessObject.CutToClipBoard;
+end;
+
+
+procedure TFormODSDesigner.EditCopyItemExecute(Sender: TObject);
+begin
+  MemoBusinessObject.CopyToClipBoard;
+end;
+
+
+procedure TFormODSDesigner.EditPasteItemExecute(Sender: TObject);
+begin
+  MemoBusinessObject.PasteFromClipBoard;
+end;
+
+
+procedure TFormODSDesigner.EditDeleteItemExecute(Sender: TObject);
+begin
+  MemoBusinessObject.Clear;
+end;
+
+
+procedure TFormODSDesigner.EditSelectAllExecute(Sender: TObject);
+begin
+  MemoBusinessObject.SelectAll;
+end;
+
+
+procedure TFormODSDesigner.EditSaveItemExecute(Sender: TObject);
+begin
+  SaveDialog.Filename := ChangeFileExt(EditName.Text, '.pas');
+  if SaveDialog.Execute then begin
+    MemoBusinessObject.Lines.SaveToFile(saveDialog.Filename);
+  end;
 end;
 
 
