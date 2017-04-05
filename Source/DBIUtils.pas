@@ -79,8 +79,6 @@ type
 
 
 const
-  BoolName: array[Boolean] of String = ('[_]', '[X]');
-
   OpenModes: array[Boolean] of Word = (fmOpenReadWrite, fmOpenRead);
   ShareModes: array[Boolean] of Word = (fmShareDenyNone, fmShareExclusive);
   CreateModes: array[Boolean] of Word = ($0000, fmCreate);
@@ -188,6 +186,30 @@ type
     property OnCommand: TDBICommandCallBack read FOnCommand write FOnCommand;
   end;
 {$endif}
+
+
+type
+  TDBICustomFileInfo = class(TPersistent)
+  private
+    FFileName: TFileName;
+
+  protected
+    function GetDate: String;
+    function GetFileName: TFileName; virtual;
+    function GetFileSize: Int64;
+    function GetModified: TDateTime;
+
+    property Date: String read GetDate;
+    property FileName: TFileName read GetFileName;
+    property FullName: TFileName read FFileName;
+    property Modified: TDateTime read GetModified;
+    property Size: Int64 read GetFileSize;
+
+  public
+    constructor Create(const AFileName: TFileName); virtual;
+
+  end;
+  TDBIFileInfoClass = class of TDBICustomFileInfo;
 
 
 type
@@ -853,6 +875,50 @@ end;
 
 
 
+{ TDBICustomFileInfo }
+
+constructor TDBICustomFileInfo.Create(const AFileName: TFileName);
+begin
+  inherited Create;
+
+  FFileName := AFileName;
+end;
+
+
+function TDBICustomFileInfo.GetDate: String;
+begin
+  Result := FormatDateTime('YYYY-MM-DD', GetModified);
+end;
+
+
+function TDBICustomFileInfo.GetFileName: TFileName;
+begin
+  Result := FFileName;
+end;
+
+
+function TDBICustomFileInfo.GetFileSize: Int64;
+var
+  FileInfo: TWin32FileAttributeData;
+
+begin
+  Result := -1;
+
+  if GetFileAttributesEx(PWideChar(FFileName), GetFileExInfoStandard, @FileInfo) then begin
+    Result := Int64(FileInfo.nFileSizeLow) or Int64(FileInfo.nFileSizeHigh shl 32);
+  end;
+end;
+
+
+function TDBICustomFileInfo.GetModified: TDateTime;
+begin
+  FileAge(FFileName, Result);
+end;
+
+
+
+
+
 {$ifndef fpc}
 { TDBIApplication }
 
@@ -1194,6 +1260,9 @@ end;  { Error }
 
 
 procedure TDBINullFlags.Log(const Index: Integer);
+const
+  BoolName: array[Boolean] of String = ('[_]', '[X]');
+
 begin
   TDBIDebugInfo.LogMsg(dkLogging,
     ' --> TDBINullFlags::Log( IsNullable: %s  -  Size: %d  -  NullIndex[%d]: %d  -  IsNull[%d]: %s )',

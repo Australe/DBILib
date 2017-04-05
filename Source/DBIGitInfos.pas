@@ -716,7 +716,7 @@ type
 
 class procedure TDBIGitPersistenceAdapter.Load(Value: TComponent);
 begin
-  (Local(Self.Create(nil)).Obj as Self).LoadFromFile(Value, ChangeFileExt(ParamStr(0), '.git'));
+  (Local(Self.Create(nil)).Obj as Self).LoadFromFile(Value, ChangeFileExt(ParamStr(0), '.ini'));
 end;
 
 

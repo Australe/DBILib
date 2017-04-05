@@ -277,9 +277,15 @@ type
 
 
 type
+{$ifdef DelphiXE2}
+  TDBIGetParam = reference to function(
+      Sender: TObject; const ParamName: String; var ParamValue: Variant
+      ): Boolean;
+{$else}
   TDBIGetParam = function(
       Sender: TObject; const ParamName: String; var ParamValue: Variant
       ): Boolean of object;
+{$endif}
 
   TDBICustomMacroProcessor = class(TDBICustomParser)
   private
@@ -299,7 +305,7 @@ type
     procedure Process; virtual;
 
   end;
-
+  TDBIMacroProcessor = class(TDBICustomMacroProcessor);
 
 type
   TDBIReflectionProcessor = class(TDBICustomMacroProcessor)
@@ -323,7 +329,21 @@ type
   end;
 
 
-function Macro(const Format: String; const Args: array of const): String;
+type
+  TDBINameValue = record
+    Name: String;
+    Value: String;
+  end;
+  TDBINameValues = array of TDBINameValue;
+
+  TDBINameValuesHelper = record helper for TDBINameValues
+    procedure Assign(const Args: array of TDBINameValue);
+  end;
+
+function NamedValue(const Name: String; const Value: String): TDBINameValue;
+
+function Macro(const Format: String; const Args: array of TDBINameValue): String; overload;
+function Macro(const Format: String; const Args: array of const): String; overload;
 
 
 implementation
@@ -337,7 +357,7 @@ uses
   DBIUtils;
 
 
-function Macro(const Format: String; const Args: array of const): String;
+function Macro(const Format: String; const Args: array of const): String; overload;
 var
   Processor: TDBIReflectionProcessor;
   Index: Integer;
@@ -362,6 +382,74 @@ begin
     Result := Processor.Output.Text;
   end;
 end;
+
+
+function Macro(const Format: String; const Args: array of TDBINameValue): String;
+var
+  Processor: TDBIMacroProcessor;
+  Arguments: TDBINameValues;
+
+begin
+  Result := '';
+
+  if (Format <> '') then begin
+    // Avoid Closure issue "Cannot capture symbol Args" in: for ... in
+    Arguments.Assign(Args);
+
+    Processor := Local(TDBIMacroProcessor.Create).Obj as TDBIMacroProcessor;
+    Processor.Input.Text := Format;
+    Processor.OnGetParam := function(
+      Sender: TObject; const ParamName: String; var ParamValue: Variant
+      ): Boolean
+      var
+        Arg: TDBINameValue;
+
+      begin
+        Result := False;
+        for Arg in Arguments do begin
+          Result := CompareText(ParamName, Arg.Name) = 0;
+          if Result then begin
+            ParamValue := Arg.Value;
+            Break;
+          end;
+        end;
+      end;
+
+    Processor.Process;
+    Result := Processor.Output.Text;
+  end;
+end;
+
+
+
+
+
+{ TDBINameValue }
+
+function NamedValue(const Name: String; const Value: String): TDBINameValue;
+begin
+  Result.Name := Name;
+  Result.Value := Value;
+end;
+
+
+
+
+
+{ TDBINameValuesHelper }
+
+procedure TDBINameValuesHelper.Assign(const Args: array of TDBINameValue);
+var
+  Index: Integer;
+begin
+  SetLength(Self, Length(Args));
+  for Index := Low(Args) to High(Args) do begin
+    Self[Index].Name := Args[Index].Name;
+    Self[Index].Value := Args[Index].Value;
+  end;
+end;
+
+
 
 
 
