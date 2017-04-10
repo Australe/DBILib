@@ -1234,7 +1234,7 @@ begin
     ftCurrency,
     ftLargeint: AParam.Value := 0;
 
-    ftDateTime: AParam.Value := DBISignifyNullDateTime;
+    ftDateTime: AParam.Value := C_DBISignifyNullDateTime;
   else
     DatabaseError(Format(SUnknownFieldType, [AParam.Name]));
   end;

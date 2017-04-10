@@ -598,7 +598,7 @@ begin
   end;
 
 
-  DateTimeValue := DBISignifyNullDateTime;
+  DateTimeValue := C_DBISignifyNullDateTime;
   DateTimeVariant := DateTimeValue;
 
   if not (DateTimeVariant = DateTimeValue) then begin
