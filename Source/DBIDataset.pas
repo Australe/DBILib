@@ -1241,7 +1241,7 @@ begin
 
   FMasterLink.Free;
   FIndexDefs.Free;
-  
+
 {$ifdef _UNUSED}
   FParams.Free;
 {$endif}
@@ -1954,7 +1954,7 @@ begin
     FieldDefs.Update;
 {$ifndef fpc}
     FieldDefList.Update;
-{$endif}    
+{$endif}
     IndexDefs.Updated := False;
     GetIndexInfo('');
 
@@ -2508,7 +2508,7 @@ begin
     FProviderEOF := FCloneSource.ProviderEOF;
     FCloneSource := nil;
   end;
-  
+
 {$ifdef _UNUSED}
   if (Operation = opRemove) and (AComponent = FConnectionBroker) then
     FConnectionBroker:= nil;
@@ -3394,7 +3394,7 @@ var
   CursorProps: DSProps;
 
 begin
-  if GetProps then 
+  if GetProps then
   begin
     Check(FDSCursor.GetCursorProps(CursorProps));
     BookmarkSize := CursorProps.iBookmarkSize;
@@ -3547,7 +3547,7 @@ end;
 }
 function TDBIDataset.GetCurrentRecord(Buffer: TDBIRecordBuffer): Boolean;
 begin
-  if not IsEmpty and (GetBookmarkFlag(ActiveBuffer) = bfCurrent) then 
+  if not IsEmpty and (GetBookmarkFlag(ActiveBuffer) = bfCurrent) then
   begin
     UpdateCursorPos;
     Result := (FDSCursor.GetCurrentRecord(Buffer) = DBIERR_NONE);
@@ -3690,7 +3690,7 @@ begin
     dsInternalCalc: RecBuf := GetCalcBuffer;
     dsFilter: RecBuf := FFilterBuffer;
     dsNewValue: RecBuf := @FNewValueBuffer[0];
-    
+
     dsOldValue: if FOldValueBuffer <> nil then
                   RecBuf := @FOldValueBuffer[0]
                 else
@@ -3710,7 +3710,7 @@ end;
 // _____________________________________________________________________________
 {**
   This is a newly introduced method.
-  
+
   Jvr - 09/12/2004 21:22:36 - Initial code.<p>
 }
 function TDBIDataset.GetActiveRecInfo(out RecInfo: PRecInfo): Boolean;
@@ -4767,7 +4767,7 @@ var
 begin
 {$ifndef fpc}
   FieldDefList.Update;
-{$endif}  
+{$endif}
   Name := String(IndexDesc.szName);
   Fields := '';
   DescFields := '';
@@ -5053,7 +5053,7 @@ begin
     Result := ''
   else
     Result := FIndexName;
-end;                         
+end;
 
 // _____________________________________________________________________________
 {**
@@ -5641,7 +5641,7 @@ procedure TDBIDataset.ReadInternalOptions(Reader: TReader);
 var
   EnumName: String;
   Value: Integer;
-  
+
 begin
   FInternalOptions := [];
 
@@ -6339,7 +6339,7 @@ begin
       Result := VarSQLTimeStampCreate(TSQLTimeStamp(Buffer^));
     ftTimeStampOffset:
       Result := VarSQLTimeStampOffsetCreate(TSQLTimeStampOffset(Buffer^));
-{$endif}    
+{$endif}
     ftString, ftGUID:
       Result := AnsiString(PAnsiChar(Buffer));
     ftWideString:
@@ -7397,7 +7397,7 @@ begin
 {$ifdef DELPHI2009}
         else if FFldDesc.iFldType = fldDATETIMEOFFSET then
           FDataType := ftTimeStampOffset
-{$endif}          
+{$endif}
         else
           FDataType := ftUnknown;
         FDataSize := FFldDesc.iFldLen;
@@ -7548,10 +7548,10 @@ function TConnectionBroker.GetAppServer: Variant;
 begin
   if not Assigned(Connection) then
     raise Exception.CreateRes(@SNoParentConnection);
-  Result := Connection.GetServer;    
+  Result := Connection.GetServer;
 end;
 
-function TConnectionBroker.GetConnected: Boolean; 
+function TConnectionBroker.GetConnected: Boolean;
 begin
   Result := inherited GetConnected;
   if Assigned(Connection) then

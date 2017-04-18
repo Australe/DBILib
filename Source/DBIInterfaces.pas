@@ -1480,7 +1480,7 @@ type
     function GetRecordNumber(out iRecNo: LongWord): DBIResult; virtual;
 
     property DataConnection: TDBIDataConnection read FDataConnection; //##CONNECTION GetDataConnection;
-    
+
   public
     constructor Create;
 
@@ -1967,7 +1967,7 @@ procedure TDBIDataConnection.GetFieldProps(Fields: pDSFLDDesc);
       Inc(FieldIndex);
     end;
   end;  { ExtractFieldProps }
-  
+
 
 begin
   // Copy the result to the Prop parameter
@@ -3098,7 +3098,7 @@ end;  { AddField }
     iFields          : Integer;       Number of columns
     iRecBufSize      : Integer;       Size of record buffer
     iBookMarkSize    : Integer;       Size of bookmark
-    
+
    [bReadOnly = not CanModify]
     bReadOnly        : LongBool;      Dataset is not updateable
 
@@ -3161,7 +3161,7 @@ end;  { GetFieldDescs }
 
 // _____________________________________________________________________________
 {**
-  Jvr - 20/12/2000 13:30:02<P> 
+  Jvr - 20/12/2000 13:30:02<P>
 }
 function TDBIBase.SetFieldDescs(Fields: pDSFLDDesc): DBIResult;
 begin
@@ -3956,7 +3956,7 @@ end;  { GetRecordAttribute }
   Should I use the StatusFilter to control this? Probably NOT because
   the StatusFilter is there to control the display of records, not the scope
   of the RecordCount.<P>
-  
+
   Jvr - 27/10/2000 15:39:16 - Now uses Getprop to obtain data<BR>
   Jvr - 19/06/2002 16:52:59 - Added code to request a RecordCount refresh<BR>
   Jvr - 09/07/2002 12:42:18 - Added code to get the active RecordCount<P>
@@ -4806,7 +4806,7 @@ end;  { DropFilter }
 // _____________________________________________________________________________
 {**
   Setrange sets up a filter for the current selected index.
-  
+
   <CODE>
   Parameters:
     iFields   = The key field count
@@ -5349,7 +5349,7 @@ var
   function NormalisePosition: Boolean;
   var
     RecCount: Integer;
-    
+
   begin
     Result := True;
 
@@ -5730,7 +5730,7 @@ begin
     // Make sure that this really is the EOF
     RecCount := dsRecRefresh;
     GetRecordCount(RecCount);
-    
+
     if (Position > RecCount) then begin
       Position := RecCount + 1;
       Result := DBIERR_EOF;

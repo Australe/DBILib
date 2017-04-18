@@ -814,7 +814,7 @@ end;
 destructor TDBICompoundComponent.Destroy;
 begin
   SetParent(nil);
-  
+
   inherited Destroy;
 end;
 

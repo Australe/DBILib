@@ -50,7 +50,7 @@ const
 type
   //*  Pointer to dBase-III Header Record
   PDBIDBase3BlobHeader = ^TDBIDBase3BlobHeader;
-  
+
   //*  dBase-III Header Record              <pre>
   TDBIDBase3BlobHeader = packed record
                                        //*  Bytes  Size  | Xbase-Version

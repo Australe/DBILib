@@ -405,7 +405,7 @@ begin
       if (FOperandStack.Count = 0) then begin
         RaiseBadExpressionError(aCharPos);
       end;
-      
+
       Operand1 := FOperandStack.Pop + UnaryMinus;
       FOperandStack.Push(Operand1);
     end
@@ -423,7 +423,7 @@ begin
       if (FOperandStack.Count < 2) then begin
         RaiseBadExpressionError(aCharPos);
       end;
-      
+
       Operand2 := FOperandStack.Pop;
       Operand1 := FOperandStack.Pop + Operand2 + TempOp;
       FOperandStack.Push(Operand1);
@@ -443,7 +443,7 @@ begin
     if FOperatorStack.IsEmpty or (FOperatorStack.Peek <> '(') then begin
       RaiseBadExpressionError(aCharPos);
     end;
-    
+
     FOperatorStack.Pop;
   end;
 end;
@@ -657,7 +657,7 @@ var
   StartPos: PAnsiChar;
   PrecOp: Integer;
   PrecTop: Integer;
-  
+
 begin
   // If we've done this already, get out
   if FParsed then begin
@@ -786,7 +786,7 @@ begin
   if (not FOperatorStack.IsEmpty) or (FOperandStack.Count <> 1) then begin
     RaiseBadExpressionError(StartPos);
   end;
-  
+
   FParsed := true;
 end;
 
@@ -910,7 +910,7 @@ begin
     WriteLn;
     TokenType := NextToken(PStartPos);
   end;
-  
+
   WriteLn('  end of expression');
 end;
 {$ENDIF}
@@ -1118,7 +1118,7 @@ end;
 // _____________________________________________________________________________
 {**
   Notes:
-  
+
   FCurString acts as the stack Pointer.
   To push a String, FCurString is advanced past the current String,
   and aligned to the nearest 4-byte boundary.
@@ -1167,7 +1167,7 @@ begin
   if (APageSize < MinChunkSize) then begin
     APageSize := MinChunkSize;
   end;
-  
+
   FPageSize := APageSize;
 end;
 
@@ -1175,7 +1175,7 @@ end;
 destructor TDBIStringStack.Destroy;
 begin
   Clear;
-  
+
   inherited Destroy;
 end;
 
@@ -1184,7 +1184,7 @@ procedure TDBIStringStack.Clear;
 var
   PPage: PDBIStackPageHeader;
   PTemp: PDBIStackPageHeader;
-  
+
 begin
   PTemp := PDBIStackPageHeader(FPage);
 
@@ -1311,11 +1311,11 @@ function TDBIStringStack.Push(const Value: AnsiString): PDBIShortString;
 var
   PPrevNode: PDBIStringNode;
   PNewString: PAnsiChar;
-  
+
 begin
   // Save the current String node address
   PPrevNode := PDBIStringNode(FCurString);
-  
+
   // Check for an empty stack
   if (FCurString = nil) then begin
     if (FPage = nil) then begin
@@ -1350,7 +1350,7 @@ begin
     Data := Value;
     Data[Length(Value)+1] := #0;
   end;
-  
+
   // Return address of the pushed String
   Result := PDBIShortString(FCurString + SizeOf(Pointer));
   Inc(FCount);
@@ -1450,7 +1450,7 @@ end;
 constructor TDBICharacterStack.Create;
 begin
   inherited Create;
-  
+
   FSize := 1024;
   GetMem(FStack, FSize);
   FStackPointer := -1;

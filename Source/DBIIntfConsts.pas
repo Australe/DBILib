@@ -794,7 +794,7 @@ const
   sLineBreak = {$IFDEF LINUX} #10 {$ELSE} #13#10 {$ENDIF};
 {$endif}
 
-  
+
 type
   // Local character buffer declared on stack
   PDBICharacterBuffer = ^TDBICharacterBuffer;
@@ -869,7 +869,7 @@ type
     bLocked: LongBool;                 // True, False
   end;
 
-  
+
 const
   // auxillary constants to access data in the DSProps.iUnused Array of DSBase
   auxStreamMode = 0;                { DSProps.iUnused[0] }
@@ -1292,7 +1292,7 @@ resourcestring
   SReadHeaderFailed = 'Cannot read Header information';
   SReadFieldsFailed = 'Unable to read Fields Structure';
   SWriteDataFailed = 'Failed to write data to stream';
-    
+
 {$ifdef fpc}
 resourcestring
   SInvalidFieldSize = 'Invalid field size';
@@ -1896,7 +1896,7 @@ const
   ERRCODE_OPTRECLOCKRECDEL      = 20;
   ERRCODE_LOCKEDRECS            = 21;
   ERRCODE_NEEDWRITELOCK         = 22;
-  ERRCODE_ENLISTFAILED          = 23; 
+  ERRCODE_ENLISTFAILED          = 23;
 
   DBIERR_LOCKED                 = (ERRBASE_LOCKCONFLICT + ERRCODE_LOCKED);
   DBIERR_UNLOCKFAILED           = (ERRBASE_LOCKCONFLICT + ERRCODE_UNLOCKFAILED);
@@ -1918,7 +1918,7 @@ const
   DBIERR_RECLOCKFAILED          = (ERRBASE_LOCKCONFLICT + ERRCODE_RECLOCKFAILED);
   DBIERR_OPTRECLOCKFAILED       = (ERRBASE_LOCKCONFLICT + ERRCODE_OPTRECLOCKFAILED);
   DBIERR_OPTRECLOCKRECDEL       = (ERRBASE_LOCKCONFLICT + ERRCODE_OPTRECLOCKRECDEL);
-  DBIERR_ENLISTFAILED           = (ERRBASE_LOCKCONFLICT + ERRCODE_ENLISTFAILED); 
+  DBIERR_ENLISTFAILED           = (ERRBASE_LOCKCONFLICT + ERRCODE_ENLISTFAILED);
 
 { ERRCAT_SECURITY }
 { =============== }

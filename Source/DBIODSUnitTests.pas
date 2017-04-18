@@ -610,7 +610,7 @@ end;
 procedure TDBIODSUnitTests.DefaultStringAttributes;
 const
   TableName = 'DefaultStringAttributes' + xmlExtension;
-  
+
 var
   ODS: TObjectListDataset;
 
@@ -672,7 +672,7 @@ procedure TDBIODSUnitTests.FieldDefs;
 var
   ODS: TDBIObjectListDataset;
   FieldDef: TfieldDef;
-  
+
 begin
   ODS := TDBIObjectListDataset.Create(nil);
   try
@@ -1306,7 +1306,7 @@ procedure TDBIODSUnitTests.NestedDataset;
 var
   ODS: TObjectListDataset;
 //##JVR  Index: Integer;
-  
+
 begin
   // Create a new Dataset
   ODS := TObjectListDataset.Create(nil);
@@ -1969,7 +1969,7 @@ begin
     ODS.Free;
   end;
 
-  
+
   // Test Validation proc
   ODS := TObjectListDataset.Create(nil);
   try

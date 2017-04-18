@@ -1544,7 +1544,7 @@ begin
       DSVer_DBase5: Result := xbDbase5;             // $05 = dBase5, no memo
     else
       inherited Active := False;
-      
+
       raise EDBIException.Create(Self, 'GetVersion::1530',
         'Not a known Xbase file, Signature = "%x"',
         [FHeader.Version]

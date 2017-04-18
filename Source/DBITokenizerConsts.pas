@@ -327,7 +327,7 @@ const
     Tok_SmallerEqual
     ];
 
-    
+
 const
   // Map characters to tokens
   TokenCharacterMap: array[#0..#127] of TDBITokenType = (

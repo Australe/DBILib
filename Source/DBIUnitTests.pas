@@ -207,7 +207,7 @@ type
 
 {$ifndef fpc}
     class procedure CDSCreateTable(AFileName: String); virtual;
-{$endif}    
+{$endif}
     class procedure ODSCreateTable(AFileName: String); virtual;
     class procedure XDSCreateTable(AFileName: String); virtual;
 
@@ -1955,7 +1955,7 @@ begin
     CDS := ADataset as TClientDataset;
     CDS.LogChanges := False;
   end;
-{$endif}  
+{$endif}
 end;
 
 
@@ -2916,7 +2916,7 @@ begin
   end
   else if (ADataset is TClientDataset) then begin
     (ADataset as TClientDataset).IndexName := AKeyName;
-{$endif}    
+{$endif}
   end;
 
   ADataset.First;
@@ -3771,7 +3771,7 @@ begin
 
   Assert(ADataset.RecordCount > 0);
   Assert(ADataset.RecordCount = GetRecordCount);
-  
+
   while not ADataset.Eof do begin
     CheckValues(ADataset, Index);
     Inc(Index);

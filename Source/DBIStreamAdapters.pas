@@ -98,7 +98,7 @@ type
 
 type
   TDBIEnabledCallback = procedure(Sender: TObject; var Enabled: Boolean) of object;
-  
+
   TDBICustomStreamFormatter = class(TDBICustomStreamAdapter)
   private
     FEnabled: Boolean;
@@ -159,7 +159,7 @@ const
   SStreamUnAssigned = 'Stream is unassigned';
   SStreamReadOnly = 'Cannot modify a read-only stream';
 
-  
+
 { TDBICustomStreamFormatter }
 
 // _____________________________________________________________________________

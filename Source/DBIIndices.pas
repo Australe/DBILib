@@ -467,7 +467,7 @@ type
   TDBIDefaultIndex = class(TDBIndex)
   private
     FCount: Integer;
-    
+
   protected
     function GetCount: Integer; override;
     function GetRecNo(Value: Integer): Integer; override;
@@ -828,7 +828,7 @@ type
   TDBIIntegerIndex = class(TDBIStandardIndex)
   protected
     function GetFieldAsString(const RecordBuffer; pFieldDesc: PDSFLDDesc): TDBIString; override;
-    
+
     function Int32Compare(
       const KeyValue: TDBIString;
       const CompareValue: TDBIString;
@@ -3028,7 +3028,7 @@ begin
       Item.Free;
     end;
   end
-  
+
   // Create Groups
   else begin
     for ItemIndex := FItems.Count-1 to Value-1 do begin

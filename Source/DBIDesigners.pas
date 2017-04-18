@@ -228,7 +228,7 @@ const
     {$endif}
     );
 
-    
+
 function TDBIBusinessObjectPublisher.GetCount: Integer;
 begin
   if (Dataset.FieldCount > 0) then begin
@@ -493,7 +493,7 @@ destructor TDBIFieldsEditor.Destroy;
 begin
   FFieldsContainer.Free;
   FFieldsContainer := nil;
-  
+
   inherited Destroy;
 end;  { Destroy }
 
@@ -501,7 +501,7 @@ end;  { Destroy }
 procedure TDBIFieldsEditor.Display;
 begin
   ODSEditor.PageControl.ActivePage := ODSEditor.TabSheetPreferences;
-  
+
   Show;
   BringToFront;
 end;

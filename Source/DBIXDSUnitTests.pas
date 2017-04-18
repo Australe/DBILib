@@ -275,7 +275,7 @@ var
 begin
   NewBooks := TBookData.GetRecords;
   BookFields := TBookData.GetFields;
-  
+
   // Delete the Datafile if it exists
   SysUtils.DeleteFile(DataPath(dbfXDSMem));
   Assert(not SysUtils.FileExists(DataPath(dbfXDSMem)));

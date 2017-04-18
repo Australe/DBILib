@@ -113,7 +113,7 @@ uses
 {$ifdef DELPHI6}
   RtlConsts,
 {$else}
-  FileCtrl,  
+  FileCtrl,
 {$endif}
 {$ifndef fpc}
   Consts,
@@ -158,7 +158,7 @@ begin
   TempTarget := TempFileName(Bytes);
   CheckFreeSpace(TempTarget, Bytes);
   Assert(MemoryMappedFile <> nil);
-  
+
   MemoryMappedFile.UnMap;
   Result := MemoryMappedFile.Map(Bytes);
 end;  { VirtualReallocPtr }

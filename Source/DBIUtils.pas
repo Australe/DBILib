@@ -33,7 +33,7 @@ interface
 uses
 {$ifndef fpc}
   Forms,
-{$endif}  
+{$endif}
   Windows, Messages, Classes, SysUtils, Menus, IniFiles, DB, DBIConst, DBIIntfConsts;
 
 type
@@ -1794,7 +1794,7 @@ var
 begin
   ArgArray[1] := PChar(Param);
   ErrorCode := GetLastError;
-  
+
   Len := Windows.FormatMessage(
     Format_Message_From_System or Format_Message_Argument_Array,
     nil, ErrorCode, 0, Buffer, SizeOf(Buffer), @ArgArray);

@@ -28,7 +28,7 @@ interface
 
 uses
   DBIIntfConsts;
-  
+
 (*
 const
   TDBIXbaseVersionCodes: array[TDBIXbaseVersion] of Byte = (
@@ -69,7 +69,7 @@ type
 
 type
   TDBIXbaseCodePage = Byte;
-    
+
 const
   // Xbase language values, (Foxpro) Code page
   cpDosUSA          = $01;   // 01h DOS USA code page 437
@@ -130,7 +130,7 @@ const
 
   // General Constants
   Xbase_MaxNameLen    = 10;            { Name limit (table, field etc) }
-  
+
   // Locking consts
   // NOTE: A value of $0 indicates: not yet known
   XbaseLockOffsets: array[TDBIXbaseVersion] of LongWord = (
@@ -238,7 +238,7 @@ const
     sizeofUNKNOWN    // Z
     );
 
-    
+
 (*##JVR
 const
   TDBIXbaseDataTypeProperties = array['A'..'Z'] of Integer (

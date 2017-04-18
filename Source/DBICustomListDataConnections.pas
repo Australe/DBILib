@@ -833,7 +833,7 @@ begin
       WData := DBIUnicodeGetStrProp(DataObject, FieldName);
       Result := Length(WData) > 0;
     end
-    
+
   else
     AData := DBIAnsiGetStrProp(DataObject, FieldName);
     Result := Length(AData) > 0;
@@ -951,7 +951,7 @@ begin
   begin
     Exit;
   end;
-  
+
   // Assign data to object property
   if (FieldBuffer = nil) then begin
     case FieldProps[FieldNo].iFldType of
@@ -2073,7 +2073,7 @@ var
 
 begin
   Size := 0;
-  
+
   // Append Blob data to target
   for FieldNo := 0 to Source.FieldCount-1 do begin
     if (Source.FieldProps[FieldNo].iFldType = fldBlob) { IsBlob } then begin
@@ -2432,7 +2432,7 @@ var
 
   begin
     NullFlagsIndex := 0;
-    
+
     // Null field flag information
     Result := (FieldCount > 0) and IsNullable;
 

@@ -91,7 +91,7 @@ type
 
     function GetDataSouce: TDataSource;
     procedure SetDataSource(const Value: TDataSource);
-    
+
   protected
     function GetDataObject: TObject;
     function GetMode: TDBIDataConnectionMode;

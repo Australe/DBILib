@@ -183,7 +183,7 @@ const
 {$endif}
 
   DBIZeroDateTime = -693594.0;      { 00/00/0000 12:00:00.000 AM = $FFF56AA6 }
-  
+
 type
   PDateTimeRec = ^TDateTimeRec;     { see DB.pas for TDateTimeRec record definition }
 

@@ -188,7 +188,7 @@ type
     destructor Destroy; override;
 
     procedure DisplayMessage(const Msg: string; const Args: array of const);
-    
+
     class function Instance: TDBIHttpServer;
 
     property Active: Boolean read GetActive write SetActive;
@@ -558,7 +558,7 @@ begin
 
       // Normal document request - Send the document back
       else begin
-      
+
         // Debug slowdown on server
         if (EmulateSlowdownDelayInSeconds > 0) then begin
           Sleep(EmulateSlowdownDelayInSeconds * 1000);
