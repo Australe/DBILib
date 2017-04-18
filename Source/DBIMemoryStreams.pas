@@ -570,7 +570,7 @@ end;  { GetVirtualMemoryThreshhold }
 }
 procedure TDBIVirtualMemoryStream.InternalSetPosition(const NewPosition: Longint);
 begin
-  Seek(NewPosition, soFromBeginning	);
+  Seek(NewPosition, soFromBeginning);
 end;  { InternalSetPosition }
 
 

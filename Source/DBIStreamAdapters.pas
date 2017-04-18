@@ -110,7 +110,7 @@ type
 
     property Enabled: Boolean read GetEnabled write SetEnabled;
     property EnabledCallback: TDBIEnabledCallback read FEnabledCallback write FEnabledCallback;
-	
+
   public
     constructor Create(AStream: TStream = nil); override;
     destructor Destroy; override;

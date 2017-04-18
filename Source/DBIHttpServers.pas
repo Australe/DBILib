@@ -546,8 +546,8 @@ begin
       ResponseInfo.ContentType := TDBIHttpMIMETable.Instance.GetFileMIMEType(LocalDoc);
 
       if AnsiSameText(RequestInfo.Command, 'HEAD') then begin
-        // HEAD request, don't send the document but still send back it's size
-        ResultFile := TFileStream.Create(LocalDoc, fmOpenRead	or fmShareDenyWrite);
+        // HEAD request, don't send the document but still send back its size
+        ResultFile := TFileStream.Create(LocalDoc, fmOpenRead or fmShareDenyWrite);
         try
           ResponseInfo.ResponseNo := 200;
           ResponseInfo.ContentLength := ResultFile.Size;

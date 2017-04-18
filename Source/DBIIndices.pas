@@ -1896,12 +1896,12 @@ end;  { SetDisplayOrder }
     bCaseInsensitive : DSKEYBOOL;
   end;
 
-  ixPrimary	        The index is the primary index of the table.
-  ixUnique	        Each value in the index is unique; there are no duplicates.
-  ixDescending	    The index imposes a descending sort order.
-  ixExpression	    The index is based on a dBASE key expression.
-  ixCaseInsensitive	The index sorts records case insensitively.
-  ixNonMaintained	  The index is not automatically updated when the table is opened.
+  ixPrimary         The index is the primary index of the table.
+  ixUnique          Each value in the index is unique; there are no duplicates.
+  ixDescending      The index imposes a descending sort order.
+  ixExpression      The index is based on a dBASE key expression.
+  ixCaseInsensitive The index sorts records case insensitively.
+  ixNonMaintained   The index is not automatically updated when the table is opened.
 </pre>
 }
 constructor TDBIStandardIndex.Create(PIndexDesc: pDSIDXDesc);

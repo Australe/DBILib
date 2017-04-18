@@ -845,10 +845,10 @@ begin
 {$ifdef Use_BufferedStreams}
     (DataStream as TDBIFileStream).Handle,// handle of file to lock
 {$else}
-    (DataStream as TFileStream).Handle,  // handle of file to lock
+    (DataStream as TFileStream).Handle,   // handle of file to lock
 {$endif Use_BufferedStreams}
-     OffsetLow,	                          // low-order word of lock region offset
-     0,	                                  // Win-95/98/Me: dwFileOffsetHigh must be 0
+     OffsetLow,                           // low-order word of lock region offset
+     0,                                   // Win-95/98/Me: dwFileOffsetHigh must be 0
      SizeLow,                             // low-order word of length to lock
      0                                    // high-order word of length to lock
     );
@@ -927,10 +927,10 @@ begin
 {$ifdef Use_BufferedStreams}
     (DataStream as TDBIFileStream).Handle,// handle of file to lock
 {$else}
-    (DataStream as TFileStream).Handle,  // handle of file to lock
+    (DataStream as TFileStream).Handle,   // handle of file to lock
 {$endif Use_BufferedStreams}
-    OffsetLow,	                          // low-order word of lock region offset
-    0,	                                  // Win-95/98/Me: dwFileOffsetHigh must be 0
+    OffsetLow,                            // low-order word of lock region offset
+    0,                                    // Win-95/98/Me: dwFileOffsetHigh must be 0
     SizeLow,                              // low-order word of length to lock
     0                                     // high-order word of length to lock
     );
@@ -999,8 +999,8 @@ begin
 {$else}
       (DataStream as TFileStream).Handle,  // handle of file to lock
 {$endif Use_BufferedStreams}
-      OffsetLow,	                  // low-order word of lock region offset
-      OffsetHigh,	                  // Win-95/98/Me: dwFileOffsetHigh must be 0
+      OffsetLow,                    // low-order word of lock region offset
+      OffsetHigh,                   // Win-95/98/Me: dwFileOffsetHigh must be 0
       SizeLow,                      // low-order word of length to lock
       SizeHigh                      // high-order word of length to lock
       );
