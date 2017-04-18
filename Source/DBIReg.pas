@@ -43,5 +43,4 @@ begin
   RegisterComponents(DBIComponentPage, [TXBaseDataset]);
 end;
 
-
 end.

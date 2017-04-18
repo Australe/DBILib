@@ -276,6 +276,5 @@ begin
   FObjectList.OwnsObjects := Value;
 end;  { SetOwnsObjects }
 
-
 end.
 

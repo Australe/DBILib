@@ -1560,8 +1560,5 @@ begin
   Result := Succ(FStackPointer);
 end;
 
-
-
-
 end.
 

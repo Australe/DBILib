@@ -336,5 +336,4 @@ begin
   RegisterComponentEditor(TDBICustomListDataset, TObjectListDatasetEditor);
 end;
 
-
 end.

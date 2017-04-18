@@ -901,8 +901,5 @@ begin
   NotifyCallback;
 end;  { SetComponent }
 
-
-
-
 end.
 

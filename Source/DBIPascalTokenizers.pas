@@ -2470,6 +2470,5 @@ begin
   raise EPropertyError.Create('Property "ClassKindName" is read only');
 end;
 
-
 end.
 

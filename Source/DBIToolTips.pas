@@ -682,6 +682,4 @@ begin
   ScalingFlags := ScalingFlags + [sfTop];
 end; { SetTop }
 
-
-
 end.

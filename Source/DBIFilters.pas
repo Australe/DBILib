@@ -122,5 +122,4 @@ begin
   end;
 end;  { Filter }
 
-
 end.

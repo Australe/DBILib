@@ -320,6 +320,4 @@ begin
   (DataConnection as TDBIXbaseDataConnection).DataStream := Value;
 end;  { SetStream }
 
-
-
 end.

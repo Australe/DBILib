@@ -709,8 +709,4 @@ begin
   Result := 0;
 end;  { Write }
 
-
-
-
-
 end.

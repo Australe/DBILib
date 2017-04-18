@@ -2701,6 +2701,5 @@ begin
   SetFieldProps(FieldDescs);
 end;  { GetMetaData }
 
-
 end.
 

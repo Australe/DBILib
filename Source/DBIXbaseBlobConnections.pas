@@ -1068,6 +1068,4 @@ begin
   end;
 end;  { WriteMetaData }
 
-
-
 end.

@@ -808,7 +808,5 @@ begin
   GitSearch.Caption := 'Select file to open';
 end;
 
-
-
 end.
 
