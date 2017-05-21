@@ -356,8 +356,6 @@ function HtmlToText(Html: String; const Options: TDBIHtmlToTextOptions): String;
 function SwapDWord(Value: LongWord): LongWord;
 function SwapDouble(Value: Double): Double;
 
-function SystemErrorMessageParam(Param: String = ''): String;
-
 
 {$ifdef fpc}
 var                           { Taken from Delphi System.pas }
@@ -1776,42 +1774,6 @@ begin
 
   Result := Value;
 end;  { SwapDouble }
-
-
-// _____________________________________________________________________________
-{**
-  Displays text of the last system error formated (if necessary) with Param.<P>
-
-  @param Param string that represents array for formating
-}
-function SystemErrorMessageParam(Param: String = ''): String;
-var
-  Len: Integer;
-  Buffer: array[0..255] of Char;
-  ArgArray: array[1..1] of PChar;
-  ErrorCode: Integer;
-
-begin
-  ArgArray[1] := PChar(Param);
-  ErrorCode := GetLastError;
-
-  Len := Windows.FormatMessage(
-    Format_Message_From_System or Format_Message_Argument_Array,
-    nil, ErrorCode, 0, Buffer, SizeOf(Buffer), @ArgArray);
-
-{$ifdef UNICODE}
-  while (Len > 0) and CharInSet(Buffer[Len - 1], [#0..#32, '.']) do begin
-{$else}
-  while (Len > 0) and (Buffer[Len - 1] in[#0..#32, '.']) do begin
-{$endif}
-    Dec(Len);
-  end;  { while }
-
-  SetString(Result, Buffer, Len);
-end;  { SystemErrorMessageParam }
-
-
-
 
 
 { TDBIDebugInfo }

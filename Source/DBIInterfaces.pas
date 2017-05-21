@@ -47,7 +47,7 @@ unit DBIInterfaces;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, DBIIntfConsts, DB, Contnrs, DBIConst, DBIStrings,
+  Windows, Classes, SysUtils, TypInfo, DBIIntfConsts, DB, Contnrs, DBIConst, DBIStrings,
   DBIUtils, DBIFilters, DBIIndices;
 
 type
@@ -2854,7 +2854,7 @@ begin
 
       // Otherwise something is really wrong
       else begin
-        raise EDBIException.Create(Self, 'Remove::2830', SystemErrorMessageParam, []);
+        raise EDBIException.Create(Self, 'Remove::2830', SysErrorMessage(GetLastError), []);
       end;
     end
 

@@ -229,8 +229,9 @@ begin
 
   FFileMapping := CreateFileMapping(FHandle, nil, Access, 0, Size, nil);
   if (FFileMapping = 0) then begin
-    raise Exception.CreateFmt('CreateFileMapping failed'#13'%s', [
-      DBIUtils.SystemErrorMessageParam(FFileName)
+    raise Exception.CreateFmt('CreateFileMapping failed for %s'#13'%s', [
+      FFileName,
+      SysErrorMessage(GetLastError)
       ]);
   end;
 
@@ -243,8 +244,9 @@ begin
 
   FMemory := MapViewOfFile(FFileMapping, Access, 0, 0, 0);
   if (FMemory = nil) then begin
-    raise Exception.CreateFmt('CreateFileMapping failed'#13'%s', [
-      DBIUtils.SystemErrorMessageParam(FFileName)
+    raise Exception.CreateFmt('CreateFileMapping failed for %s'#13'%s', [
+      FFileName,
+      SysErrorMessage(GetLastError)
       ]);
   end;
 

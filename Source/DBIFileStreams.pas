@@ -781,7 +781,7 @@ var
       on E: Exception do
         raise EDBIException.Create(Self, E, 'SaveStreamToFile::CreateFileStream::790',
           'Unable to open file "%s" for writing'#13#10'%s',
-          [AFileName, DBIUtils.SystemErrorMessageParam(ExtractFileName(ParamStr(0)))]
+          [AFileName, SysErrorMessage(GetLastError)]
           );
     end;
 
