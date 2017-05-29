@@ -173,12 +173,14 @@ const
   // NOTE: Use typed constants here otherwise you might get rounding
   //   errors in date comparisons.
 {$ifdef DELPHI6}
-  C_DBISignifyNullDateTime = -657434.0; //##JVR - this one matches "SysUtils.DateDelta" -693593.0;
+  C_DBISignifyNullDateTime = -657434.0;
   DBIMinDateTime: TDateTime = C_DBISignifyNullDateTime;         { 01/01/0100 12:00:00.000 AM = $FFF5F7E6 }
+  DBISignifyNullDateTime: TDateTime = C_DBISignifyNullDateTime; { Must be the same as DBIMinDateTime }
   DBIMaxDateTime: TDateTime = 2958465.99999;     { 12/31/9999 11:59:59.999 PM = $002D2482 }
 {$else}
-  DBIMinDateTime = -693593.0;         { 01/01/0001 12:00:00.000 AM = $FFF56AA7 }
-  DBISignifyNullDateTime = -693593.0; //-657434.0; { Must be the same as DBIMinDateTime }
+  C_DBISignifyNullDateTime = -693593.0;
+  DBIMinDateTime = C_DBISignifyNullDateTime;         { 01/01/0001 12:00:00.000 AM = $FFF56AA7 }
+  DBISignifyNullDateTime = C_DBISignifyNullDateTime; { Must be the same as DBIMinDateTime }
   DBIMaxDateTime = 2958465.99999;     { 12/31/9999 11:59:59.999 PM = $002D2482 }
 {$endif}
 
