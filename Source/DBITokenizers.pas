@@ -341,8 +341,9 @@ type
   end;
 
 function NamedValue(const Name: String; const Value: String): TDBINameValue;
-
+{$ifndef fpc}
 function Macro(const Format: String; const Args: array of TDBINameValue): String; overload;
+{$endif}
 function Macro(const Format: String; const Args: array of const): String; overload;
 
 
@@ -383,7 +384,7 @@ begin
   end;
 end;
 
-
+{$ifndef fpc}
 function Macro(const Format: String; const Args: array of TDBINameValue): String;
 var
   Processor: TDBIMacroProcessor;
@@ -419,7 +420,7 @@ begin
     Result := Processor.Output.Text;
   end;
 end;
-
+{$endif}
 
 
 

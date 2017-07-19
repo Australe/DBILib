@@ -902,7 +902,7 @@ var
 begin
   Result := -1;
 
-  if GetFileAttributesEx(PWideChar(FFileName), GetFileExInfoStandard, @FileInfo) then begin
+  if GetFileAttributesEx(PChar(FFileName), GetFileExInfoStandard, @FileInfo) then begin
     Result := Int64(FileInfo.nFileSizeLow) or Int64(FileInfo.nFileSizeHigh shl 32);
   end;
 end;

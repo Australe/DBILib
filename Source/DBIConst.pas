@@ -188,7 +188,9 @@ const
 
 type
   PDateTimeRec = ^TDateTimeRec;     { see DB.pas for TDateTimeRec record definition }
-
+{$ifdef fpc}
+  PBoolean = ^Boolean;
+{$endif}
 
 
 implementation
