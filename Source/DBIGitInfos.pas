@@ -403,6 +403,7 @@ type
   end;
 
 
+  TDBIGitFileBlame = class(TDBIGitCustomFileCommand);
   TDBIGitFileCheckout = class(TDBIGitCustomFileCommand);
   TDBIGitFileUnstage = class(TDBIGitCustomFileCommand);
 
