@@ -822,6 +822,7 @@ end;
 function TDBICompoundComponent.FindUniqueName: String;
 var
   ID: Integer;
+  ThisClassName: String;
 
 begin
   ID := ComponentIndex;
@@ -830,8 +831,10 @@ begin
     ID := 1;
   end;
 
+  ThisClassName := StringReplace(Self.ClassName, '.', '_', [rfReplaceAll]);
+
   repeat
-    Result := Copy(Self.ClassName, 2, 255) + IntToStr(ID);
+    Result := Copy(ThisClassName, 2, 255) + IntToStr(ID);
 
     Inc(ID);
   until (Owner = nil) or (Owner.FindComponent(Result) = nil);
