@@ -74,7 +74,8 @@ type
     class function GetDataType(const Value: TFieldType): String;
 
     class function IsDeveloper: Boolean;
-    class procedure LogMsg(const Kind: TDBIDebugKind; const Msg: String; Args: array of const);
+    class procedure LogMsg(const Kind: TDBIDebugKind; const Msg: String; Args: array of const); overload;
+    class procedure LogMsg(const Msg: String; Args: array of const); overload;
   end;
 
 
@@ -1822,6 +1823,11 @@ begin
   end;
 end;
 
+
+class procedure TDBIDebugInfo.LogMsg(const Msg: String; Args: array of const);
+begin
+  Windows.OutputDebugString(PChar(Format(Msg, Args)));
+end;
 
 
 
