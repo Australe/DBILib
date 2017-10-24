@@ -717,6 +717,10 @@ begin
 
         Emit(Self, LineBuffer, ioStdout);
         ProcessOutputLine(LineBuffer);
+
+        if (PTextBuffer^ = #0) then begin
+          PStart := PTextBuffer;
+        end;
       end;
     end;
   end;
