@@ -69,8 +69,8 @@ object FormODSDesigner: TFormODSDesigner
             Height = 32
             Align = alTop
             Caption = 
-              'The ObjectListDataset designer allows you to generate code for a' +
-              ' business object  from your pre-defined fields.'
+              'The ObjectListDataset designer allows you to generate code for a ' +
+              'business object  from your pre-defined fields.'
             Font.Charset = DEFAULT_CHARSET
             Font.Color = clInactiveCaption
             Font.Height = -13
@@ -94,8 +94,8 @@ object FormODSDesigner: TFormODSDesigner
             Height = 32
             Align = alTop
             Caption = 
-              'To generate the Business Object code alter the preferences to yo' +
-              'ur likings and select the Code-Tab.'
+              'To generate the Business Object code alter the preferences to your ' +
+              'likings and select the Code-Tab.'
             Font.Charset = DEFAULT_CHARSET
             Font.Color = clInactiveCaption
             Font.Height = -13
@@ -171,8 +171,7 @@ object FormODSDesigner: TFormODSDesigner
             Height = 32
             Align = alTop
             Caption = 
-              'Provides you with a Custom class.  Generally you will not need t' +
-              'his'
+              'Provides you with a Custom class.  Generally you will not need this'
             FocusControl = CheckBoxCustomClass
             Font.Charset = DEFAULT_CHARSET
             Font.Color = clInactiveCaption
