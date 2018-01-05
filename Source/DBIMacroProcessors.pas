@@ -415,6 +415,7 @@ type
     Keyword_LowerCase,
     Keyword_UpperCase,
     Keyword_CamelCase,
+    Keyword_TitleCase,
     Keyword_EOL
     );
   TDBIStandardKeywords = set of TDBIStandardKeyword;
@@ -1243,7 +1244,6 @@ var
   StringValue: String;
   IfThenElse: TDBIIfThenElseScope;
   Param: TParam;
-  ParamName: String;
   ParamValue: Variant;
   MacroName: String;
 
@@ -1387,6 +1387,7 @@ begin
           Result := ProcessIf(Input.Keyword);
 
         Keyword_CamelCase,
+        Keyword_TitleCase,
         Keyword_Lowercase,
         Keyword_Uppercase:
           Result := ProcessStringConversion(Input.Keyword);
@@ -1441,6 +1442,55 @@ begin
   Result := True;
 end;
 
+// _____________________________________________________________________________
+
+function AsciiMixedCase(const Value: String; CamelCase: Boolean): String;
+
+  function IsLowerCase(Character: Char): Boolean;
+  begin
+    Result := CharInSet(Character, ['a'..'z']);
+  end;
+
+  function IsUpperCase(Character: Char): Boolean;
+  begin
+    Result := CharInSet(Character, ['A'..'Z']);
+  end;
+
+  procedure LowerCase(var Value: String; Index: Integer);
+  begin
+    Value[Index] := Chr(Ord(Value[Index]) - Ord('A') + Ord('a'));
+  end;
+
+  procedure UpperCase(var Value: String; Index: Integer);
+  begin
+    Value[Index] := Chr(Ord(Value[Index]) - Ord('a') + Ord('A'));
+  end;
+
+var
+  Index: Integer;
+  InUpperCaseSequence: Boolean;
+begin
+  Result := Value;
+
+  InUpperCaseSequence := False;
+  for Index := 1 to Length(Result) do begin
+    if IsUpperCase(Result[Index]) then begin
+      if ((Index = 1) and CamelCase) or
+        (InUpperCaseSequence and ((Index = Length(Result)) or not IsLowerCase(Result[Index + 1]))) then
+      begin
+        LowerCase(Result, Index);
+      end;
+      InUpperCaseSequence := True;
+    end
+    else begin
+      if (Index = 1) and not CamelCase and IsLowerCase(Result[Index]) then begin
+        UpperCase(Result, Index);
+      end;
+      InUpperCaseSequence := False;
+    end;
+  end;
+end;
+
 
 // _____________________________________________________________________________
 {**
@@ -1459,7 +1509,8 @@ begin
   case Keyword of
     Keyword_LowerCase: MacroValue := AnsiLowerCase(MacroValue);
     Keyword_UpperCase: MacroValue := AnsiUpperCase(MacroValue);
-    Keyword_CamelCase: MacroValue[1] := AnsiLowerCase(MacroValue[1])[1];
+    Keyword_CamelCase: MacroValue := AsciiMixedCase(MacroValue, True);
+    Keyword_TitleCase: MacroValue := AsciiMixedCase(MacroValue, False);
   end;
 
   ProcessMacroEnd;
