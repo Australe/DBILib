@@ -911,7 +911,11 @@ end;
 
 function TDBICustomFileInfo.GetModified: TDateTime;
 begin
+{$ifdef Delphi2009}
   FileAge(FFileName, Result);
+{$else}
+  Result := FileAge(FFileName);
+{$endif}
 end;
 
 

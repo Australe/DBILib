@@ -236,6 +236,22 @@ type
   end;
 
 
+type
+  TDBICustomStringList = class(Classes.TStringList)
+{$ifndef Delphi7}
+  private
+    function GetNameValueSeparator: Char;
+    function GetValueFromIndex(Index: Integer): string;
+    procedure SetValueFromIndex(Index: Integer; const Value: string);
+
+    property NameValueSeparator: Char read GetNameValueSeparator;
+
+  public
+    property ValueFromIndex[Index: Integer]: string read GetValueFromIndex write SetValueFromIndex;
+{$endif}
+  end;
+
+
 { Ansi String Helpers }
 type
 {$ifdef UNICODE}
@@ -860,6 +876,55 @@ var
 begin
   SetString(Result, Buffer, {$ifdef DelphiXE4}AnsiStrings.{$endif}FloatToText(Buffer, Value, {$ifndef fpc} fvExtended, {$endif} ffGeneral, 15, 0));
 end;
+
+
+
+
+
+{ TDBICustomStringList }
+
+{$ifndef Delphi7}
+function TDBICustomStringList.GetNameValueSeparator: Char;
+begin
+  Result := '=';
+end;
+
+
+function TDBICustomStringList.GetValueFromIndex(Index: Integer): string;
+var
+  SepPos: Integer;
+begin
+  Result := '';
+
+  if Index >= 0 then begin
+    Result := Get(Index);
+    SepPos := AnsiPos(NameValueSeparator, Result);
+    if (SepPos > 0) then begin
+      System.Delete(Result, 1, SepPos);
+    end
+    else begin
+      Result := '';
+    end;
+  end;
+end;
+
+
+procedure TDBICustomStringList.SetValueFromIndex(Index: Integer; const Value: string);
+begin
+  if (Value <> '') then begin
+    if (Index < 0) then begin
+      Index := Add('');
+    end;
+
+    Put(Index, Names[Index] + NameValueSeparator + Value);
+  end
+  else begin
+    if (Index >= 0) then begin
+      Delete(Index);
+    end;
+  end;
+end;
+{$endif}
 
 
 

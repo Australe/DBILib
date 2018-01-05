@@ -33,7 +33,7 @@ interface
 {$I DBICompilers.inc}
 
 uses
-  Classes, SysUtils, DBITypInfo, DB, DBIConst, DBIUtils, DBIComponents,
+  Classes, SysUtils, DBITypInfo, DB, DBIConst, DBIUtils, DBIComponents, DBIStrings,
   DBIStreamAdapters, DBITokenizerConsts, DBITokenizers, DBIExpressionEvaluators;
 
 type
@@ -183,7 +183,7 @@ type
   end;
 
 type
-  TDBICustomBindingsList = class(TStringList);
+  TDBICustomBindingsList = class(TDBICustomStringList);
 
   TDBIGlobalScopeStack = class(TDBIScopeStack)
   private
@@ -410,6 +410,7 @@ type
     Keyword_IfNot,
     Keyword_Integer,
     Keyword_Short,
+    Keyword_Slice,
     Keyword_String,
     Keyword_LowerCase,
     Keyword_UpperCase,
@@ -447,8 +448,6 @@ type
   private
     FEvaluator: TDBIExpressionEvaluator;
     FLexer: TDBIGenericMacroLexer;
-    FMacroName: String;
-    FMacroValue: String;
     FNullParam: TParam;
     FOnInclude: TDBIMacroProcessorIncludeEvent;
     FOrigin: TDBICompoundComponent;
@@ -487,7 +486,8 @@ type
       ): String;
 
     function ProcessIf(const ParamType: TDBIStandardKeyword): Boolean;
-    function ProcessCase(const Keyword: TDBIStandardKeyword): Boolean;
+    function ProcessSlice(const Keyword: TDBIStandardKeyword): Boolean;
+    function ProcessStringConversion(const Keyword: TDBIStandardKeyword): Boolean;
 
     function ProcessMacros: Boolean; virtual;
 
@@ -772,31 +772,6 @@ begin
 end;
 
 
-// _____________________________________________________________________________
-{**
-  Jxg - 19/10/2015 03:00:00 - Initial code.<br>
-}
-
-function TDBIGenericMacroProcessor.ProcessCase(const Keyword: TDBIStandardKeyword): Boolean;
-begin
-  Input.Fetch([Keyword]);
-  Input.Skip([tkWhitespace]);
-
-  FMacroValue := ProcessGetMacroValue([]);
-
-  case Keyword of
-    Keyword_LowerCase: FMacroValue := AnsiLowerCase(FMacroValue);
-    Keyword_UpperCase: FMacroValue := AnsiUpperCase(FMacroValue);
-    Keyword_CamelCase: FMacroValue[1] := AnsiLowerCase(FMacroValue[1])[1];
-  end;
-
-  ProcessMacroEnd;
-
-  Output.WriteStr(FMacroValue);
-
-  Result := True;
-end;
-
 // _______________________________________________________________________________________
 
 {**
@@ -808,6 +783,8 @@ function TDBIGenericMacroProcessor.ProcessDefine(
   ): Boolean;
 var
   Param: TParam;
+  MacroName: String;
+  MacroValue: String;
 
 begin
   // Swallow Type ( #boolean, #define, #double, #integer, #short, #string )
@@ -815,72 +792,72 @@ begin
   Input.Skip([tkWhiteSpace]);
 
   // Get Macro Name
-  FMacroName := ProcessGetMacroName;
+  MacroName := ProcessGetMacroName;
   Input.Skip([tkWhiteSpace]);
 
   // Now create the appropriate typed parameter
-  FMacroValue := ProcessGetMacroValue(ExpectedTypes);
+  MacroValue := ProcessGetMacroValue(ExpectedTypes);
 
   ProcessMacroEnd;
 
   if Scope.Top.Enabled then begin
-    Param := Scope.FindParam(FMacroName);
+    Param := Scope.FindParam(MacroName);
 
     if not Assigned(Param) then begin
-      Param := Scope.Top.Params.GetByName(FMacroName);
+      Param := Scope.Top.Params.GetByName(MacroName);
     end;
 
     case ParamType of
       Keyword_Boolean: begin
-        Param.AsBoolean := CompareText('True', FMacroValue) = 0;
+        Param.AsBoolean := CompareText('True', MacroValue) = 0;
       end;
 
       Keyword_DateTime: begin
-        if (FMacroValue = '') then begin
+        if (MacroValue = '') then begin
           Param.AsDateTime := Now;
         end
         else begin
-          Param.AsString := FMacroValue;
+          Param.AsString := MacroValue;
           Param.AsDateTime := Param.AsDateTime;
         end;
       end;
 
       Keyword_Double: begin
-        if (FMacroValue = '') then begin
+        if (MacroValue = '') then begin
           Param.AsFloat := 0;
         end
         else begin
-          Evaluator.Expression := FMacroValue;
+          Evaluator.Expression := MacroValue;
           Param.AsFloat := Evaluator.Result;
         end;
       end;
 
       Keyword_Integer: begin
-        if (FMacroValue = '') then begin
+        if (MacroValue = '') then begin
           Param.AsInteger := 0;
         end
         else begin
-          Evaluator.Expression := FMacroValue;
+          Evaluator.Expression := MacroValue;
           Param.AsInteger := Round(Evaluator.Result);
         end;
       end;
 
       Keyword_Short: begin
-        if (FMacroValue = '') then begin
+        if (MacroValue = '') then begin
           Param.AsSmallint := 0;
         end
         else begin
-          Evaluator.Expression := FMacroValue;
+          Evaluator.Expression := MacroValue;
           Param.AsSmallint := Round(Evaluator.Result);
         end;
       end;
 
       Keyword_String: begin
-        Param.AsString := FMacroValue;
+        Param.AsString := MacroValue;
       end;
 
       else { Keyword_Define } begin
-        Param.AsString := FMacroValue;
+        Param.AsString := MacroValue;
       end;
     end;
   end;
@@ -1093,6 +1070,10 @@ const
   Caller = 'ProcessGetMacroName';
 
 begin
+  if (Input.Token.TokenType = Tok_OpenCurlyBracket_Hash) then begin
+    ProcessMacros;
+  end;
+
   // Allow for macro variables, in the future we may insist on it!
   Result := Input.Fetch([Tok_Identifier, Tok_Macro]);
   try
@@ -1155,8 +1136,15 @@ begin
           }
         end
         else begin
-          Input.PutBack(ParamValue);
+          Input.PutBack(String(ParamValue));
         end;
+      end
+
+      // Is it an inline function
+      else if (Input.Token.TokenType = Tok_OpenCurlyBracket_Hash) then begin
+        ProcessMacros;
+
+        Continue;
       end
 
       // Otherwise get the literal value(s)
@@ -1178,6 +1166,8 @@ begin
       Input.SyntaxError('Failed to get macro "%s". %s', [ParamName, E.Message], Self, Caller);
     end;
   end;
+
+  Result := Trim(Result);
 end;
 
 
@@ -1214,7 +1204,7 @@ begin
           }
         end
         else begin
-          Input.PutBack(ParamValue);
+          Input.PutBack(String(ParamValue));
         end;
       end
 
@@ -1247,13 +1237,15 @@ const
   Caller = 'ProcessIf';
 
 var
+  ComparisonResult: Boolean;
   ComparisonType: TDBITokenType;
   FloatValue: Double;
   StringValue: String;
   IfThenElse: TDBIIfThenElseScope;
   Param: TParam;
+  ParamName: String;
   ParamValue: Variant;
-  ComparisonResult: Boolean;
+  MacroName: String;
 
 begin
   Result := True;
@@ -1262,7 +1254,7 @@ begin
     // Swallow keyword 'If' / 'IfNot'
     Input.Fetch([ParamType]);
     Input.Skip([tkWhiteSpace]);
-    FMacroName := ProcessGetMacroName;
+    MacroName := ProcessGetMacroName;
 
     Input.Skip([tkWhiteSpace]);
     ComparisonType := Input.Token.TokenType;
@@ -1272,11 +1264,13 @@ begin
 
     Input.Skip([tkWhitespace]);
 
-    if GetParam(Self, FMacroName, ParamValue) then begin
+    if GetParam(Self, MacroName, ParamValue) then begin
       Param := Local(TParam.Create(nil)).Obj as TParam;
       Param.Value := ParamValue;
 
-      if (ComparisonType = Tok_None) then begin //process as if it's a boolean
+      // Process as a Booleans
+
+      if (ComparisonType = Tok_None) then begin
         If (ParamType = Keyword_If) then begin
           ComparisonResult := CompareText(Param.AsString, 'True') = 0;
         end
@@ -1284,29 +1278,9 @@ begin
           ComparisonResult := CompareText(Param.AsString, 'False') = 0;
         end;
       end
-      else if (Input.Token.TokenType = Tok_SingleQuote) then begin //process as if it's a string
-        Input.Fetch([Tok_SingleQuote]);
-        StringValue := ProcessGetMacroValue(
-          [],
-          [Tok_OpenCurlyBracket, Tok_CloseCurlyBracket, Tok_SingleQuote, Tok_Eof]
-          );
-        Input.Fetch([Tok_SingleQuote]);
 
-        case ComparisonType of
-          Tok_Smaller:      ComparisonResult := CompareText(Param.AsString, StringValue) < 0;
-          Tok_Greater:      ComparisonResult := CompareText(Param.AsString, StringValue) > 0;
-          Tok_GreaterEqual: ComparisonResult := CompareText(Param.AsString, StringValue) >= 0;
-          Tok_Equality:     ComparisonResult := CompareText(Param.AsString, StringValue) = 0;
-          Tok_InEquality:   ComparisonResult := CompareText(Param.AsString, StringValue) <> 0;
-          Tok_NotEqual:     ComparisonResult := CompareText(Param.AsString, StringValue) <> 0;
-          Tok_SmallerEqual: ComparisonResult := CompareText(Param.AsString, StringValue) <= 0;
-        end;
-
-        if ParamType = Keyword_IfNot then begin
-          ComparisonResult := not ComparisonResult;
-        end;
-      end
-      else begin //process as if it's a numeric
+      // Process as a Numeric
+      else if (Input.Token.TokenType in [Tok_IntegerLiteral..Tok_HexLiteral]) then begin
         Evaluator.Expression := ProcessGetMacroValue([]);
         FloatValue := Evaluator.Result;
 
@@ -1318,6 +1292,30 @@ begin
           Tok_InEquality:   ComparisonResult := Param.AsFloat <> FloatValue;
           Tok_NotEqual:     ComparisonResult := Param.AsFloat <> FloatValue;
           Tok_SmallerEqual: ComparisonResult := Param.AsFloat <= FloatValue;
+        end;
+
+        if ParamType = Keyword_IfNot then begin
+          ComparisonResult := not ComparisonResult;
+        end;
+      end
+
+      // Process as a String
+      else begin
+        Input.Skip([Tok_SingleQuote]);
+        StringValue := ProcessGetMacroValue(
+          [],
+          [Tok_OpenCurlyBracket, Tok_CloseCurlyBracket, Tok_SingleQuote, Tok_Eof]
+          );
+        Input.Skip([Tok_SingleQuote]);
+
+        case ComparisonType of
+          Tok_Smaller:      ComparisonResult := CompareText(Param.AsString, StringValue) < 0;
+          Tok_Greater:      ComparisonResult := CompareText(Param.AsString, StringValue) > 0;
+          Tok_GreaterEqual: ComparisonResult := CompareText(Param.AsString, StringValue) >= 0;
+          Tok_Equality:     ComparisonResult := CompareText(Param.AsString, StringValue) = 0;
+          Tok_InEquality:   ComparisonResult := CompareText(Param.AsString, StringValue) <> 0;
+          Tok_NotEqual:     ComparisonResult := CompareText(Param.AsString, StringValue) <> 0;
+          Tok_SmallerEqual: ComparisonResult := CompareText(Param.AsString, StringValue) <= 0;
         end;
 
         if ParamType = Keyword_IfNot then begin
@@ -1341,7 +1339,8 @@ begin
   IfThenElse := Scope.Push(TDBIIfThenElseScope.Create) as TDBIIfThenElseScope;
   IfThenElse.Condition := ComparisonResult;
   IfThenElse.State := msIf;
-  IfThenElse.TokenString := FMacroName;
+//##JVR  IfThenElse.TokenString := MacroName;
+  IfThenElse.TokenString := ParamValue;
 end;
 
 
@@ -1364,20 +1363,37 @@ begin
     try
       case Input.Keyword of
         Keyword_Define,
-          Keyword_Boolean,
-          Keyword_DateTime,
-          Keyword_Double,
-          Keyword_Integer,
-          Keyword_Short: Result := ProcessDefine(Input.Keyword, []);
-        Keyword_ForEach: Result := ProcessForEach;
-        Keyword_Else: Result := ProcessElse;
-        Keyword_EndFor: Result := ProcessEndFor;
-        Keyword_EndIf: Result := ProcessEndIf;
+        Keyword_Boolean,
+        Keyword_DateTime,
+        Keyword_Double,
+        Keyword_Integer,
+        Keyword_Short:
+          Result := ProcessDefine(Input.Keyword, []);
+
+        Keyword_ForEach:
+          Result := ProcessForEach;
+
+        Keyword_Else:
+          Result := ProcessElse;
+
+        Keyword_EndFor:
+          Result := ProcessEndFor;
+
+        Keyword_EndIf:
+          Result := ProcessEndIf;
+
         Keyword_If,
-          Keyword_IfNot: Result := ProcessIf(Input.Keyword);
+        Keyword_IfNot:
+          Result := ProcessIf(Input.Keyword);
+
         Keyword_CamelCase,
-          Keyword_Lowercase,
-          Keyword_Uppercase: Result := ProcessCase(Input.Keyword);
+        Keyword_Lowercase,
+        Keyword_Uppercase:
+          Result := ProcessStringConversion(Input.Keyword);
+
+        Keyword_Slice:
+          Result := ProcessSlice(Input.Keyword);
+
         Keyword_EOL: Result := ProcessEOL;
 
       else
@@ -1392,6 +1408,67 @@ begin
       end;
     end;
   end;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 05/01/2018 10:11:12 - Initial code.<br>
+}
+function TDBIGenericMacroProcessor.ProcessSlice(const Keyword: TDBIStandardKeyword): Boolean;
+var
+  MacroValue: String;
+  Offset: Integer;
+  Count: Integer;
+
+begin
+  Input.Fetch([Keyword]);
+  Input.Skip([tkWhitespace]);
+
+  Offset := StrToInt(Input.Fetch([tkNumber]));
+  Input.Skip([Tok_Space, Tok_Comma]);
+
+  Count := StrToInt(Input.Fetch([tkNumber]));
+  Input.Skip([Tok_Space, Tok_Comma]);
+
+  MacroValue := ProcessGetMacroValue([]);
+  ProcessMacroEnd;
+
+  Input.Rewind(Input.Token);
+  Input.PutBack(Copy(MacroValue, Offset, Count));
+  Input.NextToken;
+
+  Result := True;
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jxg - 19/10/2015 03:00:00 - Initial code.<br>
+}
+function TDBIGenericMacroProcessor.ProcessStringConversion(const Keyword: TDBIStandardKeyword): Boolean;
+var
+  MacroValue: String;
+
+begin
+  Input.Fetch([Keyword]);
+  Input.Skip([tkWhitespace]);
+
+  MacroValue := ProcessGetMacroValue([]);
+
+  case Keyword of
+    Keyword_LowerCase: MacroValue := AnsiLowerCase(MacroValue);
+    Keyword_UpperCase: MacroValue := AnsiUpperCase(MacroValue);
+    Keyword_CamelCase: MacroValue[1] := AnsiLowerCase(MacroValue[1])[1];
+  end;
+
+  ProcessMacroEnd;
+
+  Input.Rewind(Input.Token);
+  Input.PutBack(MacroValue);
+  Input.NextToken;
+
+  Result := True;
 end;
 
 
@@ -2824,6 +2901,7 @@ procedure TDBICustomScope.SetScopeName(const Value: String);
 begin
   FScopeName := Value;
 end;
+
 
 end.
 

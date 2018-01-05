@@ -37,6 +37,7 @@ uses
 {$endif}
   DBIAUXUnitTests,
   DBIODSUnitTests,
-  DBIXDSUnitTests;
+  DBIXDSUnitTests,
+  DBITokenizeUnitTests;
 
 end.

@@ -170,6 +170,7 @@ type
 
     procedure Reset; override;
     procedure Restore(AToken: TDBILexerToken);
+    procedure Rewind(AToken: TDBILexerToken);
 
   end;
 
@@ -336,13 +337,18 @@ type
   end;
   TDBINameValues = array of TDBINameValue;
 
+{$ifdef Delphi2009}
   TDBINameValuesHelper = record helper for TDBINameValues
     procedure Assign(const Args: array of TDBINameValue);
   end;
+{$endif}
 
 function NamedValue(const Name: String; const Value: String): TDBINameValue;
+
 {$ifndef fpc}
+  {$ifdef Delphi2009}
 function Macro(const Format: String; const Args: array of TDBINameValue): String; overload;
+  {$endif}
 {$endif}
 function Macro(const Format: String; const Args: array of const): String; overload;
 
@@ -385,6 +391,7 @@ begin
 end;
 
 {$ifndef fpc}
+  {$ifdef Delphi2009}
 function Macro(const Format: String; const Args: array of TDBINameValue): String;
 var
   Processor: TDBIMacroProcessor;
@@ -420,6 +427,7 @@ begin
     Result := Processor.Output.Text;
   end;
 end;
+  {$endif}
 {$endif}
 
 
@@ -438,7 +446,7 @@ end;
 
 
 { TDBINameValuesHelper }
-
+{$ifdef Delphi2009}
 procedure TDBINameValuesHelper.Assign(const Args: array of TDBINameValue);
 var
   Index: Integer;
@@ -449,7 +457,7 @@ begin
     Self[Index].Value := Args[Index].Value;
   end;
 end;
-
+{$endif}
 
 
 
@@ -1668,6 +1676,17 @@ begin
 
   // Restore Lexer Data State
   FLexerData := AToken.FTokenPosition[ptEnd];
+end;
+
+
+// _____________________________________________________________________________
+{**
+  Jvr - 21/12/2017 14:15:16 - Initial code.<br />
+}
+procedure TDBIAbstractLexer.Rewind(AToken: TDBILexerToken);
+begin
+  FLexerData := AToken.FTokenPosition[ptStart];
+  Stream.Position := FLexerData.Position;
 end;
 
 
